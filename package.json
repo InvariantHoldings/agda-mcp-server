@@ -1,0 +1,65 @@
+{
+  "name": "agda-mcp-server",
+  "version": "0.4.0",
+  "description": "MCP server for interactive Agda proof development — type-checking, goal inspection, case splitting, proof search, and more via the Model Context Protocol",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "agda-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "pretest": "npm run build",
+    "test": "node --test test/**/*.test.js",
+    "test:integration": "node --test test/integration/**/*.test.js",
+    "verify": "npm test && npm pack --dry-run",
+    "prepublishOnly": "npm run verify"
+  },
+  "packageManager": "npm@11.11.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LionOfJewdah/agda-mcp-server.git"
+  },
+  "homepage": "https://github.com/LionOfJewdah/agda-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/LionOfJewdah/agda-mcp-server/issues"
+  },
+  "keywords": [
+    "agda",
+    "mcp",
+    "model-context-protocol",
+    "proof-assistant",
+    "type-theory",
+    "interactive-theorem-proving"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.25 || ^4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "license": "MIT"
+}

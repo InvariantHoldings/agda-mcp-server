@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a defect in the MCP server or its documentation.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+      placeholder: A short description of the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Steps, input, Agda file snippets, or MCP calls needed to reproduce the issue.
+      placeholder: |
+        1. Run ...
+        2. Call agda_load ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Node version, npm version, Agda version, OS, and MCP client.
+      placeholder: |
+        Node: 24.x
+        npm: 11.x
+        Agda: ...
+        OS: ...
+        Client: ...
+    validations:
+      required: true
