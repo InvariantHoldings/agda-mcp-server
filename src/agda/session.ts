@@ -55,6 +55,7 @@ import * as AdvancedOps from "./advanced-queries.js";
  * Find the repo-pinned Agda binary.
  */
 export function findAgdaBinary(repoRoot: string): string {
+  if (process.env.AGDA_BIN) return process.env.AGDA_BIN;
   const pinned = resolve(repoRoot, "tooling/scripts/run-pinned-agda.sh");
   if (existsSync(pinned)) {
     return pinned;
