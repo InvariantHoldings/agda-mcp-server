@@ -58,6 +58,18 @@ export interface GoalInfo {
   raw: AgdaResponse[];
 }
 
+export interface GoalTypeResult {
+  goalId: number;
+  type: string;
+  raw: AgdaResponse[];
+}
+
+export interface ContextResult {
+  goalId: number;
+  context: string[];
+  raw: AgdaResponse[];
+}
+
 export interface CaseSplitResult {
   clauses: string[];
   raw: AgdaResponse[];
@@ -80,6 +92,11 @@ export interface InferResult {
 
 export interface AutoResult {
   solution: string;
+  raw: AgdaResponse[];
+}
+
+export interface SolveResult {
+  solutions: string[];
   raw: AgdaResponse[];
 }
 
@@ -112,6 +129,32 @@ export interface GoalTypeContextInferResult {
   goalType: string;
   context: string[];
   inferredType: string;
+  raw: AgdaResponse[];
+}
+
+export interface GoalTypeContextCheckResult {
+  goalType: string;
+  context: string[];
+  checkedExpr: string;
+  raw: AgdaResponse[];
+}
+
+export interface ShowVersionResult {
+  version: string;
+  raw: AgdaResponse[];
+}
+
+export interface DisplayControlResult {
+  output: string;
+  checked: boolean | null;
+  showImplicitArguments: boolean | null;
+  showIrrelevantArguments: boolean | null;
+  raw: AgdaResponse[];
+}
+
+export interface BackendCommandResult {
+  success: boolean;
+  output: string;
   raw: AgdaResponse[];
 }
 

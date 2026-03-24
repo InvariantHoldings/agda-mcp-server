@@ -24,6 +24,8 @@ import { AgdaSession } from "./agda-process.js";
 import { register as registerSession } from "./tools/session.js";
 import { register as registerProof } from "./tools/proof.js";
 import { register as registerNavigation } from "./tools/navigation.js";
+import { register as registerDisplay } from "./tools/display.js";
+import { register as registerBackend } from "./tools/backend.js";
 
 type ExtensionRegister = (
   server: McpServer,
@@ -38,13 +40,15 @@ const session = new AgdaSession(REPO_ROOT);
 
 const server = new McpServer({
   name: "agda-mcp-server",
-  version: "0.4.0",
+  version: "0.5.0",
 });
 
 // ── Core tools (generic Agda) ──────────────────────────────────────
 registerSession(server, session, REPO_ROOT);
 registerProof(server, session, REPO_ROOT);
 registerNavigation(server, session, REPO_ROOT);
+registerDisplay(server, session, REPO_ROOT);
+registerBackend(server, session, REPO_ROOT);
 
 function resolveExtensionSpecifier(modulePath: string): string {
   if (modulePath.startsWith("file://")) {

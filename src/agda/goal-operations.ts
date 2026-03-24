@@ -10,11 +10,16 @@ import type {
   AgdaResponse,
   AgdaGoal,
   GoalInfo,
+  GoalTypeResult,
+  ContextResult,
+  GoalTypeContextCheckResult,
   CaseSplitResult,
   GiveResult,
   AutoResult,
 } from "./types.js";
 import { extractMessage, escapeAgdaString } from "./response-parsing.js";
+import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
+import { decodeGiveLikeResponse } from "../protocol/responses/proof-actions.js";
 
 /**
  * Get the type and local context for a specific goal.
@@ -29,35 +34,70 @@ export async function goalTypeContext(
   );
   const responses = await ctx.sendCommand(cmd);
 
-  let type = "";
-  const context: string[] = [];
+  const decoded = decodeGoalDisplayResponses(responses);
+  return {
+    goalId,
+    type: decoded.goalType,
+    context: decoded.context,
+    raw: responses,
+  };
+}
 
-  for (const resp of responses) {
-    if (resp.kind === "DisplayInfo") {
-      const info = resp.info as Record<string, unknown> | undefined;
-      if (info?.kind === "GoalSpecific") {
-        const goalInfo = info.goalInfo as Record<string, unknown> | undefined;
-        if (goalInfo) {
-          type = extractMessage(goalInfo);
-        }
-      }
-      if (info?.kind === "GoalType") {
-        type = extractMessage(info);
-      }
-    }
-  }
+/**
+ * Get only the current goal type for a specific goal.
+ */
+export async function goalType(
+  ctx: AgdaSessionContext,
+  goalId: number,
+): Promise<GoalTypeResult> {
+  ctx.requireFile();
+  const cmd = ctx.iotcm(
+    `Cmd_goal_type Normalised ${goalId} noRange ""`,
+  );
+  const responses = await ctx.sendCommand(cmd);
+  const decoded = decodeGoalDisplayResponses(responses);
 
-  // Parse context from the type display (Agda formats it as "ctx\n----\ngoalType")
-  if (type.includes("————")) {
-    const parts = type.split(/————+/);
-    if (parts.length >= 2) {
-      const ctxLines = parts[0].trim().split("\n").filter((l) => l.trim());
-      context.push(...ctxLines);
-      type = parts[parts.length - 1].trim();
-    }
-  }
+  return { goalId, type: decoded.goalType, raw: responses };
+}
 
-  return { goalId, type, context, raw: responses };
+/**
+ * Get only the local context for a specific goal.
+ */
+export async function context(
+  ctx: AgdaSessionContext,
+  goalId: number,
+): Promise<ContextResult> {
+  ctx.requireFile();
+  const cmd = ctx.iotcm(
+    `Cmd_context Normalised ${goalId} noRange ""`,
+  );
+  const responses = await ctx.sendCommand(cmd);
+  const decoded = decodeGoalDisplayResponses(responses);
+
+  return { goalId, context: decoded.context, raw: responses };
+}
+
+/**
+ * Get goal, context, and checked elaborated term for an expression in a goal.
+ */
+export async function goalTypeContextCheck(
+  ctx: AgdaSessionContext,
+  goalId: number,
+  expr: string,
+): Promise<GoalTypeContextCheckResult> {
+  ctx.requireFile();
+  const cmd = ctx.iotcm(
+    `Cmd_goal_type_context_check Normalised ${goalId} noRange "${escapeAgdaString(expr)}"`,
+  );
+  const responses = await ctx.sendCommand(cmd);
+  const decoded = decodeGoalDisplayResponses(responses);
+
+  return {
+    goalType: decoded.goalType,
+    context: decoded.context,
+    checkedExpr: decoded.auxiliary,
+    raw: responses,
+  };
 }
 
 /**
@@ -142,17 +182,41 @@ export async function refine(
   );
   const responses = await ctx.sendCommand(cmd);
 
-  let result = "";
-  for (const resp of responses) {
-    if (resp.kind === "DisplayInfo") {
-      const info = resp.info as Record<string, unknown> | undefined;
-      if (info) {
-        result = extractMessage(info);
-      }
-    }
-  }
+  return { result: decodeGiveLikeResponse(responses), raw: responses };
+}
 
-  return { result, raw: responses };
+/**
+ * Refine a goal using Agda's exact Cmd_refine command.
+ */
+export async function refineExact(
+  ctx: AgdaSessionContext,
+  goalId: number,
+  expr: string,
+): Promise<GiveResult> {
+  ctx.requireFile();
+  const cmd = ctx.iotcm(
+    `Cmd_refine ${goalId} noRange "${escapeAgdaString(expr)}"`,
+  );
+  const responses = await ctx.sendCommand(cmd);
+
+  return { result: decodeGiveLikeResponse(responses), raw: responses };
+}
+
+/**
+ * Introduce a lambda or constructor using Agda's exact Cmd_intro command.
+ */
+export async function intro(
+  ctx: AgdaSessionContext,
+  goalId: number,
+  expr = "",
+): Promise<GiveResult> {
+  ctx.requireFile();
+  const cmd = ctx.iotcm(
+    `Cmd_intro True ${goalId} noRange "${escapeAgdaString(expr)}"`,
+  );
+  const responses = await ctx.sendCommand(cmd);
+
+  return { result: decodeGiveLikeResponse(responses), raw: responses };
 }
 
 /**

@@ -1,6 +1,6 @@
 {
   "name": "agda-mcp-server",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "MCP server for interactive Agda proof development — type-checking, goal inspection, case splitting, proof search, and more via the Model Context Protocol",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,8 +24,9 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "pretest": "npm run build",
-    "test": "node --test test/**/*.test.js",
-    "test:integration": "node --test test/integration/**/*.test.js",
+    "test": "node --test test/*.test.js test/**/*.test.js",
+    "test:property": "node --test test/property/*.test.js test/property/**/*.test.js",
+    "test:integration": "node --test test/integration/*.test.js test/integration/**/*.test.js",
     "verify": "npm test && npm pack --dry-run",
     "prepublishOnly": "npm run verify"
   },
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
+    "fast-check": "^3.23.2",
     "tsx": "^4.0.0",
     "typescript": "^5.9.3"
   },

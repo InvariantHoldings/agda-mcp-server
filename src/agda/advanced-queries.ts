@@ -15,9 +15,13 @@ import type {
   ModuleContentsResult,
   SearchAboutResult,
   AutoResult,
+  SolveResult,
   GoalTypeContextInferResult,
+  ShowVersionResult,
 } from "./types.js";
 import { extractMessage, escapeAgdaString } from "./response-parsing.js";
+import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
+import { decodeSolveResponses } from "../protocol/responses/proof-actions.js";
 
 /**
  * Show current constraints.
@@ -47,31 +51,28 @@ export async function constraints(
  */
 export async function solveAll(
   ctx: AgdaSessionContext,
-): Promise<{ solutions: string[]; raw: AgdaResponse[] }> {
+): Promise<SolveResult> {
   ctx.requireFile();
   const cmd = ctx.iotcm("Cmd_solveAll Normalised");
   const responses = await ctx.sendCommand(cmd);
 
-  const solutions: string[] = [];
-  for (const resp of responses) {
-    if (resp.kind === "SolveAll") {
-      const solns = resp.solutions as Array<[number, string]> | undefined;
-      if (Array.isArray(solns)) {
-        for (const [id, expr] of solns) {
-          solutions.push(`?${id} := ${expr}`);
-        }
-      }
-    }
-    if (resp.kind === "DisplayInfo") {
-      const info = resp.info as Record<string, unknown> | undefined;
-      if (info) {
-        const msg = extractMessage(info);
-        if (msg) solutions.push(msg);
-      }
-    }
-  }
+  return { solutions: decodeSolveResponses(responses), raw: responses };
+}
 
-  return { solutions, raw: responses };
+/**
+ * Solve one goal that has a unique solution.
+ */
+export async function solveOne(
+  ctx: AgdaSessionContext,
+  goalId: number,
+): Promise<SolveResult> {
+  ctx.requireFile();
+  const cmd = ctx.iotcm(
+    `Cmd_solveOne Normalised ${goalId} noRange ""`,
+  );
+  const responses = await ctx.sendCommand(cmd);
+
+  return { solutions: decodeSolveResponses(responses), raw: responses };
 }
 
 /**
@@ -291,6 +292,32 @@ export async function autoAll(
 }
 
 /**
+ * Show the running Agda version.
+ */
+export async function showVersion(
+  ctx: AgdaSessionContext,
+): Promise<ShowVersionResult> {
+  const cmd = ctx.iotcm("Cmd_show_version");
+  const responses = await ctx.sendCommand(cmd);
+
+  let version = "";
+
+  for (const resp of responses) {
+    if (resp.kind === "DisplayInfo") {
+      const info = resp.info as Record<string, unknown> | undefined;
+      if (info?.kind === "Version" && typeof info.version === "string") {
+        version = info.version;
+      } else if (info) {
+        const msg = extractMessage(info);
+        if (msg && !version) version = msg;
+      }
+    }
+  }
+
+  return { version, raw: responses };
+}
+
+/**
  * Get the goal type, context, and inferred type of an expression
  * in a goal context (combined query).
  */
@@ -304,39 +331,12 @@ export async function goalTypeContextInfer(
     `Cmd_goal_type_context_infer Normalised ${goalId} noRange "${escapeAgdaString(expr)}"`,
   );
   const responses = await ctx.sendCommand(cmd);
+  const decoded = decodeGoalDisplayResponses(responses);
 
-  let goalType = "";
-  let inferredType = "";
-  const context: string[] = [];
-
-  for (const resp of responses) {
-    if (resp.kind === "DisplayInfo") {
-      const info = resp.info as Record<string, unknown> | undefined;
-      if (info?.kind === "GoalSpecific") {
-        const goalInfo = info.goalInfo as Record<string, unknown> | undefined;
-        if (goalInfo) {
-          const fullText = extractMessage(goalInfo);
-          // Agda formats combined output with sections separated by ----
-          if (fullText.includes("————")) {
-            const parts = fullText.split(/————+/);
-            if (parts.length >= 2) {
-              const ctxLines = parts[0].trim().split("\n").filter((l) => l.trim());
-              context.push(...ctxLines);
-              goalType = parts[1]?.trim() ?? "";
-              if (parts.length >= 3) {
-                inferredType = parts[2].trim();
-              }
-            }
-          } else {
-            goalType = fullText;
-          }
-        }
-      }
-      if (info?.kind === "GoalType") {
-        goalType = extractMessage(info);
-      }
-    }
-  }
-
-  return { goalType, context, inferredType, raw: responses };
+  return {
+    goalType: decoded.goalType,
+    context: decoded.context,
+    inferredType: decoded.auxiliary,
+    raw: responses,
+  };
 }

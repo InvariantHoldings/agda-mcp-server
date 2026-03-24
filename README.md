@@ -172,45 +172,103 @@ If you only want a quick compile check and do not need goals, use
 
 ## Tool reference
 
+## Protocol coverage
+
+This repository now tracks full parity with Agda's interactive IOTCM command
+constructors listed in `Agda.Interaction.Base` (verification date: 2026-03-24).
+
+- The current protocol inventory lives in `src/protocol/command-registry.ts`.
+- That inventory and tests enforce that all tracked upstream commands are
+  implemented and MCP-exposed.
+- Architecture still keeps a clean separation between transport, protocol
+  decoding, and MCP presentation layers.
+
+At the current milestone, the server now exposes:
+
+- `agda_goal_type_context_infer` for goal, context, and inferred-type queries
+- `agda_goal_type_context_check` for goal, context, and checked-term queries
+- `agda_goal` for exact goal-only display
+- `agda_context` for exact context-only display
+- `agda_refine_exact` for exact `Cmd_refine`
+- `agda_intro` for exact `Cmd_intro`
+- `agda_solve_one` for exact `Cmd_solveOne`
+- `agda_load_no_metas` for strict loading without unresolved goals
+- `agda_abort` and `agda_exit` for process control
+- `agda_show_version` for the running Agda process version
+- `agda_load_highlighting_info`, `agda_token_highlighting`, and `agda_highlight` for highlighting control
+- `agda_show_implicit_args` / `agda_toggle_implicit_args` and `agda_show_irrelevant_args` / `agda_toggle_irrelevant_args` for display toggles
+- `agda_compile`, `agda_backend_top`, and `agda_backend_hole` for backend interaction commands
+
 ### Session management
 
-| Tool | Description |
-| --- | --- |
-| `agda_load` | Load and type-check a file, establish the active interactive session, and return current goal IDs |
-| `agda_session_status` | Show the currently loaded file and available goal IDs |
-| `agda_typecheck` | Run a stateless batch type-check without creating or updating the interactive session |
+| Tool                  | Description                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------- |
+| `agda_load`           | Load and type-check a file, establish the active interactive session, and return current goal IDs |
+| `agda_load_no_metas`  | Load and type-check a file, failing if any unsolved metavariables remain                          |
+| `agda_session_status` | Show the currently loaded file and available goal IDs                                             |
+| `agda_show_version`   | Show the version string reported by the running Agda process                                      |
+| `agda_abort`          | Send Agda's `Cmd_abort` to the running process                                                    |
+| `agda_exit`           | Send Agda's `Cmd_exit` to the running process                                                     |
+| `agda_typecheck`      | Run a stateless batch type-check without creating or updating the interactive session             |
+
+### Display and highlighting
+
+| Tool                          | Description                                         |
+| ----------------------------- | --------------------------------------------------- |
+| `agda_load_highlighting_info` | Load highlighting metadata for a file               |
+| `agda_token_highlighting`     | Keep or remove token highlighting output for a file |
+| `agda_highlight`              | Highlight an expression in a goal context           |
+| `agda_show_implicit_args`     | Set implicit-argument visibility                    |
+| `agda_toggle_implicit_args`   | Toggle implicit-argument visibility                 |
+| `agda_show_irrelevant_args`   | Set irrelevant-argument visibility                  |
+| `agda_toggle_irrelevant_args` | Toggle irrelevant-argument visibility               |
+
+### Backend commands
+
+| Tool                | Description                                                            |
+| ------------------- | ---------------------------------------------------------------------- |
+| `agda_compile`      | Compile a module through Agda using a selected backend (`Cmd_compile`) |
+| `agda_backend_top`  | Send backend-specific top-level payload (`Cmd_backend_top`)            |
+| `agda_backend_hole` | Send backend-specific goal-hole payload (`Cmd_backend_hole`)           |
 
 ### Goal inspection and proof interaction
 
 These tools require a file to be loaded first via `agda_load`.
 
-| Tool | Description |
-| --- | --- |
-| `agda_goal_type` | Show the goal type and local context for one interaction point |
-| `agda_metas` | List unsolved goals in the loaded file |
-| `agda_case_split` | Case-split on a variable in a goal and return the generated clauses |
-| `agda_give` | Fill a goal with a proposed expression |
-| `agda_refine` | Refine a goal by applying a function or constructor |
-| `agda_auto` | Attempt proof search for a single goal |
-| `agda_auto_all` | Attempt proof search across all goals |
-| `agda_solve_all` | Solve goals that have unique solutions |
-| `agda_compute` | Normalize an expression, either in goal context or at top level |
-| `agda_infer` | Infer the type of an expression, either in goal context or at top level |
-| `agda_constraints` | Show Agda's current constraint set |
-| `agda_elaborate` | Elaborate an expression in a goal context |
-| `agda_helper_function` | Generate a helper function type from a goal-local expression |
+| Tool                           | Description                                                                               |
+| ------------------------------ | ----------------------------------------------------------------------------------------- |
+| `agda_goal_type`               | Show the goal type and local context for one interaction point                            |
+| `agda_goal`                    | Show only the goal type for one interaction point                                         |
+| `agda_context`                 | Show only the local context for one interaction point                                     |
+| `agda_metas`                   | List unsolved goals in the loaded file                                                    |
+| `agda_case_split`              | Case-split on a variable in a goal and return the generated clauses                       |
+| `agda_give`                    | Fill a goal with a proposed expression                                                    |
+| `agda_refine`                  | Refine a goal by applying a function or constructor                                       |
+| `agda_refine_exact`            | Refine a goal using Agda's exact `Cmd_refine` command                                     |
+| `agda_intro`                   | Introduce a lambda or constructor using Agda's exact `Cmd_intro` command                  |
+| `agda_auto`                    | Attempt proof search for a single goal                                                    |
+| `agda_auto_all`                | Attempt proof search across all goals                                                     |
+| `agda_solve_all`               | Solve goals that have unique solutions                                                    |
+| `agda_solve_one`               | Solve one goal if Agda already knows it has a unique solution                             |
+| `agda_compute`                 | Normalize an expression, either in goal context or at top level                           |
+| `agda_infer`                   | Infer the type of an expression, either in goal context or at top level                   |
+| `agda_constraints`             | Show Agda's current constraint set                                                        |
+| `agda_elaborate`               | Elaborate an expression in a goal context                                                 |
+| `agda_helper_function`         | Generate a helper function type from a goal-local expression                              |
+| `agda_goal_type_context_infer` | Show a goal's context and type together with the inferred type of an expression           |
+| `agda_goal_type_context_check` | Show a goal's context and type together with the checked elaborated form of an expression |
 
 ### Navigation and environment inspection
 
-| Tool | Description |
-| --- | --- |
-| `agda_read_module` | Read a module from disk with line numbers |
-| `agda_list_modules` | List Agda modules under a tier or directory segment |
-| `agda_check_postulates` | Check a file for `postulate` declarations |
-| `agda_search_definitions` | Search source files for matching identifiers or text |
-| `agda_why_in_scope` | Explain why a name is in scope, either at top level or in a goal |
-| `agda_show_module` | Show what a module exports |
-| `agda_search_about` | Search the loaded environment for names whose types mention the query |
+| Tool                      | Description                                                           |
+| ------------------------- | --------------------------------------------------------------------- |
+| `agda_read_module`        | Read a module from disk with line numbers                             |
+| `agda_list_modules`       | List Agda modules under a tier or directory segment                   |
+| `agda_check_postulates`   | Check a file for `postulate` declarations                             |
+| `agda_search_definitions` | Search source files for matching identifiers or text                  |
+| `agda_why_in_scope`       | Explain why a name is in scope, either at top level or in a goal      |
+| `agda_show_module`        | Show what a module exports                                            |
+| `agda_search_about`       | Search the loaded environment for names whose types mention the query |
 
 ## Typical interactive workflow
 
@@ -255,10 +313,10 @@ Use `agda_load` when you want:
 
 ## Environment variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `AGDA_MCP_ROOT` | `cwd` | Root directory used to resolve Agda files and relative extension paths |
-| `AGDA_MCP_EXTENSION_MODULES` | unset | Colon-separated list of extension module paths or package specifiers |
+| Variable                     | Default | Description                                                            |
+| ---------------------------- | ------- | ---------------------------------------------------------------------- |
+| `AGDA_MCP_ROOT`              | `cwd`   | Root directory used to resolve Agda files and relative extension paths |
+| `AGDA_MCP_EXTENSION_MODULES` | unset   | Colon-separated list of extension module paths or package specifiers   |
 
 ## Extension modules
 
@@ -320,13 +378,13 @@ AGDA_MCP_ROOT=. AGDA_MCP_EXTENSION_MODULES=dist/my-extension.js node dist/index.
 
 ### Scripts
 
-| Script | Purpose |
-| --- | --- |
-| `npm run build` | Compile TypeScript into `dist/` |
-| `npm run dev` | Run the TypeScript entry point directly with `tsx` |
-| `npm test` | Build first, then run the Node test suite |
-| `npm run test:integration` | Run the Agda-backed integration test scaffold |
-| `npm run verify` | Run tests and verify package contents with `npm pack --dry-run` |
+| Script                     | Purpose                                                         |
+| -------------------------- | --------------------------------------------------------------- |
+| `npm run build`            | Compile TypeScript into `dist/`                                 |
+| `npm run dev`              | Run the TypeScript entry point directly with `tsx`              |
+| `npm test`                 | Build first, then run the Node test suite                       |
+| `npm run test:integration` | Run the Agda-backed integration test scaffold                   |
+| `npm run verify`           | Run tests and verify package contents with `npm pack --dry-run` |
 
 ### Local development flow
 
@@ -355,6 +413,15 @@ installed:
 ```bash
 RUN_AGDA_INTEGRATION=1 npm run test:integration
 ```
+
+Backend integration commands can be exercised with:
+
+```bash
+RUN_AGDA_BACKEND_INTEGRATION=1 AGDA_BACKEND_EXPR=GHC npm run test:integration
+```
+
+`AGDA_BACKEND_EXPR` accepts backend constructor expressions such as `GHC`,
+`GHCNoMain`, `LaTeX`, `QuickLaTeX`, or `OtherBackend "Name"`.
 
 ## Publishing
 
@@ -415,10 +482,26 @@ src/
       Expression normalization and type inference.
     advanced-queries.ts
       Constraints, scope, elaboration, module inspection, and search.
+    display-operations.ts
+      Highlighting and display-toggle command delegates.
+    backend-operations.ts
+      Compile and backend payload command delegates.
+    backend-expression.ts
+      Backend expression validation and normalization.
     response-parsing.ts
       Helpers for extracting user-facing messages from Agda responses.
     types.ts
       Shared types for the Agda integration layer.
+
+  protocol/
+    command-registry.ts
+      Upstream command inventory and parity metadata.
+    responses/
+      goal-display.ts
+      proof-actions.ts
+      process-controls.ts
+      backend.ts
+        Focused response decoders per command family.
 
   tools/
     session.ts
@@ -427,6 +510,14 @@ src/
       MCP tool registration for goal-oriented proof actions.
     navigation.ts
       MCP tool registration for source and environment navigation.
+    display.ts
+      MCP tool registration for highlighting and display toggles.
+    backend.ts
+      MCP tool registration for compile and backend payload commands.
+
+  session/
+    session-state.ts
+      High-level session phase derivation used to keep process lifecycle concerns explicit.
 ```
 
 ## Protocol notes

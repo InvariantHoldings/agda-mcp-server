@@ -20,27 +20,37 @@
 //     goal-operations.ts       — goal type/context, case split, give, refine, auto, metas
 //     expression-operations.ts — compute, infer (goal-level and top-level)
 //     advanced-queries.ts      — constraints, solve, scope, elaborate, modules, search
+//     display-operations.ts    — highlighting and display toggles
+//     backend-operations.ts    — compile and backend payload commands
 
 import { spawn, ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { EventEmitter } from "node:events";
+import { deriveSessionPhase, type SessionPhase } from "../session/session-state.js";
 import type {
   AgdaResponse,
   AgdaGoal,
   LoadResult,
   GoalInfo,
+  GoalTypeResult,
+  ContextResult,
   CaseSplitResult,
   GiveResult,
   ComputeResult,
   InferResult,
   AutoResult,
+  SolveResult,
   WhyInScopeResult,
   ElaborateResult,
   HelperFunctionResult,
   ModuleContentsResult,
   SearchAboutResult,
   GoalTypeContextInferResult,
+  GoalTypeContextCheckResult,
+  ShowVersionResult,
+  DisplayControlResult,
+  BackendCommandResult,
 } from "./types.js";
 import { extractMessage } from "./response-parsing.js";
 
@@ -48,6 +58,8 @@ import { extractMessage } from "./response-parsing.js";
 import * as GoalOps from "./goal-operations.js";
 import * as ExprOps from "./expression-operations.js";
 import * as AdvancedOps from "./advanced-queries.js";
+import * as DisplayOps from "./display-operations.js";
+import * as BackendOps from "./backend-operations.js";
 
 // ── Binary discovery ──────────────────────────────────────────────────
 
@@ -55,7 +67,9 @@ import * as AdvancedOps from "./advanced-queries.js";
  * Find the repo-pinned Agda binary.
  */
 export function findAgdaBinary(repoRoot: string): string {
-  if (process.env.AGDA_BIN) return process.env.AGDA_BIN;
+  if (process.env.AGDA_BIN) {
+    return process.env.AGDA_BIN;
+  }
   const pinned = resolve(repoRoot, "tooling/scripts/run-pinned-agda.sh");
   if (existsSync(pinned)) {
     return pinned;
@@ -86,6 +100,7 @@ export class AgdaSession {
   responseQueue: AgdaResponse[] = [];
   emitter = new EventEmitter();
   collecting = false;
+  exiting = false;
 
   constructor(repoRoot: string) {
     this.repoRoot = repoRoot;
@@ -124,6 +139,7 @@ export class AgdaSession {
       this.proc = null;
       this.currentFile = null;
       this.goalIds = [];
+      this.exiting = false;
       // Signal any waiting command
       this.emitter.emit("done");
     });
@@ -229,6 +245,65 @@ export class AgdaSession {
     return this.currentFile;
   }
 
+  private buildIotcm(filePath: string, agdaCmd: string): string {
+    return `IOTCM "${filePath}" NonInteractive Direct (${agdaCmd})`;
+  }
+
+  private async runIndependentCommand(
+    agdaCmd: string,
+    timeoutMs = 120_000,
+  ): Promise<AgdaResponse[]> {
+    return this.sendCommand(this.buildIotcm(this.currentFile ?? "", agdaCmd), timeoutMs);
+  }
+
+  private parseLoadResponses(responses: AgdaResponse[]): Omit<LoadResult, "raw"> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const goals: AgdaGoal[] = [];
+    let allGoalsText = "";
+    let success = true;
+
+    for (const resp of responses) {
+      if (resp.kind === "InteractionPoints") {
+        const points = resp.interactionPoints;
+        if (Array.isArray(points)) {
+          for (const pt of points) {
+            const id = typeof pt === "number" ? pt : (pt as { id: number }).id;
+            this.goalIds.push(id);
+            goals.push({ goalId: id, type: "?", context: [] });
+          }
+        }
+      }
+
+      if (resp.kind === "DisplayInfo") {
+        const info = resp.info as Record<string, unknown> | undefined;
+        if (info) {
+          if (info.kind === "Error") {
+            success = false;
+            errors.push(extractMessage(info));
+          }
+          if (info.kind === "AllGoalsWarnings") {
+            allGoalsText = extractMessage(info);
+            const warnMatch = allGoalsText.match(/———— Warnings? ————[\s\S]*$/);
+            if (warnMatch) {
+              warnings.push(warnMatch[0]);
+            }
+          }
+        }
+      }
+
+      if (resp.kind === "StderrOutput") {
+        const text = String(resp.text ?? "").trim();
+        if (text && (text.includes("Error") || text.includes("error"))) {
+          errors.push(text);
+          success = false;
+        }
+      }
+    }
+
+    return { success, errors, warnings, goals, allGoalsText };
+  }
+
   // ── Public API ────────────────────────────────────────────────────
 
   /**
@@ -251,67 +326,50 @@ export class AgdaSession {
     this.currentFile = absPath;
     this.goalIds = [];
 
-    const cmd = this.iotcm(
-      `Cmd_load "${absPath}" []`,
-    );
+    const cmd = this.iotcm(`Cmd_load "${absPath}" []`);
     const responses = await this.sendCommand(cmd);
+    return { ...this.parseLoadResponses(responses), raw: responses };
+  }
 
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const goals: AgdaGoal[] = [];
-    let allGoalsText = "";
-    let success = true;
-
-    for (const resp of responses) {
-      // Extract interaction points (goal IDs)
-      if (resp.kind === "InteractionPoints") {
-        const points = resp.interactionPoints;
-        if (Array.isArray(points)) {
-          for (const pt of points) {
-            const id = typeof pt === "number" ? pt : (pt as { id: number }).id;
-            this.goalIds.push(id);
-            goals.push({ goalId: id, type: "?", context: [] });
-          }
-        }
-      }
-
-      // Extract errors from DisplayInfo
-      if (resp.kind === "DisplayInfo") {
-        const info = resp.info as Record<string, unknown> | undefined;
-        if (info) {
-          if (info.kind === "Error") {
-            success = false;
-            const msg = extractMessage(info);
-            errors.push(msg);
-          }
-          if (info.kind === "AllGoalsWarnings") {
-            allGoalsText = extractMessage(info);
-            // Parse warnings from the all-goals text
-            const warnMatch = allGoalsText.match(/———— Warnings? ————[\s\S]*$/);
-            if (warnMatch) {
-              warnings.push(warnMatch[0]);
-            }
-          }
-        }
-      }
-
-      // Stderr errors
-      if (resp.kind === "StderrOutput") {
-        const text = String(resp.text ?? "").trim();
-        if (text && (text.includes("Error") || text.includes("error"))) {
-          errors.push(text);
-          success = false;
-        }
-      }
+  async loadNoMetas(filePath: string): Promise<LoadResult> {
+    const absPath = resolve(this.repoRoot, filePath);
+    if (!existsSync(absPath)) {
+      return {
+        success: false,
+        errors: [`File not found: ${absPath}`],
+        warnings: [],
+        goals: [],
+        allGoalsText: "",
+        raw: [],
+      };
     }
 
-    return { success, errors, warnings, goals, allGoalsText, raw: responses };
+    this.currentFile = absPath;
+    this.goalIds = [];
+
+    const responses = await this.sendCommand(
+      this.buildIotcm(absPath, `Cmd_load_no_metas "${absPath}"`),
+    );
+
+    return { ...this.parseLoadResponses(responses), raw: responses };
   }
 
   // ── Goal operations (delegated) ───────────────────────────────────
 
   async goalTypeContext(goalId: number): Promise<GoalInfo> {
     return GoalOps.goalTypeContext(this, goalId);
+  }
+
+  async goalType(goalId: number): Promise<GoalTypeResult> {
+    return GoalOps.goalType(this, goalId);
+  }
+
+  async context(goalId: number): Promise<ContextResult> {
+    return GoalOps.context(this, goalId);
+  }
+
+  async goalTypeContextCheck(goalId: number, expr: string): Promise<GoalTypeContextCheckResult> {
+    return GoalOps.goalTypeContextCheck(this, goalId, expr);
   }
 
   async caseSplit(goalId: number, variable: string): Promise<CaseSplitResult> {
@@ -324,6 +382,14 @@ export class AgdaSession {
 
   async refine(goalId: number, expr: string): Promise<GiveResult> {
     return GoalOps.refine(this, goalId, expr);
+  }
+
+  async refineExact(goalId: number, expr: string): Promise<GiveResult> {
+    return GoalOps.refineExact(this, goalId, expr);
+  }
+
+  async intro(goalId: number, expr = ""): Promise<GiveResult> {
+    return GoalOps.intro(this, goalId, expr);
   }
 
   async autoOne(goalId: number): Promise<AutoResult> {
@@ -358,8 +424,21 @@ export class AgdaSession {
     return AdvancedOps.constraints(this);
   }
 
-  async solveAll(): Promise<{ solutions: string[]; raw: AgdaResponse[] }> {
+  async solveAll(): Promise<SolveResult> {
     return AdvancedOps.solveAll(this);
+  }
+
+  async solveOne(goalId: number): Promise<SolveResult> {
+    return AdvancedOps.solveOne(this, goalId);
+  }
+
+  async abort(): Promise<AgdaResponse[]> {
+    return this.runIndependentCommand("Cmd_abort", 10_000);
+  }
+
+  async exit(): Promise<AgdaResponse[]> {
+    this.exiting = true;
+    return this.runIndependentCommand("Cmd_exit", 10_000);
   }
 
   async whyInScope(goalId: number, name: string): Promise<WhyInScopeResult> {
@@ -394,8 +473,57 @@ export class AgdaSession {
     return AdvancedOps.autoAll(this);
   }
 
+  async showVersion(): Promise<ShowVersionResult> {
+    return AdvancedOps.showVersion(this);
+  }
+
   async goalTypeContextInfer(goalId: number, expr: string): Promise<GoalTypeContextInferResult> {
     return AdvancedOps.goalTypeContextInfer(this, goalId, expr);
+  }
+
+  async loadHighlightingInfo(filePath: string): Promise<DisplayControlResult> {
+    return DisplayOps.loadHighlightingInfo(this, filePath);
+  }
+
+  async tokenHighlighting(filePath: string, remove = false): Promise<DisplayControlResult> {
+    return DisplayOps.tokenHighlighting(this, filePath, remove);
+  }
+
+  async highlight(goalId: number, expr: string): Promise<DisplayControlResult> {
+    return DisplayOps.highlight(this, goalId, expr);
+  }
+
+  async showImplicitArgs(show: boolean): Promise<DisplayControlResult> {
+    return DisplayOps.showImplicitArgs(this, show);
+  }
+
+  async toggleImplicitArgs(): Promise<DisplayControlResult> {
+    return DisplayOps.toggleImplicitArgs(this);
+  }
+
+  async showIrrelevantArgs(show: boolean): Promise<DisplayControlResult> {
+    return DisplayOps.showIrrelevantArgs(this, show);
+  }
+
+  async toggleIrrelevantArgs(): Promise<DisplayControlResult> {
+    return DisplayOps.toggleIrrelevantArgs(this);
+  }
+
+  async compile(backendExpr: string, filePath: string, argv: string[] = []): Promise<BackendCommandResult> {
+    return BackendOps.compile(this, backendExpr, filePath, argv);
+  }
+
+  async backendTop(backendExpr: string, payload: string): Promise<BackendCommandResult> {
+    return BackendOps.backendTop(this, backendExpr, payload);
+  }
+
+  async backendHole(
+    goalId: number,
+    holeContents: string,
+    backendExpr: string,
+    payload: string,
+  ): Promise<BackendCommandResult> {
+    return BackendOps.backendHole(this, goalId, holeContents, backendExpr, payload);
   }
 
   // ── Accessors ─────────────────────────────────────────────────────
@@ -410,6 +538,16 @@ export class AgdaSession {
     return this.currentFile;
   }
 
+  /** Get the current high-level session phase. */
+  getPhase(): SessionPhase {
+    return deriveSessionPhase({
+      hasProcess: this.proc !== null && this.proc.exitCode === null,
+      hasLoadedFile: this.currentFile !== null,
+      isCollecting: this.collecting,
+      isExiting: this.exiting,
+    });
+  }
+
   /** Kill the Agda process and reset state. */
   destroy(): void {
     if (this.proc) {
@@ -420,5 +558,7 @@ export class AgdaSession {
     this.goalIds = [];
     this.buffer = "";
     this.responseQueue = [];
+    this.collecting = false;
+    this.exiting = false;
   }
 }

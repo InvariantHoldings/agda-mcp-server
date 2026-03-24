@@ -38,6 +38,49 @@ export function register(
     },
   );
 
+  // ── agda_goal ─────────────────────────────────────────────────────
+  server.tool(
+    "agda_goal",
+    "Show only the current goal type for a specific goal, using Agda's exact Cmd_goal_type query.",
+    {
+      goalId: z.number().describe("The goal ID (from agda_load output)"),
+    },
+    async ({ goalId }) => {
+      try {
+        const info = await session.goalType(goalId);
+        const output = `## Goal ?${goalId}\n\n### Goal type\n\`\`\`agda\n${info.type || "(unknown)"}\n\`\`\`\n`;
+        return { content: [{ type: "text" as const, text: output }] };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  );
+
+  // ── agda_context ──────────────────────────────────────────────────
+  server.tool(
+    "agda_context",
+    "Show only the local context for a specific goal, using Agda's exact Cmd_context query.",
+    {
+      goalId: z.number().describe("The goal ID (from agda_load output)"),
+    },
+    async ({ goalId }) => {
+      try {
+        const info = await session.context(goalId);
+        let output = `## Context for ?${goalId}\n\n`;
+        output += info.context.length > 0
+          ? `\`\`\`agda\n${info.context.join("\n")}\n\`\`\`\n`
+          : "(empty context)\n";
+        return { content: [{ type: "text" as const, text: output }] };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  );
+
   // ── agda_metas ────────────────────────────────────────────────────
   server.tool(
     "agda_metas",
@@ -139,6 +182,54 @@ export function register(
     },
   );
 
+  // ── agda_refine_exact ────────────────────────────────────────────
+  server.tool(
+    "agda_refine_exact",
+    "Refine a goal using Agda's exact Cmd_refine command.",
+    {
+      goalId: z.number().describe("The goal ID to refine"),
+      expr: z.string().describe("The expression to refine with"),
+    },
+    async ({ goalId, expr }) => {
+      try {
+        const result = await session.refineExact(goalId, expr);
+        let output = `## Exact refine ?${goalId} with \`${expr}\`\n\n`;
+        output += result.result
+          ? `**Result:** \`${result.result}\`\n`
+          : "Refinement applied. Call `agda_metas` to inspect resulting goals.\n";
+        return { content: [{ type: "text" as const, text: output }] };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  );
+
+  // ── agda_intro ───────────────────────────────────────────────────
+  server.tool(
+    "agda_intro",
+    "Introduce a lambda or constructor using Agda's exact Cmd_intro command.",
+    {
+      goalId: z.number().describe("The goal ID to introduce into"),
+      expr: z.string().optional().describe("Optional existing goal contents to use as input"),
+    },
+    async ({ goalId, expr }) => {
+      try {
+        const result = await session.intro(goalId, expr ?? "");
+        let output = `## Intro ?${goalId}\n\n`;
+        output += result.result
+          ? `**Result:** \`${result.result}\`\n`
+          : "Introduction applied. Call `agda_metas` to inspect resulting goals.\n";
+        return { content: [{ type: "text" as const, text: output }] };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  );
+
   // ── agda_auto ─────────────────────────────────────────────────────
   server.tool(
     "agda_auto",
@@ -198,6 +289,33 @@ export function register(
           }
         } else {
           output += `No goals with unique solutions found.\n`;
+        }
+        return { content: [{ type: "text" as const, text: output }] };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  );
+
+  // ── agda_solve_one ───────────────────────────────────────────────
+  server.tool(
+    "agda_solve_one",
+    "Attempt to solve one goal that has a unique solution using Agda's exact Cmd_solveOne command.",
+    {
+      goalId: z.number().describe("The goal ID to solve if it has a unique solution"),
+    },
+    async ({ goalId }) => {
+      try {
+        const result = await session.solveOne(goalId);
+        let output = `## Solve one ?${goalId}\n\n`;
+        if (result.solutions.length > 0) {
+          for (const solution of result.solutions) {
+            output += `- ${solution}\n`;
+          }
+        } else {
+          output += "No unique solution found for that goal.\n";
         }
         return { content: [{ type: "text" as const, text: output }] };
       } catch (err) {
@@ -299,6 +417,35 @@ export function register(
     },
   );
 
+  // ── agda_goal_type_context_check ─────────────────────────────────
+  server.tool(
+    "agda_goal_type_context_check",
+    "Show the goal context, goal type, and checked elaborated term for an expression in a goal context.",
+    {
+      goalId: z.number().describe("The goal ID for context"),
+      expr: z.string().describe("The Agda expression to check against the goal type"),
+    },
+    async ({ goalId, expr }) => {
+      try {
+        const result = await session.goalTypeContextCheck(goalId, expr);
+        let output = `## Goal ?${goalId}, context, and checked term\n\n`;
+
+        if (result.context.length > 0) {
+          output += `### Context\n\n\`\`\`agda\n${result.context.join("\n")}\n\`\`\`\n\n`;
+        }
+
+        output += `### Goal type\n\n\`\`\`agda\n${result.goalType || "(unknown)"}\n\`\`\`\n\n`;
+        output += `### Checked term for \`${expr}\`\n\n\`\`\`agda\n${result.checkedExpr || "(no checked term returned)"}\n\`\`\`\n`;
+
+        return { content: [{ type: "text" as const, text: output }] };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  );
+
   // ── agda_helper_function ──────────────────────────────────────────
   server.tool(
     "agda_helper_function",
@@ -312,6 +459,35 @@ export function register(
         const result = await session.helperFunction(goalId, expr);
         let output = `## Helper function for \`${expr}\` in ?${goalId}\n\n`;
         output += `\`\`\`agda\n${result.helperType || "(no result)"}\n\`\`\`\n`;
+        return { content: [{ type: "text" as const, text: output }] };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  );
+
+  // ── agda_goal_type_context_infer ─────────────────────────────────
+  server.tool(
+    "agda_goal_type_context_infer",
+    "Show the goal context, goal type, and inferred type of an expression in a goal context.",
+    {
+      goalId: z.number().describe("The goal ID for context"),
+      expr: z.string().describe("The Agda expression to infer in context"),
+    },
+    async ({ goalId, expr }) => {
+      try {
+        const result = await session.goalTypeContextInfer(goalId, expr);
+        let output = `## Goal ?${goalId}, context, and inferred type\n\n`;
+
+        if (result.context.length > 0) {
+          output += `### Context\n\n\`\`\`agda\n${result.context.join("\n")}\n\`\`\`\n\n`;
+        }
+
+        output += `### Goal type\n\n\`\`\`agda\n${result.goalType || "(unknown)"}\n\`\`\`\n\n`;
+        output += `### Inferred type for \`${expr}\`\n\n\`\`\`agda\n${result.inferredType || "(unable to infer)"}\n\`\`\`\n`;
+
         return { content: [{ type: "text" as const, text: output }] };
       } catch (err) {
         return {

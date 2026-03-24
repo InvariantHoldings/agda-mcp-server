@@ -1,0 +1,10 @@
+release: 0.5.0 full IOTCM parity + backend integration
+
+- complete command coverage parity with Agda Interaction/Base IOTCM constructors
+- add backend command support tools: agda_compile, agda_backend_top, agda_backend_hole
+- add backend response decoding and backend command operation layer
+- add strict backend expression validation (including OtherBackend "Name")
+- add highlighting/display command family and process control commands
+- add property parity assertion that no planned upstream commands remain
+- add optional Agda-backed backend integration tests
+- update protocol registry metadata, README, and changelog for parity milestone
