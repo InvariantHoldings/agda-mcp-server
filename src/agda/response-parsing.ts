@@ -13,6 +13,12 @@ export function extractMessage(info: Record<string, unknown>): string {
     return extractMessage(info.goalInfo as Record<string, unknown>);
   }
 
+  // Agda 2.8+ Error wraps message inside an "error" object
+  if (info.error && typeof info.error === "object") {
+    const err = info.error as Record<string, unknown>;
+    if (typeof err.message === "string") return err.message;
+  }
+
   // Some responses use "contents" or "text"
   if (typeof info.contents === "string") return info.contents;
   if (typeof info.text === "string") return info.text;

@@ -295,13 +295,15 @@ export class AgdaSession {
       };
     }
 
-    this.currentFile = absPath;
-
-    const cmd = this.iotcm(`Cmd_load "${absPath}" []`);
-    const responses = await this.sendCommand(cmd);
+    // Use buildIotcm with absPath directly — don't set currentFile yet
+    // because ensureProcess() (called inside sendCommand) resets it
+    const responses = await this.sendCommand(
+      this.buildIotcm(absPath, `Cmd_load "${absPath}" []`),
+    );
     const parsed = parseLoadResponses(responses);
 
-    // Atomic assignment — no window where goalIds is empty
+    // Set session state atomically AFTER command completes
+    this.currentFile = absPath;
     this.goalIds = parsed.goalIds;
     this.lastLoadedMtime = statSync(absPath).mtimeMs;
 
@@ -332,14 +334,13 @@ export class AgdaSession {
       };
     }
 
-    this.currentFile = absPath;
-
     const responses = await this.sendCommand(
       this.buildIotcm(absPath, `Cmd_load_no_metas "${absPath}"`),
     );
     const parsed = parseLoadResponses(responses);
 
-    // Atomic assignment
+    // Set session state atomically AFTER command completes
+    this.currentFile = absPath;
     this.goalIds = parsed.goalIds;
     this.lastLoadedMtime = statSync(absPath).mtimeMs;
 
