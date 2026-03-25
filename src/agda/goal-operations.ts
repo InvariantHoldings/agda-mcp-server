@@ -17,7 +17,7 @@ import type {
   GiveResult,
   AutoResult,
 } from "./types.js";
-import { extractMessage, escapeAgdaString, coerceString } from "./response-parsing.js";
+import { extractMessage, escapeAgdaString } from "./response-parsing.js";
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
 import { decodeGiveLikeResponse } from "../protocol/responses/proof-actions.js";
 
@@ -117,11 +117,10 @@ export async function caseSplit(
   const clauses: string[] = [];
   for (const resp of responses) {
     if (resp.kind === "MakeCase") {
-      const cs = resp.clauses;
+      // After normalization: clauses is always string[]
+      const cs = resp.clauses as string[] | undefined;
       if (Array.isArray(cs)) {
-        for (const c of cs) {
-          clauses.push(typeof c === "string" ? c : coerceString(c));
-        }
+        clauses.push(...cs);
       }
     }
     // Also check DisplayInfo for MakeCase results
@@ -156,7 +155,8 @@ export async function give(
   let result = "";
   for (const resp of responses) {
     if (resp.kind === "GiveAction") {
-      const val = coerceString(resp.giveResult ?? resp.result);
+      // After normalization: giveResult/result are always strings
+      const val = (resp.giveResult ?? resp.result ?? "") as string;
       if (val) result = val;
     }
     if (resp.kind === "DisplayInfo") {
@@ -238,7 +238,8 @@ export async function autoOne(
   let solution = "";
   for (const resp of responses) {
     if (resp.kind === "GiveAction") {
-      const val = coerceString(resp.giveResult ?? resp.result);
+      // After normalization: giveResult/result are always strings
+      const val = (resp.giveResult ?? resp.result ?? "") as string;
       if (val) solution = val;
     }
     if (resp.kind === "DisplayInfo") {

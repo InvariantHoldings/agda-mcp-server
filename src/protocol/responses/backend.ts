@@ -1,5 +1,5 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage, coerceString } from "../../agda/response-parsing.js";
+import { extractMessage } from "../../agda/response-parsing.js";
 
 export interface DecodedBackendResponses {
   output: string;
@@ -27,13 +27,13 @@ export function decodeBackendResponses(
     }
 
     if (resp.kind === "RunningInfo") {
-      const message = coerceString(resp.message).trim();
+      const message = ((resp.message as string) ?? "").trim();
       if (message) lines.push(message);
       continue;
     }
 
     if (resp.kind === "StderrOutput") {
-      const text = coerceString(resp.text).trim();
+      const text = ((resp.text as string) ?? "").trim();
       if (text) {
         lines.push(text);
         if (/\berror\b/i.test(text)) {

@@ -19,7 +19,7 @@ import type {
   GoalTypeContextInferResult,
   ShowVersionResult,
 } from "./types.js";
-import { extractMessage, escapeAgdaString, coerceString } from "./response-parsing.js";
+import { extractMessage, escapeAgdaString } from "./response-parsing.js";
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
 import { decodeSolveResponses } from "../protocol/responses/proof-actions.js";
 
@@ -151,7 +151,8 @@ export async function elaborate(
       }
     }
     if (resp.kind === "GiveAction") {
-      const val = coerceString(resp.giveResult ?? resp.result);
+      // After normalization: giveResult/result are always strings
+      const val = (resp.giveResult ?? resp.result ?? "") as string;
       if (val) elaboration = val;
     }
   }
@@ -278,7 +279,8 @@ export async function autoAll(
   let solution = "";
   for (const resp of responses) {
     if (resp.kind === "GiveAction") {
-      const val = coerceString(resp.giveResult ?? resp.result);
+      // After normalization: giveResult/result are always strings
+      const val = (resp.giveResult ?? resp.result ?? "") as string;
       if (val) solution = val;
     }
     if (resp.kind === "DisplayInfo") {
