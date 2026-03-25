@@ -169,36 +169,46 @@ export class AgdaSession {
     return this.proc;
   }
 
-  /** Parse newline-delimited JSON from the stdout buffer. */
+  /**
+   * Parse newline-delimited JSON from the stdout buffer.
+   * Uses indexOf-based scanning instead of split() so we only
+   * process new data on each chunk — O(n) total, not O(n²).
+   */
   private drainBuffer(): void {
-    const lines = this.buffer.split("\n");
-    this.buffer = lines.pop() ?? "";
+    let start = 0;
+    let newlineIdx: number;
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
+    while ((newlineIdx = this.buffer.indexOf("\n", start)) !== -1) {
+      const line = this.buffer.slice(start, newlineIdx).trim();
+      start = newlineIdx + 1;
+
+      if (!line) continue;
 
       // Agda may emit non-JSON preamble lines (e.g. "Agda2>")
-      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
+      if (!line.startsWith("{") && !line.startsWith("[")) continue;
 
       try {
-        const resp: AgdaResponse = normalizeAgdaResponse(JSON.parse(trimmed));
+        const resp: AgdaResponse = normalizeAgdaResponse(JSON.parse(line));
         if (this.collecting) {
           this.responseQueue.push(resp);
         }
 
-        // A Status response with checked=true signals command completion
+        // A Status response signals command completion
         if (resp.kind === "Status") {
           this.emitter.emit("done");
         }
-        // ClearHighlighting/ClearRunningInfo can also signal end of response
+        // ClearRunningInfo can also signal end of response
         if (resp.kind === "ClearRunningInfo") {
-          // Give a small delay for any trailing responses, then signal
           setTimeout(() => this.emitter.emit("done"), 100);
         }
       } catch {
         // Non-JSON line — skip
       }
+    }
+
+    // Keep only the unparsed remainder
+    if (start > 0) {
+      this.buffer = this.buffer.slice(start);
     }
   }
 
