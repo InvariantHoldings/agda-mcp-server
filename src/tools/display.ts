@@ -7,6 +7,7 @@ import { z } from "zod";
 import { resolve, relative } from "node:path";
 import { existsSync } from "node:fs";
 import { AgdaSession } from "../agda-process.js";
+import { wrapHandler, wrapGoalHandler, text } from "./tool-helpers.js";
 
 export function register(
   server: McpServer,
@@ -16,23 +17,15 @@ export function register(
   server.tool(
     "agda_load_highlighting_info",
     "Load highlighting information for a file using Agda's Cmd_load_highlighting_info.",
-    {
-      file: z.string().describe("Path to the .agda file (relative to repo root or absolute)"),
-    },
+    { file: z.string().describe("Path to the .agda file (relative to repo root or absolute)") },
     async ({ file }) => {
       const filePath = resolve(repoRoot, file);
-      if (!existsSync(filePath)) {
-        return { content: [{ type: "text" as const, text: `File not found: ${filePath}` }] };
-      }
-
+      if (!existsSync(filePath)) return text(`File not found: ${filePath}`);
       try {
-        const result = await session.loadHighlightingInfo(filePath);
-        const output = `## Highlighting info loaded\n\nFile: ${relative(repoRoot, filePath)}\n\n${result.output}\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        const result = await session.display.loadHighlightingInfo(filePath);
+        return text(`## Highlighting info loaded\n\nFile: ${relative(repoRoot, filePath)}\n\n${result.output}\n`);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -46,18 +39,12 @@ export function register(
     },
     async ({ file, remove }) => {
       const filePath = resolve(repoRoot, file);
-      if (!existsSync(filePath)) {
-        return { content: [{ type: "text" as const, text: `File not found: ${filePath}` }] };
-      }
-
+      if (!existsSync(filePath)) return text(`File not found: ${filePath}`);
       try {
-        const result = await session.tokenHighlighting(filePath, Boolean(remove));
-        const output = `## Token highlighting\n\nFile: ${relative(repoRoot, filePath)}\n\n${result.output}\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        const result = await session.display.tokenHighlighting(filePath, Boolean(remove));
+        return text(`## Token highlighting\n\nFile: ${relative(repoRoot, filePath)}\n\n${result.output}\n`);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -69,34 +56,22 @@ export function register(
       goalId: z.number().describe("Goal ID used as highlighting context"),
       expr: z.string().describe("Expression to highlight"),
     },
-    async ({ goalId, expr }) => {
-      try {
-        const result = await session.highlight(goalId, expr);
-        const output = `## Highlight\n\nGoal: ?${goalId}\nExpression: \`${expr}\`\n\n${result.output}\n`;
-        return { content: [{ type: "text" as const, text: output }] };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
-      }
-    },
+    wrapGoalHandler(session, async ({ goalId, expr }) => {
+      const result = await session.display.highlight(goalId, expr as string);
+      return `## Highlight\n\nGoal: ?${goalId}\nExpression: \`${expr}\`\n\n${result.output}\n`;
+    }),
   );
 
   server.tool(
     "agda_show_implicit_args",
     "Set whether Agda should display implicit arguments.",
-    {
-      enabled: z.boolean().describe("True to show implicit arguments, false to hide them"),
-    },
+    { enabled: z.boolean().describe("True to show implicit arguments, false to hide them") },
     async ({ enabled }) => {
       try {
-        const result = await session.showImplicitArgs(enabled);
-        const output = `## Show implicit arguments\n\nRequested: ${enabled}\n\n${result.output}\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        const result = await session.display.showImplicitArgs(enabled);
+        return text(`## Show implicit arguments\n\nRequested: ${enabled}\n\n${result.output}\n`);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -105,34 +80,22 @@ export function register(
     "agda_toggle_implicit_args",
     "Toggle whether Agda displays implicit arguments.",
     {},
-    async () => {
-      try {
-        const result = await session.toggleImplicitArgs();
-        const output = `## Toggle implicit arguments\n\n${result.output}\n`;
-        return { content: [{ type: "text" as const, text: output }] };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
-      }
-    },
+    wrapHandler(session, async () => {
+      const result = await session.display.toggleImplicitArgs();
+      return `## Toggle implicit arguments\n\n${result.output}\n`;
+    }),
   );
 
   server.tool(
     "agda_show_irrelevant_args",
     "Set whether Agda should display irrelevant arguments.",
-    {
-      enabled: z.boolean().describe("True to show irrelevant arguments, false to hide them"),
-    },
+    { enabled: z.boolean().describe("True to show irrelevant arguments, false to hide them") },
     async ({ enabled }) => {
       try {
-        const result = await session.showIrrelevantArgs(enabled);
-        const output = `## Show irrelevant arguments\n\nRequested: ${enabled}\n\n${result.output}\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        const result = await session.display.showIrrelevantArgs(enabled);
+        return text(`## Show irrelevant arguments\n\nRequested: ${enabled}\n\n${result.output}\n`);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -141,16 +104,9 @@ export function register(
     "agda_toggle_irrelevant_args",
     "Toggle whether Agda displays irrelevant arguments.",
     {},
-    async () => {
-      try {
-        const result = await session.toggleIrrelevantArgs();
-        const output = `## Toggle irrelevant arguments\n\n${result.output}\n`;
-        return { content: [{ type: "text" as const, text: output }] };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
-      }
-    },
+    wrapHandler(session, async () => {
+      const result = await session.display.toggleIrrelevantArgs();
+      return `## Toggle irrelevant arguments\n\n${result.output}\n`;
+    }),
   );
 }

@@ -33,8 +33,14 @@ export type {
   DisplayControlResult,
   BackendCommandResult,
   TypeCheckResult,
+  AgdaCommandContext,
+  AgdaSessionContext,
 } from "./agda/types.js";
 
 export { AgdaSession, findAgdaBinary } from "./agda/session.js";
 export { typeCheckBatch } from "./agda/batch.js";
 export { extractMessage, escapeAgdaString } from "./agda/response-parsing.js";
+export { normalizeAgdaResponse } from "./agda/normalize-response.js";
+export { parseLoadResponses } from "./agda/parse-load-responses.js";
+export { firstDisplayMessage, firstResponseField, lastDisplayMessage } from "./agda/response-helpers.js";
+export { parseContextEntry, deriveSuggestions, findMatchingTerms } from "./agda/goal-analysis.js";

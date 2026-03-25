@@ -27,13 +27,13 @@ export function decodeBackendResponses(
     }
 
     if (resp.kind === "RunningInfo") {
-      const message = String(resp.message ?? "").trim();
+      const message = ((resp.message as string) ?? "").trim();
       if (message) lines.push(message);
       continue;
     }
 
     if (resp.kind === "StderrOutput") {
-      const text = String(resp.text ?? "").trim();
+      const text = ((resp.text as string) ?? "").trim();
       if (text) {
         lines.push(text);
         if (/\berror\b/i.test(text)) {

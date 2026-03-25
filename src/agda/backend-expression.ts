@@ -29,7 +29,9 @@ export function parseBackendExpression(input: string): ParsedBackendExpression {
   }
 
   if (OTHER_BACKEND_EXPR.test(expression)) {
-    const name = expression.slice(expression.indexOf('"') + 1, -1);
+    // Extract name between outer quotes, then unescape internal sequences
+    const quoted = expression.slice(expression.indexOf('"'));
+    const name = quoted.slice(1, -1).replace(/\\(.)/g, "$1");
     return {
       expression,
       displayName: `OtherBackend ${name}`,

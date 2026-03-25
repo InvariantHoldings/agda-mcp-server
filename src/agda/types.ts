@@ -8,25 +8,31 @@ import type { EventEmitter } from "node:events";
 // ── Session context ───────────────────────────────────────────────────
 
 /**
- * Shared mutable state exposed by AgdaSession to delegate functions.
- *
- * Delegate modules (goal-operations, expression-operations,
- * advanced-queries) accept this interface as their first argument,
- * keeping them decoupled from the full AgdaSession class.
+ * Minimal command-dispatch context for delegate functions.
+ * Delegates only need to send commands and read goal state —
+ * they never touch the process, buffer, or event emitter.
  */
-export interface AgdaSessionContext {
+export interface AgdaCommandContext {
+  sendCommand(cmd: string): Promise<AgdaResponse[]>;
+  iotcm(agdaCmd: string): string;
+  requireFile(): string;
+  readonly goalIds: number[];
+}
+
+/**
+ * Full session context including process internals.
+ * Used by the AgdaSession class itself; delegates should
+ * prefer AgdaCommandContext.
+ */
+export interface AgdaSessionContext extends AgdaCommandContext {
   proc: ChildProcess | null;
   repoRoot: string;
   currentFile: string | null;
-  goalIds: number[];
   buffer: string;
   responseQueue: AgdaResponse[];
   emitter: EventEmitter;
   collecting: boolean;
   ensureProcess(): ChildProcess;
-  sendCommand(cmd: string): Promise<AgdaResponse[]>;
-  iotcm(agdaCmd: string): string;
-  requireFile(): string;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -48,6 +54,7 @@ export interface LoadResult {
   warnings: string[];
   goals: AgdaGoal[];
   allGoalsText: string;
+  invisibleGoalCount: number;
   raw: AgdaResponse[];
 }
 

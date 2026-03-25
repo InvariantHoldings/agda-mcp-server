@@ -7,6 +7,7 @@ import { z } from "zod";
 import { resolve, relative } from "node:path";
 import { existsSync } from "node:fs";
 import { AgdaSession, typeCheckBatch } from "../agda-process.js";
+import { stalenessWarning } from "./tool-helpers.js";
 
 export function register(
   server: McpServer,
@@ -26,12 +27,27 @@ export function register(
       }
 
       try {
+        // Detect reload scenario for user feedback
+        const prevFile = session.getLoadedFile();
+        const isReload = prevFile === filePath;
+        const wasStale = isReload && session.isFileStale();
+
         const result = await session.load(filePath);
         const relPath = relative(repoRoot, filePath);
 
-        let output = `## Loaded: ${relPath}\n\n`;
+        let output = "";
+        if (isReload && wasStale) {
+          output += "**Reloading modified file.**\n\n";
+        } else if (isReload) {
+          output += "**Re-type-checking (file unchanged).**\n\n";
+        }
+        output += `## Loaded: ${relPath}\n\n`;
         output += `**Status:** ${result.success ? "OK" : "FAILED"}\n`;
-        output += `**Goals:** ${result.goals.length} unsolved\n\n`;
+        output += `**Goals:** ${result.goals.length} unsolved\n`;
+        if (result.invisibleGoalCount > 0) {
+          output += `**Invisible goals (abstract):** ${result.invisibleGoalCount}\n`;
+        }
+        output += "\n";
 
         if (result.errors.length > 0) {
           output += "### Errors\n";
@@ -106,11 +122,12 @@ export function register(
     "Show the current Agda session status: phase, loaded file, and available goal IDs.",
     {},
     async () => {
+      const warn = stalenessWarning(session);
       const loadedFile = session.getLoadedFile();
       const goalIds = session.getGoalIds();
       const phase = session.getPhase();
 
-      let output = "## Agda Session Status\n\n";
+      let output = warn + "## Agda Session Status\n\n";
       output += `**Phase:** ${phase}\n`;
       output += `**Loaded file:** ${loadedFile ? relative(repoRoot, loadedFile) : "(none)"}\n`;
       output += `**Goal IDs:** ${goalIds.length > 0 ? goalIds.map((id) => `?${id}`).join(", ") : "(none)"}\n\n`;
@@ -163,7 +180,7 @@ export function register(
     {},
     async () => {
       try {
-        const result = await session.showVersion();
+        const result = await session.query.showVersion();
         const output = `## Agda version\n\n${result.version || "(version unavailable)"}\n`;
         return { content: [{ type: "text" as const, text: output }] };
       } catch (err) {

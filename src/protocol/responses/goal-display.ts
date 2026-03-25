@@ -51,7 +51,16 @@ export function decodeGoalDisplayResponses(responses: AgdaResponse[]): DecodedGo
         }
 
         if (info.kind === "GoalType") {
-            goalType = extractMessage(info);
+            // Agda 2.8+ sends structured GoalType with type/entries fields
+            if (typeof info.type === "string") {
+                goalType = info.type;
+                // Extract context from entries if present
+                if (Array.isArray(info.entries) && context.length === 0) {
+                    context.push(...decodeContextEntries(info.entries));
+                }
+            } else {
+                goalType = extractMessage(info);
+            }
             continue;
         }
 
@@ -59,6 +68,15 @@ export function decodeGoalDisplayResponses(responses: AgdaResponse[]): DecodedGo
 
         const goalInfo = info.goalInfo as Record<string, unknown> | undefined;
         if (!goalInfo) continue;
+
+        // Agda 2.8+: GoalSpecific wraps a structured GoalType with type/entries
+        if (goalInfo.kind === "GoalType" && typeof goalInfo.type === "string") {
+            goalType = goalInfo.type;
+            if (Array.isArray(goalInfo.entries) && context.length === 0) {
+                context.push(...decodeContextEntries(goalInfo.entries));
+            }
+            continue;
+        }
 
         const fullText = extractMessage(goalInfo);
         const sections = splitSections(fullText);

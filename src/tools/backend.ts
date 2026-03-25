@@ -7,6 +7,7 @@ import { z } from "zod";
 import { resolve, relative } from "node:path";
 import { existsSync } from "node:fs";
 import { AgdaSession } from "../agda-process.js";
+import { wrapGoalHandler, text } from "./tool-helpers.js";
 
 function backendExpressionHelp(): string {
   return "Backend constructor expression (for example: GHC, GHCNoMain, LaTeX, QuickLaTeX, or OtherBackend \"JS\").";
@@ -27,27 +28,18 @@ export function register(
     },
     async ({ backend, file, args }) => {
       const filePath = resolve(repoRoot, file);
-      if (!existsSync(filePath)) {
-        return { content: [{ type: "text" as const, text: `File not found: ${filePath}` }] };
-      }
-
+      if (!existsSync(filePath)) return text(`File not found: ${filePath}`);
       try {
-        const result = await session.compile(backend, filePath, args ?? []);
-        const output = [
-          "## Compile",
-          "",
+        const result = await session.backend.compile(backend, filePath, args);
+        return text([
+          "## Compile", "",
           `Backend: ${backend}`,
           `File: ${relative(repoRoot, filePath)}`,
-          `Status: ${result.success ? "OK" : "FAILED"}`,
-          "",
+          `Status: ${result.success ? "OK" : "FAILED"}`, "",
           result.output || "(no output)",
-        ].join("\n");
-
-        return { content: [{ type: "text" as const, text: output }] };
+        ].join("\n"));
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -61,21 +53,15 @@ export function register(
     },
     async ({ backend, payload }) => {
       try {
-        const result = await session.backendTop(backend, payload);
-        const output = [
-          "## Backend top-level command",
-          "",
+        const result = await session.backend.top(backend, payload);
+        return text([
+          "## Backend top-level command", "",
           `Backend: ${backend}`,
-          `Status: ${result.success ? "OK" : "FAILED"}`,
-          "",
+          `Status: ${result.success ? "OK" : "FAILED"}`, "",
           result.output || "(no output)",
-        ].join("\n");
-
-        return { content: [{ type: "text" as const, text: output }] };
+        ].join("\n"));
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -89,25 +75,20 @@ export function register(
       backend: z.string().describe(backendExpressionHelp()),
       payload: z.string().describe("Arbitrary backend payload string"),
     },
-    async ({ goalId, holeContents, backend, payload }) => {
-      try {
-        const result = await session.backendHole(goalId, holeContents ?? "", backend, payload);
-        const output = [
-          "## Backend hole command",
-          "",
-          `Goal: ?${goalId}`,
-          `Backend: ${backend}`,
-          `Status: ${result.success ? "OK" : "FAILED"}`,
-          "",
-          result.output || "(no output)",
-        ].join("\n");
-
-        return { content: [{ type: "text" as const, text: output }] };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
-      }
-    },
+    wrapGoalHandler(session, async ({ goalId, holeContents, backend, payload }) => {
+      const result = await session.backend.hole(
+        goalId,
+        (holeContents as string) ?? "",
+        backend as string,
+        payload as string,
+      );
+      return [
+        "## Backend hole command", "",
+        `Goal: ?${goalId}`,
+        `Backend: ${backend}`,
+        `Status: ${result.success ? "OK" : "FAILED"}`, "",
+        result.output || "(no output)",
+      ].join("\n");
+    }),
   );
 }

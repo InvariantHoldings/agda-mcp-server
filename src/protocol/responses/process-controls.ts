@@ -27,15 +27,18 @@ function extractStatusState(resp: AgdaResponse): DisplayStateSnapshot {
     return EMPTY_STATE;
   }
 
-  const status =
-    resp.status && typeof resp.status === "object"
-      ? (resp.status as Record<string, unknown>)
-      : (resp as Record<string, unknown>);
+  // After normalization: fields are at top level. Fallback for nested format.
+  const src =
+    resp.checked !== undefined
+      ? (resp as Record<string, unknown>)
+      : resp.status && typeof resp.status === "object"
+        ? (resp.status as Record<string, unknown>)
+        : (resp as Record<string, unknown>);
 
   return {
-    checked: parseBoolean(status.checked),
-    showImplicitArguments: parseBoolean(status.showImplicitArguments),
-    showIrrelevantArguments: parseBoolean(status.showIrrelevantArguments),
+    checked: parseBoolean(src.checked),
+    showImplicitArguments: parseBoolean(src.showImplicitArguments),
+    showIrrelevantArguments: parseBoolean(src.showIrrelevantArguments),
   };
 }
 
@@ -56,17 +59,15 @@ export function decodeProcessControlResponses(
     }
 
     if (resp.kind === "RunningInfo") {
-      const payload = resp as Record<string, unknown>;
-      const msg = [payload.message, payload.text]
-        .find((part) => typeof part === "string");
-      if (typeof msg === "string" && msg.trim()) {
-        messages.push(msg.trim());
+      const msg = ((resp.message as string) ?? "").trim();
+      if (msg) {
+        messages.push(msg);
       }
       continue;
     }
 
     if (resp.kind === "StderrOutput") {
-      const text = String(resp.text ?? "").trim();
+      const text = ((resp.text as string) ?? "").trim();
       if (text) messages.push(text);
       continue;
     }

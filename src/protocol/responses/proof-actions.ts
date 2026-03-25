@@ -6,7 +6,9 @@ export function decodeGiveLikeResponse(responses: AgdaResponse[]): string {
 
   for (const resp of responses) {
     if (resp.kind === "GiveAction") {
-      result = String(resp.giveResult ?? resp.result ?? result);
+      // After normalization: giveResult/result are always strings
+      const val = (resp.giveResult ?? resp.result ?? "") as string;
+      if (val) result = val;
       continue;
     }
 
@@ -27,20 +29,14 @@ export function decodeSolveResponses(responses: AgdaResponse[]): string[] {
 
   for (const resp of responses) {
     if (resp.kind === "SolveAll") {
-      const rawSolutions = resp.solutions as Array<[number, string] | { interactionPoint?: number; expression?: string }> | undefined;
+      // After normalization: solutions is always {interactionPoint, expression}[]
+      const rawSolutions = resp.solutions as Array<{ interactionPoint?: number; expression?: string }> | undefined;
       if (Array.isArray(rawSolutions)) {
         for (const solution of rawSolutions) {
-          if (Array.isArray(solution) && solution.length >= 2) {
-            solutions.push(`?${solution[0]} := ${solution[1]}`);
-            continue;
-          }
-
-          if (!Array.isArray(solution) && solution && typeof solution === "object") {
-            const id = typeof solution.interactionPoint === "number" ? solution.interactionPoint : undefined;
-            const expr = typeof solution.expression === "string" ? solution.expression : undefined;
-            if (id !== undefined && expr) {
-              solutions.push(`?${id} := ${expr}`);
-            }
+          const id = typeof solution.interactionPoint === "number" ? solution.interactionPoint : undefined;
+          const expr = typeof solution.expression === "string" ? solution.expression : undefined;
+          if (id !== undefined && expr) {
+            solutions.push(`?${id} := ${expr}`);
           }
         }
       }

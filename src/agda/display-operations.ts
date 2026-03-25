@@ -3,7 +3,7 @@
 // Display and highlighting controls for Agda's interaction mode.
 
 import type {
-  AgdaSessionContext,
+  AgdaCommandContext,
   DisplayControlResult,
 } from "./types.js";
 import { escapeAgdaString } from "./response-parsing.js";
@@ -34,7 +34,7 @@ function formatDisplayState(result: DisplayControlResult): string {
 }
 
 async function runControl(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   agdaCommand: string,
   fallbackOutput: string,
 ): Promise<DisplayControlResult> {
@@ -54,7 +54,7 @@ async function runControl(
 }
 
 export async function loadHighlightingInfo(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   filePath: string,
 ): Promise<DisplayControlResult> {
   return runControl(
@@ -65,7 +65,7 @@ export async function loadHighlightingInfo(
 }
 
 export async function tokenHighlighting(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   filePath: string,
   remove = false,
 ): Promise<DisplayControlResult> {
@@ -77,7 +77,7 @@ export async function tokenHighlighting(
 }
 
 export async function highlight(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr: string,
 ): Promise<DisplayControlResult> {
@@ -90,7 +90,7 @@ export async function highlight(
 }
 
 export async function showImplicitArgs(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   show: boolean,
 ): Promise<DisplayControlResult> {
   return runControl(
@@ -101,13 +101,13 @@ export async function showImplicitArgs(
 }
 
 export async function toggleImplicitArgs(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
 ): Promise<DisplayControlResult> {
   return runControl(ctx, "ToggleImplicitArgs", "Toggled implicit arguments visibility.");
 }
 
 export async function showIrrelevantArgs(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   show: boolean,
 ): Promise<DisplayControlResult> {
   return runControl(
@@ -118,7 +118,7 @@ export async function showIrrelevantArgs(
 }
 
 export async function toggleIrrelevantArgs(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
 ): Promise<DisplayControlResult> {
   return runControl(
     ctx,
