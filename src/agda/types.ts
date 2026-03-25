@@ -48,6 +48,7 @@ export interface LoadResult {
   warnings: string[];
   goals: AgdaGoal[];
   allGoalsText: string;
+  invisibleGoalCount: number;
   raw: AgdaResponse[];
 }
 

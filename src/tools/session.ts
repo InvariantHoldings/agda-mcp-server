@@ -31,7 +31,11 @@ export function register(
 
         let output = `## Loaded: ${relPath}\n\n`;
         output += `**Status:** ${result.success ? "OK" : "FAILED"}\n`;
-        output += `**Goals:** ${result.goals.length} unsolved\n\n`;
+        output += `**Goals:** ${result.goals.length} unsolved\n`;
+        if (result.invisibleGoalCount > 0) {
+          output += `**Invisible goals (abstract):** ${result.invisibleGoalCount}\n`;
+        }
+        output += "\n";
 
         if (result.errors.length > 0) {
           output += "### Errors\n";

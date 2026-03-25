@@ -52,8 +52,9 @@ import type {
   DisplayControlResult,
   BackendCommandResult,
 } from "./types.js";
-import { extractMessage, coerceString } from "./response-parsing.js";
+// response-parsing.js is used by delegate modules, not directly here
 import { normalizeAgdaResponse } from "./normalize-response.js";
+import { parseLoadResponses } from "./parse-load-responses.js";
 
 // Delegate modules
 import * as GoalOps from "./goal-operations.js";
@@ -257,76 +258,12 @@ export class AgdaSession {
     return this.sendCommand(this.buildIotcm(this.currentFile ?? "", agdaCmd), timeoutMs);
   }
 
-  private parseLoadResponses(responses: AgdaResponse[]): Omit<LoadResult, "raw"> {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const goals: AgdaGoal[] = [];
-    let allGoalsText = "";
-    let success = true;
-
-    for (const resp of responses) {
-      if (resp.kind === "InteractionPoints") {
-        const points = resp.interactionPoints;
-        if (Array.isArray(points)) {
-          for (const pt of points) {
-            const id = typeof pt === "number" ? pt : (pt as { id: number }).id;
-            this.goalIds.push(id);
-            goals.push({ goalId: id, type: "?", context: [] });
-          }
-        }
-      }
-
-      if (resp.kind === "DisplayInfo") {
-        const info = resp.info as Record<string, unknown> | undefined;
-        if (info) {
-          if (info.kind === "Error") {
-            success = false;
-            errors.push(extractMessage(info));
-          }
-          if (info.kind === "AllGoalsWarnings") {
-            allGoalsText = extractMessage(info);
-            const warnMatch = allGoalsText.match(/———— Warnings? ————[\s\S]*$/);
-            if (warnMatch) {
-              warnings.push(warnMatch[0]);
-            }
-            // --interaction-json sends errors as an array in AllGoalsWarnings
-            const infoErrors = info.errors;
-            if (Array.isArray(infoErrors) && infoErrors.length > 0) {
-              success = false;
-              for (const e of infoErrors) {
-                const msg = typeof e === "string" ? e : (typeof e === "object" && e !== null && typeof (e as Record<string, unknown>).type === "string" ? (e as Record<string, unknown>).type as string : JSON.stringify(e));
-                errors.push(msg);
-              }
-            }
-            // Cross-check: if visibleGoals has entries not yet in goals, add them
-            const visGoals = info.visibleGoals;
-            if (Array.isArray(visGoals)) {
-              const existingIds = new Set(goals.map(g => g.goalId));
-              for (const vg of visGoals) {
-                const obj = vg as Record<string, unknown>;
-                const id = typeof obj.constraintObj === "number" ? obj.constraintObj : undefined;
-                if (id !== undefined && !existingIds.has(id)) {
-                  goals.push({ goalId: id, type: typeof obj.type === "string" ? obj.type : "?", context: [] });
-                }
-              }
-            }
-          }
-        }
-      }
-
-      if (resp.kind === "StderrOutput") {
-        const text = coerceString(resp.text).trim();
-        if (text && (text.includes("Error") || text.includes("error"))) {
-          errors.push(text);
-          success = false;
-        }
-      }
-    }
-
-    return { success, errors, warnings, goals, allGoalsText };
-  }
-
   // ── Public API ────────────────────────────────────────────────────
+
+  private static readonly NOT_FOUND_RESULT: LoadResult = Object.freeze({
+    success: false, errors: [], warnings: [], goals: [],
+    allGoalsText: "", invisibleGoalCount: 0, raw: [],
+  });
 
   /**
    * Load (type-check) a file. This is always the first command — it
@@ -336,44 +273,59 @@ export class AgdaSession {
     const absPath = resolve(this.repoRoot, filePath);
     if (!existsSync(absPath)) {
       return {
-        success: false,
+        ...AgdaSession.NOT_FOUND_RESULT,
         errors: [`File not found: ${absPath}`],
-        warnings: [],
-        goals: [],
-        allGoalsText: "",
-        raw: [],
       };
     }
 
     this.currentFile = absPath;
-    this.goalIds = [];
 
     const cmd = this.iotcm(`Cmd_load "${absPath}" []`);
     const responses = await this.sendCommand(cmd);
-    return { ...this.parseLoadResponses(responses), raw: responses };
+    const parsed = parseLoadResponses(responses);
+
+    // Atomic assignment — no window where goalIds is empty
+    this.goalIds = parsed.goalIds;
+
+    return {
+      success: parsed.success,
+      errors: parsed.errors,
+      warnings: parsed.warnings,
+      goals: parsed.goals,
+      allGoalsText: parsed.allGoalsText,
+      invisibleGoalCount: parsed.invisibleGoalCount,
+      raw: responses,
+    };
   }
 
   async loadNoMetas(filePath: string): Promise<LoadResult> {
     const absPath = resolve(this.repoRoot, filePath);
     if (!existsSync(absPath)) {
       return {
-        success: false,
+        ...AgdaSession.NOT_FOUND_RESULT,
         errors: [`File not found: ${absPath}`],
-        warnings: [],
-        goals: [],
-        allGoalsText: "",
-        raw: [],
       };
     }
 
     this.currentFile = absPath;
-    this.goalIds = [];
 
     const responses = await this.sendCommand(
       this.buildIotcm(absPath, `Cmd_load_no_metas "${absPath}"`),
     );
+    const parsed = parseLoadResponses(responses);
 
-    return { ...this.parseLoadResponses(responses), raw: responses };
+    // Atomic assignment
+    this.goalIds = parsed.goalIds;
+
+    return {
+      success: parsed.success,
+      errors: parsed.errors,
+      warnings: parsed.warnings,
+      goals: parsed.goals,
+      allGoalsText: parsed.allGoalsText,
+      invisibleGoalCount: parsed.invisibleGoalCount,
+      raw: responses,
+    };
   }
 
   // ── Goal operations (delegated) ───────────────────────────────────
