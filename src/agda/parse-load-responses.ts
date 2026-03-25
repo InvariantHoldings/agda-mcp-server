@@ -36,9 +36,13 @@ export function parseLoadResponses(
     if (resp.kind === "InteractionPoints") {
       const points = resp.interactionPoints as number[];
       if (Array.isArray(points)) {
+        const seen = new Set(goalIds);
         for (const id of points) {
-          goalIds.push(id);
-          goals.push({ goalId: id, type: "?", context: [] });
+          if (!seen.has(id)) {
+            seen.add(id);
+            goalIds.push(id);
+            goals.push({ goalId: id, type: "?", context: [] });
+          }
         }
       }
     }
