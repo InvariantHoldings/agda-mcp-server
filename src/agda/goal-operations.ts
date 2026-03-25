@@ -3,7 +3,7 @@
 // Goal-oriented Agda interaction commands.
 
 import type {
-  AgdaSessionContext,
+  AgdaCommandContext,
   AgdaResponse,
   AgdaGoal,
   GoalInfo,
@@ -24,7 +24,7 @@ import { decodeGiveLikeResponse } from "../protocol/responses/proof-actions.js";
 
 /** Get the type and local context for a specific goal. */
 export async function goalTypeContext(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
 ): Promise<GoalInfo> {
   ctx.requireFile();
@@ -37,7 +37,7 @@ export async function goalTypeContext(
 
 /** Get only the current goal type for a specific goal. */
 export async function goalType(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
 ): Promise<GoalTypeResult> {
   ctx.requireFile();
@@ -50,7 +50,7 @@ export async function goalType(
 
 /** Get only the local context for a specific goal. */
 export async function context(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
 ): Promise<ContextResult> {
   ctx.requireFile();
@@ -63,7 +63,7 @@ export async function context(
 
 /** Get goal, context, and checked elaborated term for an expression in a goal. */
 export async function goalTypeContextCheck(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr: string,
 ): Promise<GoalTypeContextCheckResult> {
@@ -82,7 +82,7 @@ export async function goalTypeContextCheck(
 
 /** Case-split on a variable in a goal. */
 export async function caseSplit(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   variable: string,
 ): Promise<CaseSplitResult> {
@@ -109,7 +109,7 @@ export async function caseSplit(
 
 /** Give (fill) a goal with an expression. */
 export async function give(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr: string,
 ): Promise<GiveResult> {
@@ -125,7 +125,7 @@ export async function give(
 
 /** Refine a goal — apply a function and create subgoals. */
 export async function refine(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr: string,
 ): Promise<GiveResult> {
@@ -138,7 +138,7 @@ export async function refine(
 
 /** Refine a goal using Agda's exact Cmd_refine command. */
 export async function refineExact(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr: string,
 ): Promise<GiveResult> {
@@ -151,7 +151,7 @@ export async function refineExact(
 
 /** Introduce a lambda or constructor using Agda's exact Cmd_intro command. */
 export async function intro(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr = "",
 ): Promise<GiveResult> {
@@ -164,7 +164,7 @@ export async function intro(
 
 /** Auto-solve a single goal. */
 export async function autoOne(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
 ): Promise<AutoResult> {
   ctx.requireFile();
@@ -179,7 +179,7 @@ export async function autoOne(
 
 /** List all unsolved metavariables (goals). */
 export async function metas(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
 ): Promise<{ goals: AgdaGoal[]; text: string; raw: AgdaResponse[] }> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(ctx.iotcm("Cmd_metas"));

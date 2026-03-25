@@ -4,7 +4,7 @@
 // module contents, search, and combined goal inspection.
 
 import type {
-  AgdaSessionContext,
+  AgdaCommandContext,
   AgdaResponse,
   WhyInScopeResult,
   ElaborateResult,
@@ -27,7 +27,7 @@ import { decodeSolveResponses } from "../protocol/responses/proof-actions.js";
 
 /** Show current constraints. */
 export async function constraints(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
 ): Promise<{ text: string; raw: AgdaResponse[] }> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(ctx.iotcm("Cmd_constraints"));
@@ -35,7 +35,7 @@ export async function constraints(
 }
 
 /** Solve all goals that have unique solutions. */
-export async function solveAll(ctx: AgdaSessionContext): Promise<SolveResult> {
+export async function solveAll(ctx: AgdaCommandContext): Promise<SolveResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
     ctx.iotcm("Cmd_solveAll Normalised"),
@@ -45,7 +45,7 @@ export async function solveAll(ctx: AgdaSessionContext): Promise<SolveResult> {
 
 /** Solve one goal that has a unique solution. */
 export async function solveOne(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
 ): Promise<SolveResult> {
   ctx.requireFile();
@@ -57,7 +57,7 @@ export async function solveOne(
 
 /** Explain why a name is in scope at a given goal. */
 export async function whyInScope(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   name: string,
 ): Promise<WhyInScopeResult> {
@@ -70,7 +70,7 @@ export async function whyInScope(
 
 /** Explain why a name is in scope at the top level. */
 export async function whyInScopeTopLevel(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   name: string,
 ): Promise<WhyInScopeResult> {
   ctx.requireFile();
@@ -82,7 +82,7 @@ export async function whyInScopeTopLevel(
 
 /** Elaborate an expression in a goal context. */
 export async function elaborate(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr: string,
 ): Promise<ElaborateResult> {
@@ -100,7 +100,7 @@ export async function elaborate(
 
 /** Generate a helper function type for an expression in a goal context. */
 export async function helperFunction(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr: string,
 ): Promise<HelperFunctionResult> {
@@ -115,7 +115,7 @@ export async function helperFunction(
 
 /** Show the contents of a module in a goal context. */
 export async function showModuleContents(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   moduleName: string,
 ): Promise<ModuleContentsResult> {
@@ -130,7 +130,7 @@ export async function showModuleContents(
 
 /** Show the contents of a module at the top level. */
 export async function showModuleContentsTopLevel(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   moduleName: string,
 ): Promise<ModuleContentsResult> {
   ctx.requireFile();
@@ -144,7 +144,7 @@ export async function showModuleContentsTopLevel(
 
 /** Search for definitions matching a query string. */
 export async function searchAbout(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   query: string,
 ): Promise<SearchAboutResult> {
   ctx.requireFile();
@@ -157,7 +157,7 @@ export async function searchAbout(
 }
 
 /** Auto-solve all goals. */
-export async function autoAll(ctx: AgdaSessionContext): Promise<AutoResult> {
+export async function autoAll(ctx: AgdaCommandContext): Promise<AutoResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
     ctx.iotcm("Cmd_autoAll Normalised"),
@@ -175,7 +175,7 @@ export async function autoAll(ctx: AgdaSessionContext): Promise<AutoResult> {
 
 /** Show the running Agda version. */
 export async function showVersion(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
 ): Promise<ShowVersionResult> {
   const responses = await ctx.sendCommand(ctx.iotcm("Cmd_show_version"));
   const version =
@@ -186,7 +186,7 @@ export async function showVersion(
 
 /** Get the goal type, context, and inferred type of an expression. */
 export async function goalTypeContextInfer(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr: string,
 ): Promise<GoalTypeContextInferResult> {

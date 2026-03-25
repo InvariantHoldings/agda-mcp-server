@@ -3,7 +3,7 @@
 // Expression-level Agda commands: compute (normalize) and infer (type-check).
 
 import type {
-  AgdaSessionContext,
+  AgdaCommandContext,
   ComputeResult,
   InferResult,
 } from "./types.js";
@@ -14,7 +14,7 @@ import { firstDisplayMessage, lastDisplayMessage } from "./response-helpers.js";
  * Normalize (evaluate) a term in a goal context.
  */
 export async function compute(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr: string,
 ): Promise<ComputeResult> {
@@ -32,7 +32,7 @@ export async function compute(
  * Normalize a top-level expression (not in a goal context).
  */
 export async function computeTopLevel(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   expr: string,
 ): Promise<ComputeResult> {
   ctx.requireFile();
@@ -46,7 +46,7 @@ export async function computeTopLevel(
  * Infer the type of an expression in a goal context.
  */
 export async function infer(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   expr: string,
 ): Promise<InferResult> {
@@ -64,7 +64,7 @@ export async function infer(
  * Infer the type of a top-level expression.
  */
 export async function inferTopLevel(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   expr: string,
 ): Promise<InferResult> {
   ctx.requireFile();

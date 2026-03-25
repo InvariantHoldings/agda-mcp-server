@@ -33,6 +33,8 @@ export type {
   DisplayControlResult,
   BackendCommandResult,
   TypeCheckResult,
+  AgdaCommandContext,
+  AgdaSessionContext,
 } from "./agda/types.js";
 
 export { AgdaSession, findAgdaBinary } from "./agda/session.js";

@@ -3,7 +3,7 @@
 // Backend command support: compile and backend-specific payload commands.
 
 import type {
-  AgdaSessionContext,
+  AgdaCommandContext,
   BackendCommandResult,
 } from "./types.js";
 import { escapeAgdaString } from "./response-parsing.js";
@@ -23,7 +23,7 @@ function renderStringList(values: string[]): string {
 }
 
 async function runBackendCommand(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   agdaCommand: string,
   fallbackOutput: string,
 ): Promise<BackendCommandResult> {
@@ -38,7 +38,7 @@ async function runBackendCommand(
 }
 
 export async function compile(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   backendExpr: string,
   filePath: string,
   argv: string[],
@@ -53,7 +53,7 @@ export async function compile(
 }
 
 export async function backendTop(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   backendExpr: string,
   payload: string,
 ): Promise<BackendCommandResult> {
@@ -68,7 +68,7 @@ export async function backendTop(
 }
 
 export async function backendHole(
-  ctx: AgdaSessionContext,
+  ctx: AgdaCommandContext,
   goalId: number,
   holeContents: string,
   backendExpr: string,
