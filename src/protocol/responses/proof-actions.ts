@@ -1,12 +1,13 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage } from "../../agda/response-parsing.js";
+import { extractMessage, coerceString } from "../../agda/response-parsing.js";
 
 export function decodeGiveLikeResponse(responses: AgdaResponse[]): string {
   let result = "";
 
   for (const resp of responses) {
     if (resp.kind === "GiveAction") {
-      result = String(resp.giveResult ?? resp.result ?? result);
+      const val = coerceString(resp.giveResult ?? resp.result);
+      if (val) result = val;
       continue;
     }
 

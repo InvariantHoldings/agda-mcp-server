@@ -52,7 +52,7 @@ import type {
   DisplayControlResult,
   BackendCommandResult,
 } from "./types.js";
-import { extractMessage } from "./response-parsing.js";
+import { extractMessage, coerceString } from "./response-parsing.js";
 
 // Delegate modules
 import * as GoalOps from "./goal-operations.js";
@@ -288,12 +288,33 @@ export class AgdaSession {
             if (warnMatch) {
               warnings.push(warnMatch[0]);
             }
+            // --interaction-json sends errors as an array in AllGoalsWarnings
+            const infoErrors = info.errors;
+            if (Array.isArray(infoErrors) && infoErrors.length > 0) {
+              success = false;
+              for (const e of infoErrors) {
+                const msg = typeof e === "string" ? e : (typeof e === "object" && e !== null && typeof (e as Record<string, unknown>).type === "string" ? (e as Record<string, unknown>).type as string : JSON.stringify(e));
+                errors.push(msg);
+              }
+            }
+            // Cross-check: if visibleGoals has entries not yet in goals, add them
+            const visGoals = info.visibleGoals;
+            if (Array.isArray(visGoals)) {
+              const existingIds = new Set(goals.map(g => g.goalId));
+              for (const vg of visGoals) {
+                const obj = vg as Record<string, unknown>;
+                const id = typeof obj.constraintObj === "number" ? obj.constraintObj : undefined;
+                if (id !== undefined && !existingIds.has(id)) {
+                  goals.push({ goalId: id, type: typeof obj.type === "string" ? obj.type : "?", context: [] });
+                }
+              }
+            }
           }
         }
       }
 
       if (resp.kind === "StderrOutput") {
-        const text = String(resp.text ?? "").trim();
+        const text = coerceString(resp.text).trim();
         if (text && (text.includes("Error") || text.includes("error"))) {
           errors.push(text);
           success = false;

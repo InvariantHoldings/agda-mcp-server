@@ -1,5 +1,5 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage } from "../../agda/response-parsing.js";
+import { extractMessage, coerceString } from "../../agda/response-parsing.js";
 
 export interface DisplayStateSnapshot {
   checked: boolean | null;
@@ -57,16 +57,15 @@ export function decodeProcessControlResponses(
 
     if (resp.kind === "RunningInfo") {
       const payload = resp as Record<string, unknown>;
-      const msg = [payload.message, payload.text]
-        .find((part) => typeof part === "string");
-      if (typeof msg === "string" && msg.trim()) {
-        messages.push(msg.trim());
+      const msg = coerceString(payload.message || payload.text).trim();
+      if (msg) {
+        messages.push(msg);
       }
       continue;
     }
 
     if (resp.kind === "StderrOutput") {
-      const text = String(resp.text ?? "").trim();
+      const text = coerceString(resp.text).trim();
       if (text) messages.push(text);
       continue;
     }
