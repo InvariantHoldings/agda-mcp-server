@@ -55,6 +55,7 @@ import type {
 // response-parsing.js is used by delegate modules, not directly here
 import { normalizeAgdaResponse } from "./normalize-response.js";
 import { parseLoadResponses } from "./parse-load-responses.js";
+import { logger } from "./logger.js";
 
 // Delegate modules
 import * as GoalOps from "./goal-operations.js";
@@ -202,7 +203,7 @@ export class AgdaSession {
           setTimeout(() => this.emitter.emit("done"), 100);
         }
       } catch {
-        // Non-JSON line — skip
+        logger.trace("Skipped unparseable line", { line: line.slice(0, 120) });
       }
     }
 
@@ -221,12 +222,15 @@ export class AgdaSession {
     timeoutMs = 120_000,
   ): Promise<AgdaResponse[]> {
     const proc = this.ensureProcess();
+    logger.trace("sendCommand", { command: command.slice(0, 200), timeoutMs });
+    const startTime = Date.now();
 
     this.responseQueue = [];
     this.collecting = true;
 
     return new Promise<AgdaResponse[]>((resolveCmd, rejectCmd) => {
       const timeout = setTimeout(() => {
+        logger.warn("sendCommand timed out", { command: command.slice(0, 100), timeoutMs });
         this.collecting = false;
         resolveCmd([...this.responseQueue]);
       }, timeoutMs);
@@ -238,7 +242,9 @@ export class AgdaSession {
           this.collecting = false;
           this.emitter.removeListener("done", onDone);
           this.emitter.removeListener("error", onError);
-          resolveCmd([...this.responseQueue]);
+          const responses = [...this.responseQueue];
+          logger.trace("sendCommand done", { responses: responses.length, durationMs: Date.now() - startTime });
+          resolveCmd(responses);
         }, 200);
       };
 
@@ -313,6 +319,13 @@ export class AgdaSession {
     // Atomic assignment — no window where goalIds is empty
     this.goalIds = parsed.goalIds;
     this.lastLoadedMtime = statSync(absPath).mtimeMs;
+
+    logger.trace("load complete", {
+      file: absPath,
+      success: parsed.success,
+      goals: parsed.goals.length,
+      errors: parsed.errors.length,
+    });
 
     return {
       success: parsed.success,
