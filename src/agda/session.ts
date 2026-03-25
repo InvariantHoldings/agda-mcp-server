@@ -32,25 +32,6 @@ import type {
   AgdaResponse,
   AgdaGoal,
   LoadResult,
-  GoalInfo,
-  GoalTypeResult,
-  ContextResult,
-  CaseSplitResult,
-  GiveResult,
-  ComputeResult,
-  InferResult,
-  AutoResult,
-  SolveResult,
-  WhyInScopeResult,
-  ElaborateResult,
-  HelperFunctionResult,
-  ModuleContentsResult,
-  SearchAboutResult,
-  GoalTypeContextInferResult,
-  GoalTypeContextCheckResult,
-  ShowVersionResult,
-  DisplayControlResult,
-  BackendCommandResult,
 } from "./types.js";
 // response-parsing.js is used by delegate modules, not directly here
 import { normalizeAgdaResponse } from "./normalize-response.js";
@@ -369,177 +350,155 @@ export class AgdaSession {
     };
   }
 
-  // ── Goal operations (delegated) ───────────────────────────────────
+  // ── Grouped command namespaces ──────────────────────────────────
 
-  async goalTypeContext(goalId: number): Promise<GoalInfo> {
-    return GoalOps.goalTypeContext(this, goalId);
-  }
+  /** Goal interaction commands. */
+  readonly goal = Object.freeze({
+    typeContext: (id: number) => GoalOps.goalTypeContext(this, id),
+    type: (id: number) => GoalOps.goalType(this, id),
+    context: (id: number) => GoalOps.context(this, id),
+    typeContextCheck: (id: number, expr: string) => GoalOps.goalTypeContextCheck(this, id, expr),
+    caseSplit: (id: number, variable: string) => GoalOps.caseSplit(this, id, variable),
+    give: (id: number, expr: string) => GoalOps.give(this, id, expr),
+    refine: (id: number, expr: string) => GoalOps.refine(this, id, expr),
+    refineExact: (id: number, expr: string) => GoalOps.refineExact(this, id, expr),
+    intro: (id: number, expr?: string) => GoalOps.intro(this, id, expr),
+    autoOne: (id: number) => GoalOps.autoOne(this, id),
+    metas: () => GoalOps.metas(this),
+  });
 
-  async goalType(goalId: number): Promise<GoalTypeResult> {
-    return GoalOps.goalType(this, goalId);
-  }
+  /** Expression-level commands. */
+  readonly expr = Object.freeze({
+    compute: (id: number, expr: string) => ExprOps.compute(this, id, expr),
+    computeTopLevel: (expr: string) => ExprOps.computeTopLevel(this, expr),
+    infer: (id: number, expr: string) => ExprOps.infer(this, id, expr),
+    inferTopLevel: (expr: string) => ExprOps.inferTopLevel(this, expr),
+  });
 
-  async context(goalId: number): Promise<ContextResult> {
-    return GoalOps.context(this, goalId);
-  }
+  /** Advanced queries: constraints, scope, solve, elaborate, modules, search. */
+  readonly query = Object.freeze({
+    constraints: () => AdvancedOps.constraints(this),
+    solveAll: () => AdvancedOps.solveAll(this),
+    solveOne: (goalId: number) => AdvancedOps.solveOne(this, goalId),
+    whyInScope: (goalId: number, name: string) => AdvancedOps.whyInScope(this, goalId, name),
+    whyInScopeTopLevel: (name: string) => AdvancedOps.whyInScopeTopLevel(this, name),
+    elaborate: (goalId: number, expr: string) => AdvancedOps.elaborate(this, goalId, expr),
+    helperFunction: (goalId: number, expr: string) => AdvancedOps.helperFunction(this, goalId, expr),
+    showModuleContents: (goalId: number, moduleName: string) => AdvancedOps.showModuleContents(this, goalId, moduleName),
+    showModuleContentsTopLevel: (moduleName: string) => AdvancedOps.showModuleContentsTopLevel(this, moduleName),
+    searchAbout: (query: string) => AdvancedOps.searchAbout(this, query),
+    autoAll: () => AdvancedOps.autoAll(this),
+    showVersion: () => AdvancedOps.showVersion(this),
+    goalTypeContextInfer: (goalId: number, expr: string) => AdvancedOps.goalTypeContextInfer(this, goalId, expr),
+  });
 
-  async goalTypeContextCheck(goalId: number, expr: string): Promise<GoalTypeContextCheckResult> {
-    return GoalOps.goalTypeContextCheck(this, goalId, expr);
-  }
+  /** Display and highlighting controls. */
+  readonly display = Object.freeze({
+    loadHighlightingInfo: (filePath: string) => DisplayOps.loadHighlightingInfo(this, filePath),
+    tokenHighlighting: (filePath: string, remove?: boolean) => DisplayOps.tokenHighlighting(this, filePath, remove),
+    highlight: (goalId: number, expr: string) => DisplayOps.highlight(this, goalId, expr),
+    showImplicitArgs: (show: boolean) => DisplayOps.showImplicitArgs(this, show),
+    toggleImplicitArgs: () => DisplayOps.toggleImplicitArgs(this),
+    showIrrelevantArgs: (show: boolean) => DisplayOps.showIrrelevantArgs(this, show),
+    toggleIrrelevantArgs: () => DisplayOps.toggleIrrelevantArgs(this),
+  });
 
-  async caseSplit(goalId: number, variable: string): Promise<CaseSplitResult> {
-    return GoalOps.caseSplit(this, goalId, variable);
-  }
+  /** Backend and compilation commands. */
+  readonly backend = Object.freeze({
+    compile: (backendExpr: string, filePath: string, argv?: string[]) => BackendOps.compile(this, backendExpr, filePath, argv ?? []),
+    top: (backendExpr: string, payload: string) => BackendOps.backendTop(this, backendExpr, payload),
+    hole: (goalId: number, holeContents: string, backendExpr: string, payload: string) => BackendOps.backendHole(this, goalId, holeContents, backendExpr, payload),
+  });
 
-  async give(goalId: number, expr: string): Promise<GiveResult> {
-    return GoalOps.give(this, goalId, expr);
-  }
-
-  async refine(goalId: number, expr: string): Promise<GiveResult> {
-    return GoalOps.refine(this, goalId, expr);
-  }
-
-  async refineExact(goalId: number, expr: string): Promise<GiveResult> {
-    return GoalOps.refineExact(this, goalId, expr);
-  }
-
-  async intro(goalId: number, expr = ""): Promise<GiveResult> {
-    return GoalOps.intro(this, goalId, expr);
-  }
-
-  async autoOne(goalId: number): Promise<AutoResult> {
-    return GoalOps.autoOne(this, goalId);
-  }
-
-  async metas(): Promise<{ goals: AgdaGoal[]; text: string; raw: AgdaResponse[] }> {
-    return GoalOps.metas(this);
-  }
-
-  // ── Expression operations (delegated) ─────────────────────────────
-
-  async compute(goalId: number, expr: string): Promise<ComputeResult> {
-    return ExprOps.compute(this, goalId, expr);
-  }
-
-  async computeTopLevel(expr: string): Promise<ComputeResult> {
-    return ExprOps.computeTopLevel(this, expr);
-  }
-
-  async infer(goalId: number, expr: string): Promise<InferResult> {
-    return ExprOps.infer(this, goalId, expr);
-  }
-
-  async inferTopLevel(expr: string): Promise<InferResult> {
-    return ExprOps.inferTopLevel(this, expr);
-  }
-
-  // ── Advanced queries (delegated) ──────────────────────────────────
-
-  async constraints(): Promise<{ text: string; raw: AgdaResponse[] }> {
-    return AdvancedOps.constraints(this);
-  }
-
-  async solveAll(): Promise<SolveResult> {
-    return AdvancedOps.solveAll(this);
-  }
-
-  async solveOne(goalId: number): Promise<SolveResult> {
-    return AdvancedOps.solveOne(this, goalId);
-  }
-
+  /** Send Cmd_abort to the running Agda process. */
   async abort(): Promise<AgdaResponse[]> {
     return this.runIndependentCommand("Cmd_abort", 10_000);
   }
 
+  /** Send Cmd_exit to the running Agda process. */
   async exit(): Promise<AgdaResponse[]> {
     this.exiting = true;
     return this.runIndependentCommand("Cmd_exit", 10_000);
   }
 
-  async whyInScope(goalId: number, name: string): Promise<WhyInScopeResult> {
-    return AdvancedOps.whyInScope(this, goalId, name);
-  }
+  // ── Deprecated flat methods (backward compatibility) ───────────
 
-  async whyInScopeTopLevel(name: string): Promise<WhyInScopeResult> {
-    return AdvancedOps.whyInScopeTopLevel(this, name);
-  }
-
-  async elaborate(goalId: number, expr: string): Promise<ElaborateResult> {
-    return AdvancedOps.elaborate(this, goalId, expr);
-  }
-
-  async helperFunction(goalId: number, expr: string): Promise<HelperFunctionResult> {
-    return AdvancedOps.helperFunction(this, goalId, expr);
-  }
-
-  async showModuleContents(goalId: number, moduleName: string): Promise<ModuleContentsResult> {
-    return AdvancedOps.showModuleContents(this, goalId, moduleName);
-  }
-
-  async showModuleContentsTopLevel(moduleName: string): Promise<ModuleContentsResult> {
-    return AdvancedOps.showModuleContentsTopLevel(this, moduleName);
-  }
-
-  async searchAbout(query: string): Promise<SearchAboutResult> {
-    return AdvancedOps.searchAbout(this, query);
-  }
-
-  async autoAll(): Promise<AutoResult> {
-    return AdvancedOps.autoAll(this);
-  }
-
-  async showVersion(): Promise<ShowVersionResult> {
-    return AdvancedOps.showVersion(this);
-  }
-
-  async goalTypeContextInfer(goalId: number, expr: string): Promise<GoalTypeContextInferResult> {
-    return AdvancedOps.goalTypeContextInfer(this, goalId, expr);
-  }
-
-  async loadHighlightingInfo(filePath: string): Promise<DisplayControlResult> {
-    return DisplayOps.loadHighlightingInfo(this, filePath);
-  }
-
-  async tokenHighlighting(filePath: string, remove = false): Promise<DisplayControlResult> {
-    return DisplayOps.tokenHighlighting(this, filePath, remove);
-  }
-
-  async highlight(goalId: number, expr: string): Promise<DisplayControlResult> {
-    return DisplayOps.highlight(this, goalId, expr);
-  }
-
-  async showImplicitArgs(show: boolean): Promise<DisplayControlResult> {
-    return DisplayOps.showImplicitArgs(this, show);
-  }
-
-  async toggleImplicitArgs(): Promise<DisplayControlResult> {
-    return DisplayOps.toggleImplicitArgs(this);
-  }
-
-  async showIrrelevantArgs(show: boolean): Promise<DisplayControlResult> {
-    return DisplayOps.showIrrelevantArgs(this, show);
-  }
-
-  async toggleIrrelevantArgs(): Promise<DisplayControlResult> {
-    return DisplayOps.toggleIrrelevantArgs(this);
-  }
-
-  async compile(backendExpr: string, filePath: string, argv: string[] = []): Promise<BackendCommandResult> {
-    return BackendOps.compile(this, backendExpr, filePath, argv);
-  }
-
-  async backendTop(backendExpr: string, payload: string): Promise<BackendCommandResult> {
-    return BackendOps.backendTop(this, backendExpr, payload);
-  }
-
-  async backendHole(
-    goalId: number,
-    holeContents: string,
-    backendExpr: string,
-    payload: string,
-  ): Promise<BackendCommandResult> {
-    return BackendOps.backendHole(this, goalId, holeContents, backendExpr, payload);
-  }
+  /** @deprecated Use session.goal.typeContext() */
+  goalTypeContext(id: number) { return this.goal.typeContext(id); }
+  /** @deprecated Use session.goal.type() */
+  goalType(id: number) { return this.goal.type(id); }
+  /** @deprecated Use session.goal.context() */
+  context(id: number) { return this.goal.context(id); }
+  /** @deprecated Use session.goal.typeContextCheck() */
+  goalTypeContextCheck(id: number, expr: string) { return this.goal.typeContextCheck(id, expr); }
+  /** @deprecated Use session.goal.caseSplit() */
+  caseSplit(id: number, variable: string) { return this.goal.caseSplit(id, variable); }
+  /** @deprecated Use session.goal.give() */
+  give(id: number, expr: string) { return this.goal.give(id, expr); }
+  /** @deprecated Use session.goal.refine() */
+  refine(id: number, expr: string) { return this.goal.refine(id, expr); }
+  /** @deprecated Use session.goal.refineExact() */
+  refineExact(id: number, expr: string) { return this.goal.refineExact(id, expr); }
+  /** @deprecated Use session.goal.intro() */
+  intro(id: number, expr?: string) { return this.goal.intro(id, expr); }
+  /** @deprecated Use session.goal.autoOne() */
+  autoOne(id: number) { return this.goal.autoOne(id); }
+  /** @deprecated Use session.goal.metas() */
+  metas() { return this.goal.metas(); }
+  /** @deprecated Use session.expr.compute() */
+  compute(id: number, expr: string) { return this.expr.compute(id, expr); }
+  /** @deprecated Use session.expr.computeTopLevel() */
+  computeTopLevel(expr: string) { return this.expr.computeTopLevel(expr); }
+  /** @deprecated Use session.expr.infer() */
+  infer(id: number, expr: string) { return this.expr.infer(id, expr); }
+  /** @deprecated Use session.expr.inferTopLevel() */
+  inferTopLevel(expr: string) { return this.expr.inferTopLevel(expr); }
+  /** @deprecated Use session.query.constraints() */
+  constraints() { return this.query.constraints(); }
+  /** @deprecated Use session.query.solveAll() */
+  solveAll() { return this.query.solveAll(); }
+  /** @deprecated Use session.query.solveOne() */
+  solveOne(goalId: number) { return this.query.solveOne(goalId); }
+  /** @deprecated Use session.query.whyInScope() */
+  whyInScope(goalId: number, name: string) { return this.query.whyInScope(goalId, name); }
+  /** @deprecated Use session.query.whyInScopeTopLevel() */
+  whyInScopeTopLevel(name: string) { return this.query.whyInScopeTopLevel(name); }
+  /** @deprecated Use session.query.elaborate() */
+  elaborate(goalId: number, expr: string) { return this.query.elaborate(goalId, expr); }
+  /** @deprecated Use session.query.helperFunction() */
+  helperFunction(goalId: number, expr: string) { return this.query.helperFunction(goalId, expr); }
+  /** @deprecated Use session.query.showModuleContents() */
+  showModuleContents(goalId: number, moduleName: string) { return this.query.showModuleContents(goalId, moduleName); }
+  /** @deprecated Use session.query.showModuleContentsTopLevel() */
+  showModuleContentsTopLevel(moduleName: string) { return this.query.showModuleContentsTopLevel(moduleName); }
+  /** @deprecated Use session.query.searchAbout() */
+  searchAbout(q: string) { return this.query.searchAbout(q); }
+  /** @deprecated Use session.query.autoAll() */
+  autoAll() { return this.query.autoAll(); }
+  /** @deprecated Use session.query.showVersion() */
+  showVersion() { return this.query.showVersion(); }
+  /** @deprecated Use session.query.goalTypeContextInfer() */
+  goalTypeContextInfer(goalId: number, expr: string) { return this.query.goalTypeContextInfer(goalId, expr); }
+  /** @deprecated Use session.display.loadHighlightingInfo() */
+  loadHighlightingInfo(filePath: string) { return this.display.loadHighlightingInfo(filePath); }
+  /** @deprecated Use session.display.tokenHighlighting() */
+  tokenHighlighting(filePath: string, remove?: boolean) { return this.display.tokenHighlighting(filePath, remove); }
+  /** @deprecated Use session.display.highlight() */
+  highlight(goalId: number, expr: string) { return this.display.highlight(goalId, expr); }
+  /** @deprecated Use session.display.showImplicitArgs() */
+  showImplicitArgs(show: boolean) { return this.display.showImplicitArgs(show); }
+  /** @deprecated Use session.display.toggleImplicitArgs() */
+  toggleImplicitArgs() { return this.display.toggleImplicitArgs(); }
+  /** @deprecated Use session.display.showIrrelevantArgs() */
+  showIrrelevantArgs(show: boolean) { return this.display.showIrrelevantArgs(show); }
+  /** @deprecated Use session.display.toggleIrrelevantArgs() */
+  toggleIrrelevantArgs() { return this.display.toggleIrrelevantArgs(); }
+  /** @deprecated Use session.backend.compile() */
+  compile(backendExpr: string, filePath: string, argv?: string[]) { return this.backend.compile(backendExpr, filePath, argv); }
+  /** @deprecated Use session.backend.top() */
+  backendTop(backendExpr: string, payload: string) { return this.backend.top(backendExpr, payload); }
+  /** @deprecated Use session.backend.hole() */
+  backendHole(goalId: number, holeContents: string, backendExpr: string, payload: string) { return this.backend.hole(goalId, holeContents, backendExpr, payload); }
 
   // ── Accessors ─────────────────────────────────────────────────────
 
