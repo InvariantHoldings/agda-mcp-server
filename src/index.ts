@@ -29,6 +29,7 @@ import { register as registerFileTools } from "./tools/file-tools.js";
 import { register as registerScopeTools } from "./tools/scope-tools.js";
 import { register as registerDisplay } from "./tools/display.js";
 import { register as registerBackend } from "./tools/backend.js";
+import { register as registerAnalysis } from "./tools/analysis-tools.js";
 
 type ExtensionRegister = (
   server: McpServer,
@@ -55,6 +56,7 @@ registerFileTools(server, session, REPO_ROOT);
 registerScopeTools(server, session, REPO_ROOT);
 registerDisplay(server, session, REPO_ROOT);
 registerBackend(server, session, REPO_ROOT);
+registerAnalysis(server, session, REPO_ROOT);
 
 function resolveExtensionSpecifier(modulePath: string): string {
   if (modulePath.startsWith("file://")) {
