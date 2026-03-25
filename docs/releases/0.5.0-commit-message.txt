@@ -1,10 +1,22 @@
-release: 0.5.0 full IOTCM parity + backend integration
+release: 0.5.0 full IOTCM parity, backend support, and extension ecosystem docs
 
 - complete command coverage parity with Agda Interaction/Base IOTCM constructors
-- add backend command support tools: agda_compile, agda_backend_top, agda_backend_hole
-- add backend response decoding and backend command operation layer
-- add strict backend expression validation (including OtherBackend "Name")
-- add highlighting/display command family and process control commands
-- add property parity assertion that no planned upstream commands remain
-- add optional Agda-backed backend integration tests
-- update protocol registry metadata, README, and changelog for parity milestone
+- add exact backend command support and MCP tools:
+	- agda_compile (Cmd_compile)
+	- agda_backend_top (Cmd_backend_top)
+	- agda_backend_hole (Cmd_backend_hole)
+- add backend response decoder and backend operations layer
+- add strict backend expression parsing and validation (including OtherBackend "Name")
+- add highlighting/display command family and process control command coverage
+- add parity guardrails in tests:
+	- no planned upstream commands remain
+	- implemented commands match upstream registry
+- add optional live Agda backend integration tests and runbook flags
+- add dedicated extension documentation and examples catalog:
+	- docs/extensions.md
+	- examples/extensions/* (TypeScript and JavaScript samples)
+- add standalone examples workspace setup (examples/extensions/package.json + tsconfig.json)
+- add examples-focused automated tests and dedicated npm script:
+	- npm run test:examples
+- expand CONTRIBUTING.md with extension workflow and quality gate
+- update v0.5.0 release checklist and cross-link docs for discoverability
