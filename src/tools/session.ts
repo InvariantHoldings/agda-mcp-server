@@ -180,7 +180,7 @@ export function register(
     {},
     async () => {
       try {
-        const result = await session.showVersion();
+        const result = await session.query.showVersion();
         const output = `## Agda version\n\n${result.version || "(version unavailable)"}\n`;
         return { content: [{ type: "text" as const, text: output }] };
       } catch (err) {

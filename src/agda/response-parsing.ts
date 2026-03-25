@@ -42,30 +42,6 @@ export function extractMessage(info: Record<string, unknown>): string {
   return JSON.stringify(info, null, 2);
 }
 
-/**
- * Coerce an Agda response field to a string.
- * Handles: string → pass-through, array → join elements, object → stringify.
- * Returns "" for null/undefined.
- *
- * @deprecated Internal usage replaced by normalize-response.ts.
- * Retained for external consumers — will be removed in a future major version.
- */
-export function coerceString(val: unknown): string {
-  if (typeof val === "string") return val;
-  if (Array.isArray(val)) {
-    return val
-      .map((item) =>
-        typeof item === "string"
-          ? item
-          : item && typeof item === "object" && typeof (item as Record<string, unknown>).type === "string"
-            ? (item as Record<string, unknown>).type as string
-            : JSON.stringify(item),
-      )
-      .join("\n");
-  }
-  if (val != null) return String(val);
-  return "";
-}
 
 /** Escape a string for embedding in an Agda IOTCM command. */
 export function escapeAgdaString(s: string): string {

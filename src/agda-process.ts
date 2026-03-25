@@ -39,7 +39,7 @@ export type {
 
 export { AgdaSession, findAgdaBinary } from "./agda/session.js";
 export { typeCheckBatch } from "./agda/batch.js";
-export { extractMessage, escapeAgdaString, coerceString } from "./agda/response-parsing.js";
+export { extractMessage, escapeAgdaString } from "./agda/response-parsing.js";
 export { normalizeAgdaResponse } from "./agda/normalize-response.js";
 export { parseLoadResponses } from "./agda/parse-load-responses.js";
 export { firstDisplayMessage, firstResponseField, lastDisplayMessage } from "./agda/response-helpers.js";

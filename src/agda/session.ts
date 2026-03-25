@@ -86,6 +86,7 @@ export class AgdaSession {
   collecting = false;
   exiting = false;
   private lastLoadedMtime: number | null = null;
+  private sawStatusDone = false;
 
   constructor(repoRoot: string) {
     this.repoRoot = repoRoot;
@@ -175,8 +176,9 @@ export class AgdaSession {
           this.responseQueue.push(resp);
         }
 
-        // A Status response signals command completion
+        // A Status response signals definitive command completion
         if (resp.kind === "Status") {
+          this.sawStatusDone = true;
           this.emitter.emit("done");
         }
         // ClearRunningInfo can also signal end of response
@@ -208,6 +210,7 @@ export class AgdaSession {
 
     this.responseQueue = [];
     this.collecting = true;
+    this.sawStatusDone = false;
 
     return new Promise<AgdaResponse[]>((resolveCmd, rejectCmd) => {
       const timeout = setTimeout(() => {
@@ -217,7 +220,8 @@ export class AgdaSession {
       }, timeoutMs);
 
       const onDone = () => {
-        // Wait briefly for any trailing responses
+        // Short delay for trailing responses; shorter if Status (definitive) was seen
+        const trailingDelay = this.sawStatusDone ? 50 : 200;
         setTimeout(() => {
           clearTimeout(timeout);
           this.collecting = false;
@@ -226,7 +230,7 @@ export class AgdaSession {
           const responses = [...this.responseQueue];
           logger.trace("sendCommand done", { responses: responses.length, durationMs: Date.now() - startTime });
           resolveCmd(responses);
-        }, 200);
+        }, trailingDelay);
       };
 
       const onError = (err: Error) => {
@@ -420,85 +424,6 @@ export class AgdaSession {
     this.exiting = true;
     return this.runIndependentCommand("Cmd_exit", 10_000);
   }
-
-  // ── Deprecated flat methods (backward compatibility) ───────────
-
-  /** @deprecated Use session.goal.typeContext() */
-  goalTypeContext(id: number) { return this.goal.typeContext(id); }
-  /** @deprecated Use session.goal.type() */
-  goalType(id: number) { return this.goal.type(id); }
-  /** @deprecated Use session.goal.context() */
-  context(id: number) { return this.goal.context(id); }
-  /** @deprecated Use session.goal.typeContextCheck() */
-  goalTypeContextCheck(id: number, expr: string) { return this.goal.typeContextCheck(id, expr); }
-  /** @deprecated Use session.goal.caseSplit() */
-  caseSplit(id: number, variable: string) { return this.goal.caseSplit(id, variable); }
-  /** @deprecated Use session.goal.give() */
-  give(id: number, expr: string) { return this.goal.give(id, expr); }
-  /** @deprecated Use session.goal.refine() */
-  refine(id: number, expr: string) { return this.goal.refine(id, expr); }
-  /** @deprecated Use session.goal.refineExact() */
-  refineExact(id: number, expr: string) { return this.goal.refineExact(id, expr); }
-  /** @deprecated Use session.goal.intro() */
-  intro(id: number, expr?: string) { return this.goal.intro(id, expr); }
-  /** @deprecated Use session.goal.autoOne() */
-  autoOne(id: number) { return this.goal.autoOne(id); }
-  /** @deprecated Use session.goal.metas() */
-  metas() { return this.goal.metas(); }
-  /** @deprecated Use session.expr.compute() */
-  compute(id: number, expr: string) { return this.expr.compute(id, expr); }
-  /** @deprecated Use session.expr.computeTopLevel() */
-  computeTopLevel(expr: string) { return this.expr.computeTopLevel(expr); }
-  /** @deprecated Use session.expr.infer() */
-  infer(id: number, expr: string) { return this.expr.infer(id, expr); }
-  /** @deprecated Use session.expr.inferTopLevel() */
-  inferTopLevel(expr: string) { return this.expr.inferTopLevel(expr); }
-  /** @deprecated Use session.query.constraints() */
-  constraints() { return this.query.constraints(); }
-  /** @deprecated Use session.query.solveAll() */
-  solveAll() { return this.query.solveAll(); }
-  /** @deprecated Use session.query.solveOne() */
-  solveOne(goalId: number) { return this.query.solveOne(goalId); }
-  /** @deprecated Use session.query.whyInScope() */
-  whyInScope(goalId: number, name: string) { return this.query.whyInScope(goalId, name); }
-  /** @deprecated Use session.query.whyInScopeTopLevel() */
-  whyInScopeTopLevel(name: string) { return this.query.whyInScopeTopLevel(name); }
-  /** @deprecated Use session.query.elaborate() */
-  elaborate(goalId: number, expr: string) { return this.query.elaborate(goalId, expr); }
-  /** @deprecated Use session.query.helperFunction() */
-  helperFunction(goalId: number, expr: string) { return this.query.helperFunction(goalId, expr); }
-  /** @deprecated Use session.query.showModuleContents() */
-  showModuleContents(goalId: number, moduleName: string) { return this.query.showModuleContents(goalId, moduleName); }
-  /** @deprecated Use session.query.showModuleContentsTopLevel() */
-  showModuleContentsTopLevel(moduleName: string) { return this.query.showModuleContentsTopLevel(moduleName); }
-  /** @deprecated Use session.query.searchAbout() */
-  searchAbout(q: string) { return this.query.searchAbout(q); }
-  /** @deprecated Use session.query.autoAll() */
-  autoAll() { return this.query.autoAll(); }
-  /** @deprecated Use session.query.showVersion() */
-  showVersion() { return this.query.showVersion(); }
-  /** @deprecated Use session.query.goalTypeContextInfer() */
-  goalTypeContextInfer(goalId: number, expr: string) { return this.query.goalTypeContextInfer(goalId, expr); }
-  /** @deprecated Use session.display.loadHighlightingInfo() */
-  loadHighlightingInfo(filePath: string) { return this.display.loadHighlightingInfo(filePath); }
-  /** @deprecated Use session.display.tokenHighlighting() */
-  tokenHighlighting(filePath: string, remove?: boolean) { return this.display.tokenHighlighting(filePath, remove); }
-  /** @deprecated Use session.display.highlight() */
-  highlight(goalId: number, expr: string) { return this.display.highlight(goalId, expr); }
-  /** @deprecated Use session.display.showImplicitArgs() */
-  showImplicitArgs(show: boolean) { return this.display.showImplicitArgs(show); }
-  /** @deprecated Use session.display.toggleImplicitArgs() */
-  toggleImplicitArgs() { return this.display.toggleImplicitArgs(); }
-  /** @deprecated Use session.display.showIrrelevantArgs() */
-  showIrrelevantArgs(show: boolean) { return this.display.showIrrelevantArgs(show); }
-  /** @deprecated Use session.display.toggleIrrelevantArgs() */
-  toggleIrrelevantArgs() { return this.display.toggleIrrelevantArgs(); }
-  /** @deprecated Use session.backend.compile() */
-  compile(backendExpr: string, filePath: string, argv?: string[]) { return this.backend.compile(backendExpr, filePath, argv); }
-  /** @deprecated Use session.backend.top() */
-  backendTop(backendExpr: string, payload: string) { return this.backend.top(backendExpr, payload); }
-  /** @deprecated Use session.backend.hole() */
-  backendHole(goalId: number, holeContents: string, backendExpr: string, payload: string) { return this.backend.hole(goalId, holeContents, backendExpr, payload); }
 
   // ── Accessors ─────────────────────────────────────────────────────
 

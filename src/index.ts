@@ -22,8 +22,11 @@ import { pathToFileURL } from "node:url";
 import { AgdaSession } from "./agda-process.js";
 
 import { register as registerSession } from "./tools/session.js";
-import { register as registerProof } from "./tools/proof.js";
-import { register as registerNavigation } from "./tools/navigation.js";
+import { register as registerGoalTools } from "./tools/goal-tools.js";
+import { register as registerExpressionTools } from "./tools/expression-tools.js";
+import { register as registerQueryTools } from "./tools/query-tools.js";
+import { register as registerFileTools } from "./tools/file-tools.js";
+import { register as registerScopeTools } from "./tools/scope-tools.js";
 import { register as registerDisplay } from "./tools/display.js";
 import { register as registerBackend } from "./tools/backend.js";
 
@@ -45,8 +48,11 @@ const server = new McpServer({
 
 // ── Core tools (generic Agda) ──────────────────────────────────────
 registerSession(server, session, REPO_ROOT);
-registerProof(server, session, REPO_ROOT);
-registerNavigation(server, session, REPO_ROOT);
+registerGoalTools(server, session, REPO_ROOT);
+registerExpressionTools(server, session, REPO_ROOT);
+registerQueryTools(server, session, REPO_ROOT);
+registerFileTools(server, session, REPO_ROOT);
+registerScopeTools(server, session, REPO_ROOT);
 registerDisplay(server, session, REPO_ROOT);
 registerBackend(server, session, REPO_ROOT);
 
