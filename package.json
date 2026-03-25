@@ -25,6 +25,7 @@
     "dev": "tsx src/index.ts",
     "pretest": "npm run build",
     "test": "node --test test/*.test.js test/**/*.test.js",
+    "test:examples": "node --test test/examples/*.test.js test/examples/**/*.test.js",
     "test:property": "node --test test/property/*.test.js test/property/**/*.test.js",
     "test:integration": "node --test test/integration/*.test.js test/integration/**/*.test.js",
     "verify": "npm test && npm pack --dry-run",

@@ -320,59 +320,12 @@ Use `agda_load` when you want:
 
 ## Extension modules
 
-The core server is intentionally generic. Project-specific workflows can be added
-through external extension modules loaded at startup.
+The core server is intentionally generic and supports external extension modules.
 
-Values in `AGDA_MCP_EXTENSION_MODULES` are resolved as follows:
+For complete setup instructions and multiple extension examples, see:
 
-- absolute filesystem paths are used directly,
-- relative filesystem paths are resolved relative to `AGDA_MCP_ROOT`,
-- `file://` specifiers are used as-is,
-- anything else is treated as a normal module specifier.
-
-An extension can export `register` or multiple functions whose names begin with
-`register`. Each function receives the MCP server instance, the shared
-`AgdaSession`, and the resolved repo root.
-
-### Example extension
-
-```typescript
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-import type { AgdaSession } from "agda-mcp-server";
-
-export function register(
-  server: McpServer,
-  session: AgdaSession,
-  repoRoot: string,
-): void {
-  server.tool(
-    "my_custom_tool",
-    "Example custom Agda tool",
-    {
-      expr: z.string(),
-    },
-    async ({ expr }) => {
-      const loadedFile = session.getLoadedFile();
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `repoRoot=${repoRoot}\nloadedFile=${loadedFile ?? "(none)"}\nexpr=${expr}`,
-          },
-        ],
-      };
-    },
-  );
-}
-```
-
-Then start the server with something like:
-
-```bash
-AGDA_MCP_ROOT=. AGDA_MCP_EXTENSION_MODULES=dist/my-extension.js node dist/index.js
-```
+- [docs/extensions.md](docs/extensions.md)
+- [examples/extensions/README.md](examples/extensions/README.md)
 
 ## Development
 
@@ -383,6 +336,7 @@ AGDA_MCP_ROOT=. AGDA_MCP_EXTENSION_MODULES=dist/my-extension.js node dist/index.
 | `npm run build`            | Compile TypeScript into `dist/`                                 |
 | `npm run dev`              | Run the TypeScript entry point directly with `tsx`              |
 | `npm test`                 | Build first, then run the Node test suite                       |
+| `npm run test:examples`    | Run tests focused on extension examples and extension docs links |
 | `npm run test:integration` | Run the Agda-backed integration test scaffold                   |
 | `npm run verify`           | Run tests and verify package contents with `npm pack --dry-run` |
 

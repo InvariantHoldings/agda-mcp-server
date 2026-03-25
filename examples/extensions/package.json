@@ -1,0 +1,18 @@
+{
+  "name": "agda-mcp-server-extension-examples",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "agda-mcp-server": "file:../..",
+    "zod": "^3.25 || ^4.0"
+  }
+}
