@@ -53,6 +53,7 @@ import type {
   BackendCommandResult,
 } from "./types.js";
 import { extractMessage, coerceString } from "./response-parsing.js";
+import { normalizeAgdaResponse } from "./normalize-response.js";
 
 // Delegate modules
 import * as GoalOps from "./goal-operations.js";
@@ -164,7 +165,7 @@ export class AgdaSession {
       if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
 
       try {
-        const resp: AgdaResponse = JSON.parse(trimmed);
+        const resp: AgdaResponse = normalizeAgdaResponse(JSON.parse(trimmed));
         if (this.collecting) {
           this.responseQueue.push(resp);
         }
