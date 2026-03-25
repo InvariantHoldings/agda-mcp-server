@@ -264,17 +264,41 @@ export async function metas(
   const responses = await ctx.sendCommand(cmd);
 
   let text = "";
+  const goals: AgdaGoal[] = [];
+
   for (const resp of responses) {
     if (resp.kind === "DisplayInfo") {
       const info = resp.info as Record<string, unknown> | undefined;
-      if (info) {
-        text = extractMessage(info);
+      if (!info) continue;
+      text = extractMessage(info);
+
+      // After normalization: visibleGoals is always an array
+      if (info.kind === "AllGoalsWarnings") {
+        const visGoals = info.visibleGoals as unknown[];
+        if (visGoals) {
+          for (const vg of visGoals) {
+            const obj = vg as Record<string, unknown>;
+            const id = typeof obj.constraintObj === "number" ? obj.constraintObj : undefined;
+            if (id !== undefined) {
+              goals.push({
+                goalId: id,
+                type: typeof obj.type === "string" ? obj.type : "?",
+                context: [],
+              });
+            }
+          }
+        }
       }
     }
   }
 
+  // Fall back to cached goalIds if Cmd_metas didn't return structured goals
+  if (goals.length === 0 && ctx.goalIds.length > 0) {
+    goals.push(...ctx.goalIds.map((id) => ({ goalId: id, type: "?", context: [] as string[] })));
+  }
+
   return {
-    goals: ctx.goalIds.map((id) => ({ goalId: id, type: "?", context: [] })),
+    goals,
     text,
     raw: responses,
   };

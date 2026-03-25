@@ -25,7 +25,7 @@
 
 import { spawn, ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { deriveSessionPhase, type SessionPhase } from "../session/session-state.js";
 import type {
@@ -103,9 +103,21 @@ export class AgdaSession {
   emitter = new EventEmitter();
   collecting = false;
   exiting = false;
+  private lastLoadedMtime: number | null = null;
 
   constructor(repoRoot: string) {
     this.repoRoot = repoRoot;
+  }
+
+  /** Check if the loaded file has been modified on disk since last load. */
+  isFileStale(): boolean {
+    if (!this.currentFile) return false;
+    try {
+      const current = statSync(this.currentFile).mtimeMs;
+      return this.lastLoadedMtime !== null && current !== this.lastLoadedMtime;
+    } catch {
+      return true; // file deleted = stale
+    }
   }
 
   /** Start the Agda process if not already running. */
@@ -113,6 +125,10 @@ export class AgdaSession {
     if (this.proc && this.proc.exitCode === null) {
       return this.proc;
     }
+
+    // Process died or never started — reset stale state
+    this.currentFile = null;
+    this.goalIds = [];
 
     const agdaBin = findAgdaBinary(this.repoRoot);
     this.proc = spawn(agdaBin, ["--interaction-json"], {
@@ -286,6 +302,7 @@ export class AgdaSession {
 
     // Atomic assignment — no window where goalIds is empty
     this.goalIds = parsed.goalIds;
+    this.lastLoadedMtime = statSync(absPath).mtimeMs;
 
     return {
       success: parsed.success,
@@ -316,6 +333,7 @@ export class AgdaSession {
 
     // Atomic assignment
     this.goalIds = parsed.goalIds;
+    this.lastLoadedMtime = statSync(absPath).mtimeMs;
 
     return {
       success: parsed.success,
@@ -530,6 +548,7 @@ export class AgdaSession {
     }
     this.currentFile = null;
     this.goalIds = [];
+    this.lastLoadedMtime = null;
     this.buffer = "";
     this.responseQueue = [];
     this.collecting = false;
