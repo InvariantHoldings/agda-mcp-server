@@ -6,6 +6,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
+import { stalenessWarning, validateGoalId, text } from "./tool-helpers.js";
 
 export function register(
   server: McpServer,
@@ -20,20 +21,21 @@ export function register(
       goalId: z.number().describe("The goal ID (from agda_load output)"),
     },
     async ({ goalId }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const info = await session.goalTypeContext(goalId);
-        let output = `## Goal ?${goalId}\n\n`;
+        let output = warn + `## Goal ?${goalId}\n\n`;
 
         if (info.context.length > 0) {
           output += `### Context\n\`\`\`agda\n${info.context.join("\n")}\n\`\`\`\n\n`;
         }
         output += `### Goal type\n\`\`\`agda\n${info.type || "(unknown)"}\n\`\`\`\n`;
 
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -46,14 +48,14 @@ export function register(
       goalId: z.number().describe("The goal ID (from agda_load output)"),
     },
     async ({ goalId }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const info = await session.goalType(goalId);
-        const output = `## Goal ?${goalId}\n\n### Goal type\n\`\`\`agda\n${info.type || "(unknown)"}\n\`\`\`\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(warn + `## Goal ?${goalId}\n\n### Goal type\n\`\`\`agda\n${info.type || "(unknown)"}\n\`\`\`\n`);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -66,17 +68,18 @@ export function register(
       goalId: z.number().describe("The goal ID (from agda_load output)"),
     },
     async ({ goalId }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const info = await session.context(goalId);
-        let output = `## Context for ?${goalId}\n\n`;
+        let output = warn + `## Context for ?${goalId}\n\n`;
         output += info.context.length > 0
           ? `\`\`\`agda\n${info.context.join("\n")}\n\`\`\`\n`
           : "(empty context)\n";
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -88,19 +91,18 @@ export function register(
     {},
     async () => {
       try {
+        const warn = stalenessWarning(session);
         const result = await session.metas();
-        let output = `## Unsolved goals (${result.goals.length})\n\n`;
+        let output = warn + `## Unsolved goals (${result.goals.length})\n\n`;
         if (result.text) {
           output += `\`\`\`\n${result.text}\n\`\`\`\n`;
         }
         if (result.goals.length > 0) {
           output += `\nGoal IDs: ${result.goals.map((g) => `?${g.goalId}`).join(", ")}\n`;
         }
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -114,9 +116,12 @@ export function register(
       variable: z.string().describe("The variable name to case-split on"),
     },
     async ({ goalId, variable }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.caseSplit(goalId, variable);
-        let output = `## Case split on \`${variable}\` in ?${goalId}\n\n`;
+        let output = warn + `## Case split on \`${variable}\` in ?${goalId}\n\n`;
 
         if (result.clauses.length > 0) {
           output += `### New clauses\n\`\`\`agda\n${result.clauses.join("\n")}\n\`\`\`\n`;
@@ -125,11 +130,9 @@ export function register(
           output += `No clauses generated. The variable may not be splittable.\n`;
         }
 
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -143,17 +146,18 @@ export function register(
       expr: z.string().describe("The Agda expression to give"),
     },
     async ({ goalId, expr }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.give(goalId, expr);
-        let output = `## Give \`${expr}\` to ?${goalId}\n\n`;
+        let output = warn + `## Give \`${expr}\` to ?${goalId}\n\n`;
         output += result.result
           ? `**Result:** \`${result.result}\`\n`
           : `Expression accepted.\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -167,17 +171,18 @@ export function register(
       expr: z.string().describe("The expression to refine with (can be empty to let Agda choose)"),
     },
     async ({ goalId, expr }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.refine(goalId, expr);
-        let output = `## Refine ?${goalId} with \`${expr || "(auto)"}\`\n\n`;
+        let output = warn + `## Refine ?${goalId} with \`${expr || "(auto)"}\`\n\n`;
         output += result.result
           ? `**Result:** \`${result.result}\`\n`
           : `Refinement applied. Call \`agda_metas\` to see new goals.\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -191,17 +196,18 @@ export function register(
       expr: z.string().describe("The expression to refine with"),
     },
     async ({ goalId, expr }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.refineExact(goalId, expr);
-        let output = `## Exact refine ?${goalId} with \`${expr}\`\n\n`;
+        let output = warn + `## Exact refine ?${goalId} with \`${expr}\`\n\n`;
         output += result.result
           ? `**Result:** \`${result.result}\`\n`
           : "Refinement applied. Call `agda_metas` to inspect resulting goals.\n";
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -215,17 +221,18 @@ export function register(
       expr: z.string().optional().describe("Optional existing goal contents to use as input"),
     },
     async ({ goalId, expr }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.intro(goalId, expr ?? "");
-        let output = `## Intro ?${goalId}\n\n`;
+        let output = warn + `## Intro ?${goalId}\n\n`;
         output += result.result
           ? `**Result:** \`${result.result}\`\n`
           : "Introduction applied. Call `agda_metas` to inspect resulting goals.\n";
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -238,17 +245,18 @@ export function register(
       goalId: z.number().describe("The goal ID to auto-solve"),
     },
     async ({ goalId }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.autoOne(goalId);
-        let output = `## Auto-solve ?${goalId}\n\n`;
+        let output = warn + `## Auto-solve ?${goalId}\n\n`;
         output += result.solution
           ? `**Solution:** \`${result.solution}\`\n`
           : `No automatic solution found.\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -260,16 +268,15 @@ export function register(
     {},
     async () => {
       try {
+        const warn = stalenessWarning(session);
         const result = await session.autoAll();
-        let output = `## Auto-solve all goals\n\n`;
+        let output = warn + `## Auto-solve all goals\n\n`;
         output += result.solution
           ? `**Result:**\n\`\`\`\n${result.solution}\n\`\`\`\n`
           : `No automatic solutions found.\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -281,8 +288,9 @@ export function register(
     {},
     async () => {
       try {
+        const warn = stalenessWarning(session);
         const result = await session.solveAll();
-        let output = `## Solve all\n\n`;
+        let output = warn + `## Solve all\n\n`;
         if (result.solutions.length > 0) {
           for (const s of result.solutions) {
             output += `- ${s}\n`;
@@ -290,11 +298,9 @@ export function register(
         } else {
           output += `No goals with unique solutions found.\n`;
         }
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -307,9 +313,12 @@ export function register(
       goalId: z.number().describe("The goal ID to solve if it has a unique solution"),
     },
     async ({ goalId }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.solveOne(goalId);
-        let output = `## Solve one ?${goalId}\n\n`;
+        let output = warn + `## Solve one ?${goalId}\n\n`;
         if (result.solutions.length > 0) {
           for (const solution of result.solutions) {
             output += `- ${solution}\n`;
@@ -317,11 +326,9 @@ export function register(
         } else {
           output += "No unique solution found for that goal.\n";
         }
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -335,17 +342,20 @@ export function register(
       goalId: z.number().optional().describe("Optional goal ID for context"),
     },
     async ({ expr, goalId }) => {
+      if (goalId !== undefined) {
+        const invalid = validateGoalId(session, goalId);
+        if (invalid) return invalid;
+      }
       try {
+        const warn = stalenessWarning(session);
         const result = goalId !== undefined
           ? await session.compute(goalId, expr)
           : await session.computeTopLevel(expr);
-        let output = `## Normalize \`${expr}\`\n\n`;
+        let output = warn + `## Normalize \`${expr}\`\n\n`;
         output += `\`\`\`agda\n${result.normalForm || "(no result)"}\n\`\`\`\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -359,17 +369,20 @@ export function register(
       goalId: z.number().optional().describe("Optional goal ID for context"),
     },
     async ({ expr, goalId }) => {
+      if (goalId !== undefined) {
+        const invalid = validateGoalId(session, goalId);
+        if (invalid) return invalid;
+      }
       try {
+        const warn = stalenessWarning(session);
         const result = goalId !== undefined
           ? await session.infer(goalId, expr)
           : await session.inferTopLevel(expr);
-        let output = `## Type of \`${expr}\`\n\n`;
+        let output = warn + `## Type of \`${expr}\`\n\n`;
         output += `\`\`\`agda\n${result.type || "(unable to infer)"}\n\`\`\`\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -381,16 +394,15 @@ export function register(
     {},
     async () => {
       try {
+        const warn = stalenessWarning(session);
         const result = await session.constraints();
-        let output = `## Constraints\n\n`;
+        let output = warn + `## Constraints\n\n`;
         output += result.text
           ? `\`\`\`\n${result.text}\n\`\`\`\n`
           : `No constraints.\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -404,15 +416,16 @@ export function register(
       expr: z.string().describe("The Agda expression to elaborate"),
     },
     async ({ goalId, expr }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.elaborate(goalId, expr);
-        let output = `## Elaborate \`${expr}\` in ?${goalId}\n\n`;
+        let output = warn + `## Elaborate \`${expr}\` in ?${goalId}\n\n`;
         output += `\`\`\`agda\n${result.elaboration || "(no result)"}\n\`\`\`\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -426,9 +439,12 @@ export function register(
       expr: z.string().describe("The Agda expression to check against the goal type"),
     },
     async ({ goalId, expr }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.goalTypeContextCheck(goalId, expr);
-        let output = `## Goal ?${goalId}, context, and checked term\n\n`;
+        let output = warn + `## Goal ?${goalId}, context, and checked term\n\n`;
 
         if (result.context.length > 0) {
           output += `### Context\n\n\`\`\`agda\n${result.context.join("\n")}\n\`\`\`\n\n`;
@@ -437,11 +453,9 @@ export function register(
         output += `### Goal type\n\n\`\`\`agda\n${result.goalType || "(unknown)"}\n\`\`\`\n\n`;
         output += `### Checked term for \`${expr}\`\n\n\`\`\`agda\n${result.checkedExpr || "(no checked term returned)"}\n\`\`\`\n`;
 
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -455,15 +469,16 @@ export function register(
       expr: z.string().describe("The expression to generate a helper for"),
     },
     async ({ goalId, expr }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.helperFunction(goalId, expr);
-        let output = `## Helper function for \`${expr}\` in ?${goalId}\n\n`;
+        let output = warn + `## Helper function for \`${expr}\` in ?${goalId}\n\n`;
         output += `\`\`\`agda\n${result.helperType || "(no result)"}\n\`\`\`\n`;
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
@@ -477,9 +492,12 @@ export function register(
       expr: z.string().describe("The Agda expression to infer in context"),
     },
     async ({ goalId, expr }) => {
+      const invalid = validateGoalId(session, goalId);
+      if (invalid) return invalid;
       try {
+        const warn = stalenessWarning(session);
         const result = await session.goalTypeContextInfer(goalId, expr);
-        let output = `## Goal ?${goalId}, context, and inferred type\n\n`;
+        let output = warn + `## Goal ?${goalId}, context, and inferred type\n\n`;
 
         if (result.context.length > 0) {
           output += `### Context\n\n\`\`\`agda\n${result.context.join("\n")}\n\`\`\`\n\n`;
@@ -488,11 +506,9 @@ export function register(
         output += `### Goal type\n\n\`\`\`agda\n${result.goalType || "(unknown)"}\n\`\`\`\n\n`;
         output += `### Inferred type for \`${expr}\`\n\n\`\`\`agda\n${result.inferredType || "(unable to infer)"}\n\`\`\`\n`;
 
-        return { content: [{ type: "text" as const, text: output }] };
+        return text(output);
       } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
