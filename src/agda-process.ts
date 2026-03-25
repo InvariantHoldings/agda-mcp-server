@@ -38,3 +38,4 @@ export type {
 export { AgdaSession, findAgdaBinary } from "./agda/session.js";
 export { typeCheckBatch } from "./agda/batch.js";
 export { extractMessage, escapeAgdaString, coerceString } from "./agda/response-parsing.js";
+export { normalizeAgdaResponse } from "./agda/normalize-response.js";
