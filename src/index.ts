@@ -44,7 +44,7 @@ const session = new AgdaSession(REPO_ROOT);
 
 const server = new McpServer({
   name: "agda-mcp-server",
-  version: "0.5.0",
+  version: "0.6.1",
 });
 
 // ── Core tools (generic Agda) ──────────────────────────────────────

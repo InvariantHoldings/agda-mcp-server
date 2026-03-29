@@ -30,7 +30,7 @@ test("parseContextEntry: well-formed 'name : type' round-trips name", async () =
   const typeArb = fc.stringOf(
     fc.constantFrom(..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz→ "),
     { minLength: 1, maxLength: 20 },
-  );
+  ).filter((s) => s.trim().length > 0);
 
   await fc.assert(
     fc.property(nameArb, typeArb, (name, type) => {
