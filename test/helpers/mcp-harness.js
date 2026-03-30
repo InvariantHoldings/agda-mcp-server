@@ -10,18 +10,21 @@ function filterStringEnv(env) {
 }
 
 export function buildHarnessServerParameters({
-  repoRoot,
-  projectRoot = repoRoot,
+  serverRepoRoot,
+  repoRoot = serverRepoRoot,
+  projectRoot = repoRoot ?? serverRepoRoot,
   extraEnv = {},
 } = {}) {
-  if (!repoRoot) {
-    throw new Error("repoRoot is required");
+  const effectiveServerRepoRoot = repoRoot ?? serverRepoRoot;
+
+  if (!effectiveServerRepoRoot) {
+    throw new Error("serverRepoRoot is required");
   }
 
   return {
     command: process.execPath,
-    args: [resolve(repoRoot, "dist/index.js")],
-    cwd: repoRoot,
+    args: [resolve(effectiveServerRepoRoot, "dist/index.js")],
+    cwd: effectiveServerRepoRoot,
     env: filterStringEnv({
       ...process.env,
       ...extraEnv,
@@ -32,14 +35,19 @@ export function buildHarnessServerParameters({
 }
 
 export async function createMcpHarness({
-  repoRoot,
-  projectRoot = repoRoot,
+  serverRepoRoot,
+  repoRoot = serverRepoRoot,
+  projectRoot = repoRoot ?? serverRepoRoot,
   extraEnv = {},
   clientInfo = { name: "agda-mcp-harness", version: "0.0.0" },
 } = {}) {
   const client = new Client(clientInfo);
   const transport = new StdioClientTransport(
-    buildHarnessServerParameters({ repoRoot, projectRoot, extraEnv }),
+    buildHarnessServerParameters({
+      serverRepoRoot: repoRoot ?? serverRepoRoot,
+      projectRoot,
+      extraEnv,
+    }),
   );
 
   let stderr = "";

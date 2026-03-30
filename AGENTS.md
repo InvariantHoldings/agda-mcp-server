@@ -16,6 +16,16 @@ Core goals for changes in this repo:
 - Add at least unit tests for every new module or helper.
 - All new features and bug fixes must follow property-based TDD.
 
+Terminology:
+
+- `SERVER_REPO_ROOT`
+  The root of the `agda-mcp-server` repository itself.
+- `PROJECT_ROOT`
+  The root of the project/workspace the MCP server is operating on.
+
+Do not conflate these. For example, when this server is used from another repo,
+that consumer repo is the `PROJECT_ROOT`, not the `SERVER_REPO_ROOT`.
+
 ## Architecture
 
 Main layers:

@@ -4,9 +4,9 @@ import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 
 import { createMcpHarness } from "../../helpers/mcp-harness.js";
+import { TEST_SERVER_REPO_ROOT } from "../../helpers/repo-root.js";
 import { navigationQueryMatrix } from "../../fixtures/agda/navigation-query-matrix.js";
 
-const REPO_ROOT = resolve(import.meta.dirname, "../../..");
 const FIXTURES = resolve(import.meta.dirname, "../../fixtures/agda");
 
 let agdaAvailable = false;
@@ -23,7 +23,7 @@ const it = agdaAvailable && process.env.RUN_AGDA_INTEGRATION === "1"
 
 async function withHarness(run, projectRoot = FIXTURES) {
   const harness = await createMcpHarness({
-    repoRoot: REPO_ROOT,
+    serverRepoRoot: TEST_SERVER_REPO_ROOT,
     projectRoot,
   });
 

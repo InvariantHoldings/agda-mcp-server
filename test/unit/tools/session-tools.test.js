@@ -9,8 +9,9 @@ import { clearToolManifest, getToolManifestEntry, listToolManifest } from "../..
 import { register as registerSessionTools } from "../../../dist/tools/session.js";
 import { register as registerReportingTools } from "../../../dist/tools/reporting-tools.js";
 import { availableSessionTools, renderLoadLikeText } from "../../../dist/session/tool-presentation.js";
+import { TEST_FIXTURE_PROJECT_ROOT } from "../../helpers/repo-root.js";
 
-const repoRoot = resolve(import.meta.dirname, "fixtures/agda");
+const projectRoot = TEST_FIXTURE_PROJECT_ROOT;
 
 function createServer() {
   return new McpServer({
@@ -44,11 +45,11 @@ test("renderLoadLikeText includes completeness and goal metadata", () => {
 test("session and reporting registrations populate manifest entries", () => {
   clearToolManifest();
   const server = createServer();
-  const session = new AgdaSession(repoRoot);
+  const session = new AgdaSession(projectRoot);
 
   try {
-    registerSessionTools(server, session, repoRoot);
-    registerReportingTools(server, session, repoRoot);
+    registerSessionTools(server, session, projectRoot);
+    registerReportingTools(server, session, projectRoot);
 
     const loadEntry = getToolManifestEntry("agda_load");
     const statusEntry = getToolManifestEntry("agda_session_status");
@@ -81,11 +82,11 @@ test("session and reporting registrations populate manifest entries", () => {
 test("availableSessionTools filters interactive tools when no file is loaded", () => {
   clearToolManifest();
   const server = createServer();
-  const session = new AgdaSession(repoRoot);
+  const session = new AgdaSession(projectRoot);
 
   try {
-    registerSessionTools(server, session, repoRoot);
-    registerReportingTools(server, session, repoRoot);
+    registerSessionTools(server, session, projectRoot);
+    registerReportingTools(server, session, projectRoot);
 
     const unloaded = availableSessionTools(false).map((entry) => entry.name);
     const loaded = availableSessionTools(true).map((entry) => entry.name);

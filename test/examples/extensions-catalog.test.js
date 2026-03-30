@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const repoRoot = process.cwd();
-const examplesDir = resolve(repoRoot, "examples", "extensions");
-const rootReadmePath = resolve(repoRoot, "README.md");
-const extensionsDocPath = resolve(repoRoot, "docs", "extensions.md");
+import { TEST_SERVER_REPO_ROOT } from "../helpers/repo-root.js";
+
+const examplesDir = resolve(TEST_SERVER_REPO_ROOT, "examples", "extensions");
+const rootReadmePath = resolve(TEST_SERVER_REPO_ROOT, "README.md");
+const extensionsDocPath = resolve(TEST_SERVER_REPO_ROOT, "docs", "extensions.md");
 
 const expectedFiles = [
   "README.md",
