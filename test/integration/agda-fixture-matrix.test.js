@@ -21,6 +21,36 @@ const it = agdaAvailable && process.env.RUN_AGDA_INTEGRATION === "1"
   ? test
   : test.skip;
 
+function selectedPhases() {
+  const rawPhases = process.env.AGDA_FIXTURE_PHASES?.trim();
+  if (!rawPhases) {
+    return new Set(["load", "batch", "goal"]);
+  }
+
+  return new Set(
+    rawPhases
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean),
+  );
+}
+
+function selectedFixtures() {
+  const rawFilter = process.env.AGDA_FIXTURE_FILTER?.trim();
+  if (!rawFilter) {
+    return fixtureMatrix;
+  }
+
+  const parts = rawFilter
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return fixtureMatrix.filter((fixture) =>
+    parts.some((part) => fixture.name.includes(part)),
+  );
+}
+
 async function withSession(run) {
   const session = new AgdaSession(FIXTURES);
   try {
@@ -28,6 +58,13 @@ async function withSession(run) {
   } finally {
     session.destroy();
   }
+}
+
+async function timedStep(t, label, run) {
+  const startedAt = Date.now();
+  const result = await run();
+  t.diagnostic(`${label}: ${Date.now() - startedAt}ms`);
+  return result;
 }
 
 test("fixture matrix entries reference existing files", () => {
@@ -40,28 +77,36 @@ test("fixture matrix entries reference existing files", () => {
   }
 });
 
-for (const fixture of fixtureMatrix) {
-  it(`${fixture.name}: load and batch typecheck match matrix expectations`, async () => {
+const phases = selectedPhases();
+
+for (const fixture of selectedFixtures()) {
+  it(`${fixture.name}: load and batch typecheck match matrix expectations`, async (t) => {
     await withSession(async (session) => {
-      const load = await session.load(fixture.name);
-      const batch = await typeCheckBatch(fixture.name, FIXTURES);
+      const load = phases.has("load")
+        ? await timedStep(t, "load", () => session.load(fixture.name))
+        : await session.load(fixture.name);
 
-      assert.equal(load.success, fixture.expectedSuccess);
-      assert.equal(load.classification, fixture.expectedClassification);
-      assert.ok(
-        load.goalCount >= fixture.minGoalCount,
-        `expected >=${fixture.minGoalCount} goals for ${fixture.name}, got ${load.goalCount}`,
-      );
+      if (phases.has("load")) {
+        assert.equal(load.success, fixture.expectedSuccess);
+        assert.equal(load.classification, fixture.expectedClassification);
+        assert.ok(
+          load.goalCount >= fixture.minGoalCount,
+          `expected >=${fixture.minGoalCount} goals for ${fixture.name}, got ${load.goalCount}`,
+        );
+      }
 
-      assert.equal(batch.success, fixture.expectedSuccess);
-      assert.equal(batch.classification, fixture.expectedClassification);
-      assert.ok(
-        batch.goalCount >= fixture.minGoalCount,
-        `expected >=${fixture.minGoalCount} batch goals for ${fixture.name}, got ${batch.goalCount}`,
-      );
+      if (phases.has("batch")) {
+        const batch = await timedStep(t, "batch", () => typeCheckBatch(fixture.name, FIXTURES));
+        assert.equal(batch.success, fixture.expectedSuccess);
+        assert.equal(batch.classification, fixture.expectedClassification);
+        assert.ok(
+          batch.goalCount >= fixture.minGoalCount,
+          `expected >=${fixture.minGoalCount} batch goals for ${fixture.name}, got ${batch.goalCount}`,
+        );
+      }
 
-      if (load.goalCount > 0) {
-        const info = await session.goal.typeContext(load.goals[0].goalId);
+      if (phases.has("goal") && load.goalCount > 0) {
+        const info = await timedStep(t, "goal", () => session.goal.typeContext(load.goals[0].goalId));
         assert.ok(info.type.length > 0, `expected non-empty goal type for ${fixture.name}`);
       }
     });

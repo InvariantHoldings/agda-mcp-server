@@ -29,6 +29,8 @@
     "test:examples": "node --test test/examples/*.test.js test/examples/**/*.test.js",
     "test:property": "node --test test/property/*.test.js test/property/**/*.test.js",
     "test:integration": "node --test test/integration/*.test.js test/integration/**/*.test.js",
+    "test:integration:fixtures": "node --test test/integration/agda-fixture-matrix.test.js",
+    "test:integration:mcp": "node --test test/integration/mcp-server.test.js",
     "verify": "npm test && npm pack --dry-run",
     "prepublishOnly": "npm run verify"
   },

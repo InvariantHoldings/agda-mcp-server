@@ -29,6 +29,15 @@ import { existsSync, statSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { deriveSessionPhase, type SessionPhase } from "../session/session-state.js";
 import {
+  configuredCommandTimeoutMs,
+  configuredIdleCompletionMs,
+  configuredWaitingSentryMs,
+  shouldResolveOnIdle,
+  summarizeResponseKinds,
+  tailResponsePreview,
+  trailingResponseDelay,
+} from "../session/command-completion.js";
+import {
   createLibraryRegistration,
   type LibraryRegistration,
 } from "./library-registration.js";
@@ -92,7 +101,10 @@ export class AgdaSession {
   exiting = false;
   private lastLoadedMtime: number | null = null;
   private sawStatusDone = false;
+  private idleDoneTimer: NodeJS.Timeout | null = null;
   private libraryRegistration: LibraryRegistration | null = null;
+  private lastResponseAt: number | null = null;
+  private lastResponseKind: string | null = null;
 
   constructor(repoRoot: string) {
     this.repoRoot = repoRoot;
@@ -188,7 +200,11 @@ export class AgdaSession {
         const resp: AgdaResponse = normalizeAgdaResponse(JSON.parse(line));
         if (this.collecting) {
           this.responseQueue.push(resp);
+          this.lastResponseAt = Date.now();
+          this.lastResponseKind = resp.kind;
         }
+
+        this.bumpIdleCompletionTimer();
 
         // A Status response signals definitive command completion
         if (resp.kind === "Status") {
@@ -210,13 +226,44 @@ export class AgdaSession {
     }
   }
 
+  private clearIdleCompletionTimer(): void {
+    if (this.idleDoneTimer) {
+      clearTimeout(this.idleDoneTimer);
+      this.idleDoneTimer = null;
+    }
+  }
+
+  private bumpIdleCompletionTimer(): void {
+    this.clearIdleCompletionTimer();
+
+    if (!this.collecting) {
+      return;
+    }
+
+    if (!shouldResolveOnIdle({
+      sawStatusDone: this.sawStatusDone,
+      responseCount: this.responseQueue.length,
+    })) {
+      return;
+    }
+
+    this.idleDoneTimer = setTimeout(() => {
+      if (this.collecting && !this.sawStatusDone) {
+        logger.trace("sendCommand idle-complete", {
+          responses: this.responseQueue.length,
+        });
+        this.emitter.emit("done");
+      }
+    }, configuredIdleCompletionMs());
+  }
+
   /**
    * Send an IOTCM command and collect responses until completion.
    * Returns all JSON responses received during this command.
    */
   sendCommand(
     command: string,
-    timeoutMs = 120_000,
+    timeoutMs = configuredCommandTimeoutMs(),
   ): Promise<AgdaResponse[]> {
     const proc = this.ensureProcess();
     logger.trace("sendCommand", { command: command.slice(0, 200), timeoutMs });
@@ -225,20 +272,62 @@ export class AgdaSession {
     this.responseQueue = [];
     this.collecting = true;
     this.sawStatusDone = false;
+    this.lastResponseAt = null;
+    this.lastResponseKind = null;
 
     return new Promise<AgdaResponse[]>((resolveCmd, rejectCmd) => {
+      const sentryIntervalMs = configuredWaitingSentryMs();
+      const waitingSentry = sentryIntervalMs > 0
+        ? setInterval(() => {
+            logger.warn("sendCommand still waiting", {
+              command: command.slice(0, 100),
+              elapsedMs: Date.now() - startTime,
+              responseCount: this.responseQueue.length,
+              sawStatusDone: this.sawStatusDone,
+              msSinceLastResponse: this.lastResponseAt === null
+                ? null
+                : Date.now() - this.lastResponseAt,
+              lastResponseKind: this.lastResponseKind,
+              responseKinds: summarizeResponseKinds(this.responseQueue),
+              responseTail: tailResponsePreview(this.responseQueue),
+            });
+          }, sentryIntervalMs)
+        : null;
+
       const timeout = setTimeout(() => {
-        logger.warn("sendCommand timed out", { command: command.slice(0, 100), timeoutMs });
+        logger.warn("sendCommand timed out", {
+          command: command.slice(0, 100),
+          timeoutMs,
+          responseCount: this.responseQueue.length,
+          sawStatusDone: this.sawStatusDone,
+          elapsedMs: Date.now() - startTime,
+          msSinceLastResponse: this.lastResponseAt === null
+            ? null
+            : Date.now() - this.lastResponseAt,
+          lastResponseKind: this.lastResponseKind,
+          responseKinds: summarizeResponseKinds(this.responseQueue),
+          responseTail: tailResponsePreview(this.responseQueue),
+        });
         this.collecting = false;
+        this.clearIdleCompletionTimer();
+        if (waitingSentry) {
+          clearInterval(waitingSentry);
+        }
         resolveCmd([...this.responseQueue]);
       }, timeoutMs);
 
       const onDone = () => {
-        // Short delay for trailing responses; shorter if Status (definitive) was seen
-        const trailingDelay = this.sawStatusDone ? 50 : 200;
+        const trailingDelay = trailingResponseDelay({
+          sawStatusDone: this.sawStatusDone,
+          responseCount: this.responseQueue.length,
+        });
         setTimeout(() => {
           clearTimeout(timeout);
           this.collecting = false;
+          this.clearIdleCompletionTimer();
+          if (waitingSentry) {
+            clearInterval(waitingSentry);
+          }
           this.emitter.removeListener("done", onDone);
           this.emitter.removeListener("error", onError);
           const responses = [...this.responseQueue];
@@ -250,7 +339,12 @@ export class AgdaSession {
       const onError = (err: Error) => {
         clearTimeout(timeout);
         this.collecting = false;
+        this.clearIdleCompletionTimer();
+        if (waitingSentry) {
+          clearInterval(waitingSentry);
+        }
         this.emitter.removeListener("done", onDone);
+        this.emitter.removeListener("error", onError);
         rejectCmd(err);
       };
 
