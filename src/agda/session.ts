@@ -28,6 +28,10 @@ import { resolve } from "node:path";
 import { existsSync, statSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { deriveSessionPhase, type SessionPhase } from "../session/session-state.js";
+import {
+  createLibraryRegistration,
+  type LibraryRegistration,
+} from "./library-registration.js";
 import type {
   AgdaResponse,
   AgdaGoal,
@@ -87,6 +91,7 @@ export class AgdaSession {
   exiting = false;
   private lastLoadedMtime: number | null = null;
   private sawStatusDone = false;
+  private libraryRegistration: LibraryRegistration | null = null;
 
   constructor(repoRoot: string) {
     this.repoRoot = repoRoot;
@@ -114,9 +119,10 @@ export class AgdaSession {
     this.goalIds = [];
 
     const agdaBin = findAgdaBinary(this.repoRoot);
-    this.proc = spawn(agdaBin, ["--interaction-json"], {
+    const registration = this.getLibraryRegistration();
+    this.proc = spawn(agdaBin, ["--interaction-json", ...registration.agdaArgs], {
       cwd: this.repoRoot,
-      env: { ...process.env },
+      env: { ...process.env, AGDA_DIR: registration.agdaDir },
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -150,6 +156,13 @@ export class AgdaSession {
     });
 
     return this.proc;
+  }
+
+  private getLibraryRegistration(): LibraryRegistration {
+    if (!this.libraryRegistration) {
+      this.libraryRegistration = createLibraryRegistration(this.repoRoot);
+    }
+    return this.libraryRegistration;
   }
 
   /**
@@ -454,6 +467,8 @@ export class AgdaSession {
       this.proc.kill();
       this.proc = null;
     }
+    this.libraryRegistration?.cleanup();
+    this.libraryRegistration = null;
     this.currentFile = null;
     this.goalIds = [];
     this.lastLoadedMtime = null;
