@@ -1,19 +1,10 @@
-import { z } from "zod";
 import { loadJsonData } from "../json-data.js";
-
-export const officialReferenceSourceSchema = z.object({
-  id: z.string().min(1),
-  url: z.string().url(),
-  filename: z.string().min(1),
-  description: z.string().min(1),
-});
-
-export const officialReferenceSourcesSchema = z.object({
-  sources: z.array(officialReferenceSourceSchema),
-});
-
-export type OfficialReferenceSource = z.infer<typeof officialReferenceSourceSchema>;
-export type OfficialReferenceSources = z.infer<typeof officialReferenceSourcesSchema>;
+import {
+  officialReferenceSourcesSchema,
+  type OfficialReferenceCachePolicy,
+  type OfficialReferenceSource,
+  type OfficialReferenceSources,
+} from "./official-reference-cache.js";
 
 export const officialReferenceSources = loadJsonData(
   "./data/official-reference-sources.json",
@@ -21,6 +12,12 @@ export const officialReferenceSources = loadJsonData(
   import.meta.url,
 );
 
+export type { OfficialReferenceCachePolicy, OfficialReferenceSource, OfficialReferenceSources };
+
 export function listOfficialReferenceSources(): OfficialReferenceSource[] {
   return [...officialReferenceSources.sources];
+}
+
+export function getOfficialReferenceCachePolicy(): OfficialReferenceCachePolicy {
+  return officialReferenceSources.cachePolicy;
 }

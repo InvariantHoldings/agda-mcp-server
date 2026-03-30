@@ -135,7 +135,18 @@ pages:
 npm run protocol:refresh:official
 ```
 
-This writes into `.local-reference/agda-protocol/`.
+This writes into `.local-reference/agda-protocol/` with:
+
+- `manifest.json`
+  crawl metadata plus cached page inventory
+- `search-index.json`
+  quick textual lookup/index metadata
+- `all-content.txt`
+  concatenated readable text across cached pages
+- `pages/<page-id>/raw.html`
+- `pages/<page-id>/pretty.html`
+- `pages/<page-id>/content.txt`
+- `pages/<page-id>/page.json`
 
 Committed source metadata for that cache lives in:
 
