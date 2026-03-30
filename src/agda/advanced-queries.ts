@@ -25,6 +25,7 @@ import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.j
 import { decodeSolveResponses } from "../protocol/responses/proof-actions.js";
 import { decodeSearchAboutResponses } from "../protocol/responses/search-about.js";
 import { decodeGoalExpressionDisplayResponses } from "../protocol/responses/goal-expression-display.js";
+import { decodeDisplayTextResponses } from "../protocol/responses/text-display.js";
 import {
   command,
   goalCommand,
@@ -40,7 +41,7 @@ export async function constraints(
 ): Promise<{ text: string; raw: AgdaResponse[] }> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(ctx.iotcm("Cmd_constraints"));
-  return { text: lastDisplayMessage(responses), raw: responses };
+  return { text: decodeDisplayTextResponses(responses).text, raw: responses };
 }
 
 /** Solve all goals that have unique solutions. */
@@ -74,7 +75,7 @@ export async function whyInScope(
   const responses = await ctx.sendCommand(
     ctx.iotcm(goalCommand("Cmd_why_in_scope", goalId, quoted(name))),
   );
-  return { explanation: lastDisplayMessage(responses), raw: responses };
+  return { explanation: decodeDisplayTextResponses(responses).text, raw: responses };
 }
 
 /** Explain why a name is in scope at the top level. */
@@ -86,7 +87,7 @@ export async function whyInScopeTopLevel(
   const responses = await ctx.sendCommand(
     ctx.iotcm(topLevelCommand("Cmd_why_in_scope_toplevel", quoted(name))),
   );
-  return { explanation: lastDisplayMessage(responses), raw: responses };
+  return { explanation: decodeDisplayTextResponses(responses).text, raw: responses };
 }
 
 /** Elaborate an expression in a goal context. */
@@ -101,7 +102,7 @@ export async function elaborate(
   );
   const elaboration =
     firstResponseField(responses, "GiveAction", "giveResult", "result") ||
-    lastDisplayMessage(responses);
+    decodeDisplayTextResponses(responses).text;
   return { elaboration, raw: responses };
 }
 
@@ -115,7 +116,7 @@ export async function helperFunction(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_helper_function", "Normalised", goalId, quoted(expr))),
   );
-  return { helperType: lastDisplayMessage(responses), raw: responses };
+  return { helperType: decodeDisplayTextResponses(responses).text, raw: responses };
 }
 
 /** Show the contents of a module in a goal context. */
@@ -128,7 +129,7 @@ export async function showModuleContents(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_show_module_contents", "Normalised", goalId, quoted(moduleName))),
   );
-  return { contents: lastDisplayMessage(responses), raw: responses };
+  return { contents: decodeDisplayTextResponses(responses).text, raw: responses };
 }
 
 /** Show the contents of a module at the top level. */
@@ -140,7 +141,7 @@ export async function showModuleContentsTopLevel(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeTopLevelCommand("Cmd_show_module_contents_toplevel", "Normalised", quoted(moduleName))),
   );
-  return { contents: lastDisplayMessage(responses), raw: responses };
+  return { contents: decodeDisplayTextResponses(responses).text, raw: responses };
 }
 
 /** Search for definitions matching a query string. */
@@ -187,6 +188,11 @@ export async function showVersion(
 ): Promise<ShowVersionResult> {
   const responses = await ctx.sendCommand(ctx.iotcm("Cmd_show_version"));
   const version =
+    decodeDisplayTextResponses(responses, {
+      infoKinds: ["Version"],
+      position: "first",
+    }).text ||
+    decodeDisplayTextResponses(responses).text ||
     firstDisplayMessage(responses, ["Version"]) ||
     lastDisplayMessage(responses);
   return { version, raw: responses };
