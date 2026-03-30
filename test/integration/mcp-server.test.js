@@ -33,6 +33,18 @@ async function withHarness(run, projectRoot = FIXTURES) {
   }
 }
 
+async function callToolStep(harness, label, name, args = {}) {
+  try {
+    return await harness.callTool(name, args);
+  } catch (error) {
+    const stderr = harness.getStderr().trim();
+    const details = stderr ? `\nserver stderr:\n${stderr}` : "";
+    throw new Error(
+      `${label} failed for ${name}: ${error instanceof Error ? error.message : String(error)}${details}`,
+    );
+  }
+}
+
 test("MCP harness lists tools and exposes semantic schemas", async () => {
   await withHarness(async (harness) => {
     const result = await harness.listTools();
@@ -89,32 +101,37 @@ it("MCP harness can call agda_search_about after loading a fixture", async () =>
 
 it("MCP harness can call compute, infer, and context tools on expression fixtures", async () => {
   await withHarness(async (harness) => {
-    const load = await harness.callTool("agda_load", { file: "ExpressionQueries.agda" });
+    const load = await callToolStep(harness, "load expression fixture", "agda_load", { file: "ExpressionQueries.agda" });
     assert.equal(load.isError, false);
     assert.equal(load.structuredContent.classification, "ok-with-holes");
     assert.ok(load.structuredContent.data.goalIds.length >= 1);
 
-    const topInfer = await harness.callTool("agda_infer", { expr: "add" });
+    const topInfer = await callToolStep(harness, "top-level infer", "agda_infer", { expr: "add" });
     assert.equal(topInfer.isError, false);
     assert.equal(topInfer.structuredContent.tool, "agda_infer");
     assert.ok(topInfer.structuredContent.data.inferredType.includes("Nat"));
 
-    const topCompute = await harness.callTool("agda_compute", { expr: "add (suc zero) (suc zero)" });
+    const topCompute = await callToolStep(
+      harness,
+      "top-level compute",
+      "agda_compute",
+      { expr: "add (suc zero) (suc zero)" },
+    );
     assert.equal(topCompute.isError, false);
     assert.equal(topCompute.structuredContent.tool, "agda_compute");
     assert.ok(topCompute.structuredContent.data.normalForm.includes("suc"));
 
     const goalId = load.structuredContent.data.goalIds[0];
-    const context = await harness.callTool("agda_context", { goalId });
+    const context = await callToolStep(harness, "goal context", "agda_context", { goalId });
     assert.equal(context.isError, false);
     assert.ok(context.content[0].text.includes("n : Nat"));
     assert.ok(context.content[0].text.includes("m : Nat"));
 
-    const goalInfer = await harness.callTool("agda_infer", { goalId, expr: "add n m" });
+    const goalInfer = await callToolStep(harness, "goal infer", "agda_infer", { goalId, expr: "add n m" });
     assert.equal(goalInfer.isError, false);
     assert.ok(goalInfer.structuredContent.data.inferredType.includes("Nat"));
 
-    const goalCompute = await harness.callTool("agda_compute", { goalId, expr: "add zero m" });
+    const goalCompute = await callToolStep(harness, "goal compute", "agda_compute", { goalId, expr: "add zero m" });
     assert.equal(goalCompute.isError, false);
     assert.ok(goalCompute.structuredContent.data.normalForm.includes("m"));
   });
