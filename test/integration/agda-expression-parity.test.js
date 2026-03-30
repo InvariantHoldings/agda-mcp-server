@@ -26,6 +26,14 @@ function assertIncludesAll(text, expected, message) {
   }
 }
 
+function rawPreview(raw) {
+  const serialized = JSON.stringify(raw, null, 2);
+  if (serialized.length <= 2000) {
+    return serialized;
+  }
+  return `${serialized.slice(0, 2000)}\n...<truncated>`;
+}
+
 for (const scenario of expressionQueryMatrix) {
   it(`expression parity: ${scenario.file}`, async () => {
     const session = new AgdaSession(FIXTURES);
@@ -96,11 +104,12 @@ for (const scenario of expressionQueryMatrix) {
           scenario.goal.goalTypeContextInfer.goalTypeIncludes,
           `goal type for infer in ${scenario.file}`,
         );
-        assertIncludesAll(
-          result.inferredType,
-          scenario.goal.goalTypeContextInfer.inferredTypeIncludes,
-          `inferred type for ${scenario.file}`,
-        );
+        for (const fragment of scenario.goal.goalTypeContextInfer.inferredTypeIncludes) {
+          assert.ok(
+            result.inferredType.includes(fragment),
+            `inferred type for ${scenario.file}: missing ${fragment} in ${result.inferredType}\nraw:\n${rawPreview(result.raw)}`,
+          );
+        }
         if (scenario.goal.goalTypeContextInfer.contextIncludes) {
           assertIncludesAll(
             result.context.join("\n"),
@@ -120,11 +129,12 @@ for (const scenario of expressionQueryMatrix) {
           scenario.goal.goalTypeContextCheck.goalTypeIncludes,
           `goal type for check in ${scenario.file}`,
         );
-        assertIncludesAll(
-          result.checkedExpr,
-          scenario.goal.goalTypeContextCheck.checkedExprIncludes,
-          `checked expr for ${scenario.file}`,
-        );
+        for (const fragment of scenario.goal.goalTypeContextCheck.checkedExprIncludes) {
+          assert.ok(
+            result.checkedExpr.includes(fragment),
+            `checked expr for ${scenario.file}: missing ${fragment} in ${result.checkedExpr}\nraw:\n${rawPreview(result.raw)}`,
+          );
+        }
         if (scenario.goal.goalTypeContextCheck.contextIncludes) {
           assertIncludesAll(
             result.context.join("\n"),

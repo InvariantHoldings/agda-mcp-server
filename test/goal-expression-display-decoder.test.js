@@ -47,3 +47,57 @@ test("decodeGoalExpressionDisplayResponses falls back to goal auxiliary text", (
   assert.equal(decoded.inferredType, "zero");
   assert.equal(decoded.checkedExpr, "zero");
 });
+
+test("decodeGoalExpressionDisplayResponses reads GoalType.typeAux expr", () => {
+  const decoded = decodeGoalExpressionDisplayResponses([
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "GoalSpecific",
+        goalInfo: {
+          kind: "GoalType",
+          type: "Nat",
+          entries: [
+            { reifiedName: "n", binding: "Nat" },
+            { reifiedName: "m", binding: "Nat" },
+          ],
+          typeAux: {
+            kind: "GoalAndHave",
+            expr: "Nat",
+          },
+        },
+      },
+    },
+  ]);
+
+  assert.equal(decoded.goalType, "Nat");
+  assert.equal(decoded.inferredType, "Nat");
+  assert.equal(decoded.checkedExpr, "Nat");
+});
+
+test("decodeGoalExpressionDisplayResponses reads GoalType.typeAux term", () => {
+  const decoded = decodeGoalExpressionDisplayResponses([
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "GoalSpecific",
+        goalInfo: {
+          kind: "GoalType",
+          type: "Nat",
+          entries: [
+            { reifiedName: "n", binding: "Nat" },
+            { reifiedName: "m", binding: "Nat" },
+          ],
+          typeAux: {
+            kind: "GoalAndElaboration",
+            term: "zero",
+          },
+        },
+      },
+    },
+  ]);
+
+  assert.equal(decoded.goalType, "Nat");
+  assert.equal(decoded.inferredType, "zero");
+  assert.equal(decoded.checkedExpr, "zero");
+});
