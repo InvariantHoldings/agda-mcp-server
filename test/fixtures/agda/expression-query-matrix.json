@@ -7,7 +7,7 @@
     },
     "topLevelInfer": {
       "expr": "add",
-      "expectedIncludes": ["Nat", "->"]
+      "expectedIncludes": ["Nat", "→"]
     },
     "goal": {
       "contextIncludes": ["n : Nat", "m : Nat"],
