@@ -79,6 +79,22 @@ it("MCP harness can load a fixture and inspect a goal through the built server",
   });
 });
 
+it("MCP harness preserves goal access for imported-context holes", async () => {
+  await withHarness(async (harness) => {
+    const load = await harness.callTool("agda_load", { file: "ImportedContextHole.agda" });
+
+    assert.equal(load.isError, false);
+    assert.equal(load.structuredContent.classification, "ok-with-holes");
+    assert.ok(load.structuredContent.data.goalIds.length >= 1);
+
+    const goalId = load.structuredContent.data.goalIds[0];
+    const goal = await harness.callTool("agda_goal_type", { goalId });
+
+    assert.equal(goal.isError, false);
+    assert.ok(goal.structuredContent.data.text.includes("Nat"));
+  });
+});
+
 it("MCP harness reports complete success for a clean fixture", async () => {
   await withHarness(async (harness) => {
     const load = await harness.callTool("agda_load", { file: "Clean.agda" });

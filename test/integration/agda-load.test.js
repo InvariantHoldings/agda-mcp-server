@@ -78,6 +78,18 @@ it("PatternMatch.agda: hole ready for case split", async () => {
   assert.ok(r.goals.length >= 1);
 });
 
+it("ImportedContextHole.agda: goal survives multi-file imports", async () => {
+  const r = await loadFixture("ImportedContextHole.agda");
+  assert.equal(r.success, true);
+  assert.ok(r.goals.length >= 1, `expected imported-context goal, got ${r.goals.length}`);
+});
+
+it("QualifiedImportedHole.agda: goal survives qualified imports", async () => {
+  const r = await loadFixture("QualifiedImportedHole.agda");
+  assert.equal(r.success, true);
+  assert.ok(r.goals.length >= 1, `expected qualified-import goal, got ${r.goals.length}`);
+});
+
 // ── Errors ───────────────────────────────────────────────
 
 it("TypeError.agda: success=false, error mentions type mismatch", async () => {
@@ -99,6 +111,12 @@ it("ParseError.agda: success=false", async () => {
 
 it("ImportMissing.agda: success=false, mentions module not found", async () => {
   const r = await loadFixture("ImportMissing.agda");
+  assert.equal(r.success, false);
+  assert.ok(r.errors.length >= 1);
+});
+
+it("ImportedTypeError.agda: imported dependency type errors surface on root load", async () => {
+  const r = await loadFixture("ImportedTypeError.agda");
   assert.equal(r.success, false);
   assert.ok(r.errors.length >= 1);
 });
@@ -173,6 +191,18 @@ it("InstanceArgs.agda: instance arguments and search", async () => {
   assert.equal(r.success, true);
 });
 
+it("MultiFileImports.agda: complete multi-file import graph loads", async () => {
+  const r = await loadFixture("MultiFileImports.agda");
+  assert.equal(r.success, true);
+  assert.equal(r.goals.length, 0);
+});
+
+it("TransitiveImport.agda: transitive multi-file import graph loads", async () => {
+  const r = await loadFixture("TransitiveImport.agda");
+  assert.equal(r.success, true);
+  assert.equal(r.goals.length, 0);
+});
+
 // ── Abstract blocks ──────────────────────────────────────
 
 it("WithAbstract.agda: detects invisible goals in abstract block", async () => {
@@ -231,6 +261,19 @@ it("goal.typeContext returns type for a hole", async () => {
     const info = await session.goal.typeContext(load.goals[0].goalId);
     assert.equal(typeof info.type, "string");
     assert.ok(info.type.length > 0, `goal type should be non-empty, got: "${info.type}"`);
+  } finally {
+    session.destroy();
+  }
+});
+
+it("goal.typeContext works for imported-context holes", async () => {
+  const session = new AgdaSession(FIXTURES);
+  try {
+    const load = await session.load("ImportedContextHole.agda");
+    assert.ok(load.goals.length >= 1, "need at least 1 imported-context goal");
+    const info = await session.goal.typeContext(load.goals[0].goalId);
+    assert.equal(typeof info.type, "string");
+    assert.ok(info.type.includes("Nat"), `expected Nat-like goal type, got: "${info.type}"`);
   } finally {
     session.destroy();
   }

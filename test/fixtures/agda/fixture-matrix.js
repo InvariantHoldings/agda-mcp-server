@@ -18,6 +18,16 @@ export function completeFixture(name, overrides = {}) {
   };
 }
 
+export function errorFixture(name, overrides = {}) {
+  return {
+    name,
+    expectedSuccess: false,
+    expectedClassification: "type-error",
+    minGoalCount: 0,
+    ...overrides,
+  };
+}
+
 export const fixtureMatrix = [
   incompleteFixture("WithHoles.agda"),
   incompleteFixture("MultipleHoles.agda", { minGoalCount: 2 }),
@@ -31,6 +41,8 @@ export const fixtureMatrix = [
   incompleteFixture("WithClauseHole.agda"),
   incompleteFixture("ImplicitHole.agda"),
   incompleteFixture("EqualityProofHole.agda"),
+  incompleteFixture("ImportedContextHole.agda"),
+  incompleteFixture("QualifiedImportedHole.agda"),
 
   completeFixture("Clean.agda"),
   completeFixture("EmptyModule.agda"),
@@ -41,5 +53,9 @@ export const fixtureMatrix = [
   completeFixture("NestedModules.agda"),
   completeFixture("FixtureSupport.agda"),
   completeFixture("ImportedFixture.agda"),
+  completeFixture("MultiFileImports.agda"),
+  completeFixture("TransitiveImport.agda"),
   completeFixture("SearchAboutTargets.agda"),
+
+  errorFixture("ImportedTypeError.agda"),
 ];
