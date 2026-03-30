@@ -1,0 +1,28 @@
+{
+  "sources": [
+    {
+      "id": "interaction-json",
+      "url": "https://agda.github.io/agda/Agda-Interaction-JSON.html",
+      "filename": "Agda-Interaction-JSON.html",
+      "description": "Official Agda JSON interaction format documentation."
+    },
+    {
+      "id": "interaction-highlighting-json",
+      "url": "https://agda.github.io/agda/Agda-Interaction-Highlighting-JSON.html",
+      "filename": "Agda-Interaction-Highlighting-JSON.html",
+      "description": "Official Agda JSON highlighting protocol documentation."
+    },
+    {
+      "id": "main-interaction-json",
+      "url": "https://agda.github.io/agda/Agda-Main.html",
+      "filename": "Agda-Main.html",
+      "description": "Official Agda frontend documentation including --interaction-json."
+    },
+    {
+      "id": "interaction-library",
+      "url": "https://agda.github.io/agda/Agda-Interaction-Library.html",
+      "filename": "Agda-Interaction-Library.html",
+      "description": "Official Agda library resolution documentation."
+    }
+  ]
+}

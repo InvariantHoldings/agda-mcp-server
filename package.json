@@ -21,6 +21,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && rsync -a --prune-empty-dirs --include '*/' --include '*.json' --exclude '*' src/ dist/",
+    "protocol:refresh:official": "node scripts/refresh-official-protocol-references.mjs",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "mcp:local": "node scripts/mcp-local-client.mjs",

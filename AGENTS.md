@@ -113,6 +113,28 @@ Related files:
 Use this for real MCP-layer debugging. Do not make the server call itself
 through MCP in production code.
 
+## Official protocol reference
+
+For protocol and parity work, prefer official Agda docs plus repo-local live
+fixtures over third-party extensions.
+
+This repo can hydrate a local, gitignored cache of official Agda reference
+pages:
+
+```bash
+npm run protocol:refresh:official
+```
+
+This writes into `.local-reference/agda-protocol/`.
+
+Committed source metadata for that cache lives in:
+
+- `src/protocol/data/official-reference-sources.json`
+
+Use the local cache as the day-to-day protocol SSOT when doing parity work, but
+remember the ultimate source of truth is the official Agda documentation those
+files were fetched from.
+
 ## Fixtures
 
 Agda fixtures live in `test/fixtures/agda/`.
