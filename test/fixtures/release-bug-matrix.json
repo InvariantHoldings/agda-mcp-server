@@ -1,0 +1,75 @@
+[
+  {
+    "issue": 3,
+    "title": "batch mode library registration not symmetric with stateful mode",
+    "release": "0.6.2",
+    "status": "branch-fixed",
+    "localEvidence": [
+      "test/unit/tools/library-registration-matrix.test.js",
+      "test/integration/agda/agda-library-registration.test.js"
+    ],
+    "liveSuites": [
+      "test/integration/agda/agda-library-registration.test.js"
+    ]
+  },
+  {
+    "issue": 4,
+    "title": "agda_load never reports interaction points",
+    "release": "0.6.2",
+    "status": "branch-fixed",
+    "localEvidence": [
+      "test/integration/agda/agda-load.test.js",
+      "test/integration/agda/agda-fixture-matrix.test.js",
+      "test/integration/mcp/mcp-server.test.js"
+    ],
+    "liveSuites": [
+      "test/integration/agda/agda-load.test.js",
+      "test/integration/agda/agda-fixture-matrix.test.js",
+      "test/integration/mcp/mcp-server.test.js"
+    ]
+  },
+  {
+    "issue": 5,
+    "title": "agda_typecheck accepts well-typed holes without reporting them",
+    "release": "0.6.2",
+    "status": "branch-fixed",
+    "localEvidence": [
+      "test/unit/agda/completeness.test.js",
+      "test/integration/agda/agda-load.test.js",
+      "test/integration/agda/agda-fixture-matrix.test.js"
+    ],
+    "liveSuites": [
+      "test/integration/agda/agda-load.test.js",
+      "test/integration/agda/agda-fixture-matrix.test.js"
+    ]
+  },
+  {
+    "issue": 7,
+    "title": "agda_search_about always returns empty results",
+    "release": "0.6.2",
+    "status": "branch-fixed",
+    "localEvidence": [
+      "test/unit/protocol/protocol-parity.test.js",
+      "test/integration/agda/agda-search-about.test.js",
+      "test/integration/mcp/mcp-server.test.js"
+    ],
+    "liveSuites": [
+      "test/integration/agda/agda-search-about.test.js",
+      "test/integration/mcp/mcp-server.test.js"
+    ]
+  },
+  {
+    "issue": 8,
+    "title": "goal-dependent tools reject valid goal IDs because agda_load does not populate goal list",
+    "release": "0.6.2",
+    "status": "branch-fixed",
+    "localEvidence": [
+      "test/integration/agda/agda-load.test.js",
+      "test/integration/mcp/mcp-server.test.js"
+    ],
+    "liveSuites": [
+      "test/integration/agda/agda-load.test.js",
+      "test/integration/mcp/mcp-server.test.js"
+    ]
+  }
+]

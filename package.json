@@ -36,6 +36,8 @@
     "test:integration:fixtures:sentinel": "node scripts/test-with-sentinel.mjs --label fixture-matrix test/integration/agda/agda-fixture-matrix.test.js",
     "test:integration:mcp": "node --test test/integration/mcp/mcp-server.test.js",
     "test:integration:mcp:sentinel": "node scripts/test-with-sentinel.mjs --label mcp test/integration/mcp/mcp-server.test.js",
+    "test:release:bugs": "node --test test/unit/agda/completeness.test.js test/unit/protocol/protocol-parity.test.js test/unit/reporting/release-bug-matrix.test.js test/unit/tools/library-registration-matrix.test.js test/integration/agda/agda-load.test.js test/integration/agda/agda-fixture-matrix.test.js test/integration/agda/agda-search-about.test.js test/integration/agda/agda-library-registration.test.js test/integration/mcp/mcp-server.test.js",
+    "test:release:bugs:sentinel": "node scripts/test-with-sentinel.mjs --label release-bugs test/unit/agda/completeness.test.js test/unit/protocol/protocol-parity.test.js test/unit/reporting/release-bug-matrix.test.js test/unit/tools/library-registration-matrix.test.js test/integration/agda/agda-load.test.js test/integration/agda/agda-fixture-matrix.test.js test/integration/agda/agda-search-about.test.js test/integration/agda/agda-library-registration.test.js test/integration/mcp/mcp-server.test.js",
     "verify": "npm test && npm pack --dry-run",
     "prepublishOnly": "npm run verify"
   },
