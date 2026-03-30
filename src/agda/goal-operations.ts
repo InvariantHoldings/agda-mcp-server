@@ -17,6 +17,7 @@ import type {
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
 import { decodeGiveLikeResponse } from "../protocol/responses/proof-actions.js";
 import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
+import { decodeLoadDisplayResponses } from "../protocol/responses/load-display.js";
 import { decodeGoalExpressionDisplayResponses } from "../protocol/responses/goal-expression-display.js";
 import { goalCommand, modeGoalCommand, quoted } from "../protocol/command-builder.js";
 
@@ -182,28 +183,11 @@ export async function metas(
     .map((event) => event.text)
     .filter(Boolean)
     .at(-1) ?? "";
-  const goals: AgdaGoal[] = [];
-
-  for (const resp of responses) {
-    if (resp.kind !== "DisplayInfo") continue;
-    const info = resp.info as Record<string, unknown> | undefined;
-    if (!info || info.kind !== "AllGoalsWarnings") continue;
-
-    const visGoals = info.visibleGoals as unknown[];
-    if (visGoals) {
-      for (const vg of visGoals) {
-        const obj = vg as Record<string, unknown>;
-        const id = typeof obj.constraintObj === "number" ? obj.constraintObj : undefined;
-        if (id !== undefined) {
-          goals.push({
-            goalId: id,
-            type: typeof obj.type === "string" ? obj.type : "?",
-            context: [],
-          });
-        }
-      }
-    }
-  }
+  const goals = decodeLoadDisplayResponses(responses).visibleGoals.map((goal) => ({
+    goalId: goal.goalId,
+    type: goal.type,
+    context: [] as string[],
+  }));
 
   // Fall back to cached goalIds if Cmd_metas didn't return structured goals
   if (goals.length === 0 && ctx.goalIds.length > 0) {

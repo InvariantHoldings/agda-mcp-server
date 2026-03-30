@@ -32,6 +32,16 @@ export const contextEntrySchema = z.object({
   binding: z.string().optional(),
 }).passthrough();
 
+export const goalConstraintEntrySchema = z.object({
+  constraintObj: z.number().optional(),
+  type: z.string().optional(),
+}).passthrough();
+
+export const diagnosticEntrySchema = z.object({
+  message: z.string().optional(),
+  type: z.string().optional(),
+}).passthrough();
+
 export const contextInfoSchema = z.object({
   kind: z.literal("Context"),
   context: z.array(contextEntrySchema),

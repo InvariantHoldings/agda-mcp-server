@@ -7,11 +7,11 @@
 import type { AgdaResponse, AgdaGoal, LoadResult } from "./types.js";
 import { classifyCompleteness } from "./completeness.js";
 import {
-  allGoalsWarningsInfoSchema,
   displayInfoResponseSchema,
   parseResponseWithSchema,
 } from "../protocol/response-schemas.js";
 import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
+import { decodeLoadDisplayResponses } from "../protocol/responses/load-display.js";
 
 export interface ParsedLoadResult extends Omit<LoadResult, "raw"> {
   /** Goal IDs for atomic assignment to session state. */
@@ -33,12 +33,10 @@ export function parseLoadResponses(
   const warnings: string[] = [];
   const goals: AgdaGoal[] = [];
   const goalIds: number[] = [];
-  let allGoalsText = "";
+  const loadDisplay = decodeLoadDisplayResponses(responses);
+  const allGoalsText = loadDisplay.text;
   let success = true;
-  let invisibleGoalCount = 0;
-  const displayEvents = decodeDisplayInfoEvents(responses);
-
-  let displayIndex = 0;
+  let invisibleGoalCount = loadDisplay.invisibleGoalCount;
 
   for (const resp of responses) {
     // ── InteractionPoints (normalized: always number[]) ──
@@ -61,89 +59,12 @@ export function parseLoadResponses(
       const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
       if (!display) continue;
       const info = display.info;
-      const displayText = displayEvents[displayIndex]?.text ?? "";
-      displayIndex += 1;
 
       if (info.kind === "Error") {
         success = false;
-        if (displayText) {
-          errors.push(displayText);
-        }
-      }
-
-      const allGoalsWarnings = parseResponseWithSchema(allGoalsWarningsInfoSchema, info);
-      if (allGoalsWarnings) {
-        allGoalsText = displayText;
-
-        // Errors (normalized: always an array)
-        const infoErrors = allGoalsWarnings.errors;
-        if (infoErrors && infoErrors.length > 0) {
-          success = false;
-          for (const e of infoErrors) {
-            if (typeof e === "string") {
-              errors.push(e);
-            } else if (e && typeof e === "object") {
-              const obj = e as Record<string, unknown>;
-              errors.push(
-                typeof obj.message === "string"
-                  ? obj.message
-                  : JSON.stringify(e),
-              );
-            }
-          }
-        }
-
-        // Warnings (normalized: always an array)
-        const infoWarnings = allGoalsWarnings.warnings;
-        if (infoWarnings && infoWarnings.length > 0) {
-          for (const w of infoWarnings) {
-            if (typeof w === "string") {
-              warnings.push(w);
-            } else if (w && typeof w === "object") {
-              const obj = w as Record<string, unknown>;
-              warnings.push(
-                typeof obj.message === "string"
-                  ? obj.message
-                  : JSON.stringify(w),
-              );
-            }
-          }
-        }
-
-        // Cross-check: visibleGoals may have entries not in InteractionPoints
-        const visGoals = allGoalsWarnings.visibleGoals;
-        if (visGoals) {
-          const existingIds = new Set(goalIds);
-          for (const vg of visGoals) {
-            const obj = vg as Record<string, unknown>;
-            const id =
-              typeof obj.constraintObj === "number"
-                ? obj.constraintObj
-                : undefined;
-            if (id !== undefined) {
-              // Enrich existing goals with type from visibleGoals
-              const existing = goals.find((g) => g.goalId === id);
-              if (existing && typeof obj.type === "string") {
-                existing.type = obj.type;
-              }
-              // Add goals missing from InteractionPoints
-              if (!existingIds.has(id)) {
-                goalIds.push(id);
-                goals.push({
-                  goalId: id,
-                  type: typeof obj.type === "string" ? obj.type : "?",
-                  context: [],
-                });
-                existingIds.add(id);
-              }
-            }
-          }
-        }
-
-        // Track invisible goals (abstract blocks)
-        const invisGoals = allGoalsWarnings.invisibleGoals;
-        if (invisGoals) {
-          invisibleGoalCount = invisGoals.length;
+        const text = decodeDisplayInfoEvents([resp]).at(-1)?.text ?? "";
+        if (text) {
+          errors.push(text);
         }
       }
     }
@@ -155,6 +76,31 @@ export function parseLoadResponses(
         errors.push(text);
         success = false;
       }
+    }
+  }
+
+  if (loadDisplay.errors.length > 0) {
+    success = false;
+    errors.push(...loadDisplay.errors);
+  }
+  warnings.push(...loadDisplay.warnings);
+
+  const existingIds = new Set(goalIds);
+  for (const visibleGoal of loadDisplay.visibleGoals) {
+    const existing = goals.find((goal) => goal.goalId === visibleGoal.goalId);
+    if (existing) {
+      existing.type = visibleGoal.type;
+      continue;
+    }
+
+    if (!existingIds.has(visibleGoal.goalId)) {
+      goalIds.push(visibleGoal.goalId);
+      goals.push({
+        goalId: visibleGoal.goalId,
+        type: visibleGoal.type,
+        context: [],
+      });
+      existingIds.add(visibleGoal.goalId);
     }
   }
 
