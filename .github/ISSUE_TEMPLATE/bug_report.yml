@@ -4,6 +4,47 @@ title: "bug: "
 labels:
   - bug
 body:
+  - type: dropdown
+    id: report_kind
+    attributes:
+      label: Report kind
+      description: Is this a new bug, an update to an existing bug, or a regression?
+      options:
+        - new bug
+        - update to existing bug
+        - regression
+    validations:
+      required: true
+
+  - type: input
+    id: affected_tool
+    attributes:
+      label: Affected tool
+      description: The MCP tool that produced the failure.
+      placeholder: agda_load
+    validations:
+      required: true
+
+  - type: input
+    id: classification
+    attributes:
+      label: Classification
+      description: Normalized classification from semantic output, if available.
+      placeholder: ok-with-holes
+
+  - type: input
+    id: existing_issue
+    attributes:
+      label: Existing issue
+      description: If this is an update, reference the existing issue number.
+      placeholder: "4"
+
+  - type: input
+    id: bug_fingerprint
+    attributes:
+      label: Bug fingerprint
+      description: Paste the `bugFingerprint` from `agda_bug_report_bundle` or `agda_bug_report_update_bundle`, if available.
+
   - type: textarea
     id: summary
     attributes:
@@ -37,7 +78,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Node version, npm version, Agda version, OS, and MCP client.
+      description: Node version, npm version, Agda version, OS, MCP client, and any relevant AGDA_DIR or AGDA_MCP_ROOT settings.
       placeholder: |
         Node: 24.x
         npm: 11.x
@@ -46,3 +87,10 @@ body:
         Client: ...
     validations:
       required: true
+
+  - type: textarea
+    id: structured_bundle
+    attributes:
+      label: Structured bug bundle
+      description: Paste the JSON output from `agda_bug_report_bundle` or `agda_bug_report_update_bundle` when available.
+      render: json

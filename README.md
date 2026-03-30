@@ -20,6 +20,8 @@ every request.
 - Goal-aware proof actions over MCP.
 - Stateless batch type-checking when you only want a quick validation pass.
 - Navigation and scope-inspection helpers for large Agda codebases.
+- Structured semantic outputs for every tool, alongside human-readable text.
+- Bug-report and issue-update bundle generation with stable fingerprints.
 - A small extension system for project-specific or domain-specific tools.
 
 ## How it works
@@ -129,6 +131,17 @@ agda_typecheck file="MyModule.agda"
 
 Use this when you want errors and warnings without creating a persistent session.
 
+## Semantic outputs
+
+Every tool now returns:
+
+- Human-readable text for existing MCP clients.
+- Structured content with stable fields such as `tool`, `ok`, `classification`, `summary`, `data`, and `diagnostics`.
+
+Core session tools such as `agda_load`, `agda_load_no_metas`, and `agda_typecheck`
+also expose completeness fields including `goalCount`, `invisibleGoalCount`,
+`hasHoles`, and `isComplete`.
+
 ## MCP client configuration
 
 ### Claude Code
@@ -198,6 +211,8 @@ At the current milestone, the server now exposes:
 - `agda_load_highlighting_info`, `agda_token_highlighting`, and `agda_highlight` for highlighting control
 - `agda_show_implicit_args` / `agda_toggle_implicit_args` and `agda_show_irrelevant_args` / `agda_toggle_irrelevant_args` for display toggles
 - `agda_compile`, `agda_backend_top`, and `agda_backend_hole` for backend interaction commands
+- `agda_tools_catalog` for manifest-derived tool and schema introspection
+- `agda_bug_report_bundle` and `agda_bug_report_update_bundle` for structured bug intake
 
 ### Session management
 
@@ -210,6 +225,7 @@ At the current milestone, the server now exposes:
 | `agda_abort`          | Send Agda's `Cmd_abort` to the running process                                                    |
 | `agda_exit`           | Send Agda's `Cmd_exit` to the running process                                                     |
 | `agda_typecheck`      | Run a stateless batch type-check without creating or updating the interactive session             |
+| `agda_tools_catalog`  | Return the manifest-derived catalog of tools, categories, and schema field names                  |
 
 ### Display and highlighting
 
@@ -230,6 +246,13 @@ At the current milestone, the server now exposes:
 | `agda_compile`      | Compile a module through Agda using a selected backend (`Cmd_compile`) |
 | `agda_backend_top`  | Send backend-specific top-level payload (`Cmd_backend_top`)            |
 | `agda_backend_hole` | Send backend-specific goal-hole payload (`Cmd_backend_hole`)           |
+
+### Reporting and issue intake
+
+| Tool                            | Description                                                                      |
+| ------------------------------- | -------------------------------------------------------------------------------- |
+| `agda_bug_report_bundle`        | Generate a structured bundle for a new bug report or regression                  |
+| `agda_bug_report_update_bundle` | Generate a structured bundle for updating an existing bug report with new data   |
 
 ### Goal inspection and proof interaction
 
