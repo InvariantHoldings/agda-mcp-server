@@ -20,6 +20,7 @@ import { existsSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { AgdaSession } from "./agda-process.js";
+import { getServerVersion } from "./server-version.js";
 
 import { register as registerSession } from "./tools/session.js";
 import { register as registerGoalTools } from "./tools/goal-tools.js";
@@ -30,6 +31,7 @@ import { register as registerScopeTools } from "./tools/scope-tools.js";
 import { register as registerDisplay } from "./tools/display.js";
 import { register as registerBackend } from "./tools/backend.js";
 import { register as registerAnalysis } from "./tools/analysis-tools.js";
+import { register as registerReporting } from "./tools/reporting-tools.js";
 
 type ExtensionRegister = (
   server: McpServer,
@@ -44,7 +46,7 @@ const session = new AgdaSession(REPO_ROOT);
 
 const server = new McpServer({
   name: "agda-mcp-server",
-  version: "0.6.1",
+  version: getServerVersion(),
 });
 
 // ── Core tools (generic Agda) ──────────────────────────────────────
@@ -57,6 +59,7 @@ registerScopeTools(server, session, REPO_ROOT);
 registerDisplay(server, session, REPO_ROOT);
 registerBackend(server, session, REPO_ROOT);
 registerAnalysis(server, session, REPO_ROOT);
+registerReporting(server, session, REPO_ROOT);
 
 function resolveExtensionSpecifier(modulePath: string): string {
   if (modulePath.startsWith("file://")) {

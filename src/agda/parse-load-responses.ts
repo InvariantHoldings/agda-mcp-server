@@ -6,6 +6,7 @@
 
 import type { AgdaResponse, AgdaGoal, LoadResult } from "./types.js";
 import { extractMessage } from "./response-parsing.js";
+import { classifyCompleteness } from "./completeness.js";
 
 export interface ParsedLoadResult extends Omit<LoadResult, "raw"> {
   /** Goal IDs for atomic assignment to session state. */
@@ -143,6 +144,12 @@ export function parseLoadResponses(
     }
   }
 
+  const completeness = classifyCompleteness({
+    success,
+    goals,
+    invisibleGoalCount,
+  });
+
   return {
     success,
     errors,
@@ -151,5 +158,9 @@ export function parseLoadResponses(
     goalIds,
     allGoalsText,
     invisibleGoalCount,
+    goalCount: completeness.goalCount,
+    hasHoles: completeness.hasHoles,
+    isComplete: completeness.isComplete,
+    classification: completeness.classification,
   };
 }

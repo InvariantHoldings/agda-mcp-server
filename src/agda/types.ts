@@ -55,6 +55,10 @@ export interface LoadResult {
   goals: AgdaGoal[];
   allGoalsText: string;
   invisibleGoalCount: number;
+  goalCount: number;
+  hasHoles: boolean;
+  isComplete: boolean;
+  classification: string;
   raw: AgdaResponse[];
 }
 
@@ -170,5 +174,10 @@ export interface TypeCheckResult {
   errors: string[];
   warnings: string[];
   goals: AgdaGoal[];
+  invisibleGoalCount: number;
+  goalCount: number;
+  hasHoles: boolean;
+  isComplete: boolean;
+  classification: string;
   raw: AgdaResponse[];
 }

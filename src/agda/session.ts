@@ -41,6 +41,7 @@ import type {
 import { normalizeAgdaResponse } from "./normalize-response.js";
 import { parseLoadResponses } from "./parse-load-responses.js";
 import { logger } from "./logger.js";
+import { command, quoted } from "../protocol/command-builder.js";
 
 // Delegate modules
 import * as GoalOps from "./goal-operations.js";
@@ -292,8 +293,40 @@ export class AgdaSession {
 
   private static readonly NOT_FOUND_RESULT: LoadResult = Object.freeze({
     success: false, errors: [], warnings: [], goals: [],
-    allGoalsText: "", invisibleGoalCount: 0, raw: [],
+    allGoalsText: "", invisibleGoalCount: 0,
+    goalCount: 0, hasHoles: false, isComplete: false,
+    classification: "type-error",
+    raw: [],
   });
+
+  private mergeGoals(
+    primaryGoals: AgdaGoal[],
+    secondaryGoals: AgdaGoal[],
+  ): AgdaGoal[] {
+    const merged = new Map<number, AgdaGoal>();
+
+    for (const goal of primaryGoals) {
+      merged.set(goal.goalId, { ...goal, context: [...goal.context] });
+    }
+
+    for (const goal of secondaryGoals) {
+      const existing = merged.get(goal.goalId);
+      if (!existing) {
+        merged.set(goal.goalId, { ...goal, context: [...goal.context] });
+        continue;
+      }
+
+      if (existing.type === "?" && goal.type !== "?") {
+        existing.type = goal.type;
+      }
+
+      if (existing.context.length === 0 && goal.context.length > 0) {
+        existing.context = [...goal.context];
+      }
+    }
+
+    return [...merged.values()].sort((left, right) => left.goalId - right.goalId);
+  }
 
   /**
    * Load (type-check) a file. This is always the first command — it
@@ -311,19 +344,48 @@ export class AgdaSession {
     // Use buildIotcm with absPath directly — don't set currentFile yet
     // because ensureProcess() (called inside sendCommand) resets it
     const responses = await this.sendCommand(
-      this.buildIotcm(absPath, `Cmd_load "${absPath}" []`),
+      this.buildIotcm(absPath, command("Cmd_load", quoted(absPath), "[]")),
     );
     const parsed = parseLoadResponses(responses);
 
-    // Set session state atomically AFTER command completes
+    // Set session state before reconciling metas so follow-up queries can run
     this.currentFile = absPath;
     this.goalIds = parsed.goalIds;
     this.lastLoadedMtime = statSync(absPath).mtimeMs;
 
+    let goals = parsed.goals;
+    let goalIds = parsed.goalIds;
+
+    if (parsed.success) {
+      try {
+        const metas = await this.goal.metas();
+        if (metas.goals.length > 0) {
+          goals = this.mergeGoals(parsed.goals, metas.goals);
+          goalIds = goals.map((goal) => goal.goalId);
+        }
+      } catch (err) {
+        logger.warn("post-load metas reconciliation failed", {
+          file: absPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const goalCount = goals.length;
+    const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0;
+    const isComplete = parsed.success && !hasHoles;
+    const classification = parsed.success
+      ? hasHoles
+        ? "ok-with-holes"
+        : "ok-complete"
+      : "type-error";
+
+    this.goalIds = goalIds;
+
     logger.trace("load complete", {
       file: absPath,
       success: parsed.success,
-      goals: parsed.goals.length,
+      goals: goals.length,
       errors: parsed.errors.length,
     });
 
@@ -331,9 +393,13 @@ export class AgdaSession {
       success: parsed.success,
       errors: parsed.errors,
       warnings: parsed.warnings,
-      goals: parsed.goals,
+      goals,
       allGoalsText: parsed.allGoalsText,
       invisibleGoalCount: parsed.invisibleGoalCount,
+      goalCount,
+      hasHoles,
+      isComplete,
+      classification,
       raw: responses,
     };
   }
@@ -348,7 +414,7 @@ export class AgdaSession {
     }
 
     const responses = await this.sendCommand(
-      this.buildIotcm(absPath, `Cmd_load_no_metas "${absPath}"`),
+      this.buildIotcm(absPath, command("Cmd_load_no_metas", quoted(absPath))),
     );
     const parsed = parseLoadResponses(responses);
 
@@ -364,6 +430,10 @@ export class AgdaSession {
       goals: parsed.goals,
       allGoalsText: parsed.allGoalsText,
       invisibleGoalCount: parsed.invisibleGoalCount,
+      goalCount: parsed.goalCount,
+      hasHoles: parsed.hasHoles,
+      isComplete: parsed.isComplete,
+      classification: parsed.classification,
       raw: responses,
     };
   }

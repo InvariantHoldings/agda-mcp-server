@@ -6,7 +6,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
-import { wrapHandler, wrapGoalHandler, text } from "./tool-helpers.js";
+import { registerGoalTextTool, registerTextTool } from "./tool-helpers.js";
 import {
   parseContextEntry,
   deriveSuggestions,
@@ -20,11 +20,13 @@ export function register(
 ): void {
   // ── agda_proof_status — one-call proof progress dashboard ──────
 
-  server.tool(
-    "agda_proof_status",
-    "Get a complete proof state snapshot: loaded file, staleness, all goals with types, and constraints. Use this instead of calling agda_session_status + agda_metas + agda_constraints separately.",
-    {},
-    wrapHandler(session, async () => {
+  registerTextTool({
+    server,
+    name: "agda_proof_status",
+    description: "Get a complete proof state snapshot: loaded file, staleness, all goals with types, and constraints. Use this instead of calling agda_session_status + agda_metas + agda_constraints separately.",
+    category: "analysis",
+    inputSchema: {},
+    callback: async () => {
       const file = session.getLoadedFile();
       if (!file) return "No file loaded. Call `agda_load` first.";
 
@@ -56,18 +58,21 @@ export function register(
       }
 
       return output;
-    }),
-  );
+    },
+  });
 
   // ── agda_goal_analysis — per-goal actionability ────────────────
 
-  server.tool(
-    "agda_goal_analysis",
-    "Analyze a goal: show its type, parsed context, splittable variables, and suggested next actions. Use this to decide what proof step to take.",
-    {
+  registerGoalTextTool({
+    server,
+    session,
+    name: "agda_goal_analysis",
+    description: "Analyze a goal: show its type, parsed context, splittable variables, and suggested next actions. Use this to decide what proof step to take.",
+    category: "analysis",
+    inputSchema: {
       goalId: z.number().describe("The goal ID to analyze"),
     },
-    wrapGoalHandler(session, async ({ goalId }) => {
+    callback: async ({ goalId }) => {
       const info = await session.goal.typeContext(goalId);
       const contextEntries = info.context.map(parseContextEntry);
       const suggestions = deriveSuggestions(info.type, contextEntries);
@@ -102,18 +107,20 @@ export function register(
       }
 
       return output;
-    }),
-  );
+    },
+  });
 
   // ── agda_reload — smart reload with goal diff ─────────────────
 
-  server.tool(
-    "agda_reload",
-    "Reload the currently loaded file and report what changed: which goals were solved, which are new, and the current proof state.",
-    {},
-    async () => {
+  registerTextTool({
+    server,
+    name: "agda_reload",
+    description: "Reload the currently loaded file and report what changed: which goals were solved, which are new, and the current proof state.",
+    category: "analysis",
+    inputSchema: {},
+    callback: async () => {
       const prevFile = session.getLoadedFile();
-      if (!prevFile) return text("No file loaded. Call `agda_load` first.");
+      if (!prevFile) return "No file loaded. Call `agda_load` first.";
 
       const prevGoalIds = session.getGoalIds();
       const wasStale = session.isFileStale();
@@ -151,23 +158,26 @@ export function register(
           }
         }
 
-        return text(output);
+        return output;
       } catch (err) {
-        return text(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        return `Error: ${err instanceof Error ? err.message : String(err)}`;
       }
     },
-  );
+  });
 
   // ── agda_term_search — find terms of matching type ────────────
 
-  server.tool(
-    "agda_term_search",
-    "Search the goal's context for terms whose type matches the goal type (or a custom target type). Returns candidate expressions that might fill the goal.",
-    {
+  registerGoalTextTool({
+    server,
+    session,
+    name: "agda_term_search",
+    description: "Search the goal's context for terms whose type matches the goal type (or a custom target type). Returns candidate expressions that might fill the goal.",
+    category: "analysis",
+    inputSchema: {
       goalId: z.number().describe("The goal ID to search in"),
       targetType: z.string().optional().describe("Optional type to search for (defaults to the goal's type)"),
     },
-    wrapGoalHandler(session, async ({ goalId, targetType }) => {
+    callback: async ({ goalId, targetType }) => {
       const info = await session.goal.typeContext(goalId);
       const target = (targetType as string) || info.type;
       const contextEntries = info.context.map(parseContextEntry);
@@ -194,6 +204,6 @@ export function register(
       }
 
       return output;
-    }),
-  );
+    },
+  });
 }
