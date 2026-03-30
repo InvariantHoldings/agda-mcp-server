@@ -63,9 +63,9 @@ npm run build
 Live Agda integration:
 
 ```bash
-RUN_AGDA_INTEGRATION=1 node --test test/integration/agda-load.test.js
-RUN_AGDA_INTEGRATION=1 node --test test/integration/agda-fixture-matrix.test.js
-RUN_AGDA_INTEGRATION=1 node --test test/integration/mcp-server.test.js
+RUN_AGDA_INTEGRATION=1 node --test test/integration/agda/agda-load.test.js
+RUN_AGDA_INTEGRATION=1 node --test test/integration/agda/agda-fixture-matrix.test.js
+RUN_AGDA_INTEGRATION=1 node --test test/integration/mcp/mcp-server.test.js
 ```
 
 Convenience scripts:
@@ -108,7 +108,7 @@ Related files:
 
 - `scripts/mcp-local-client.mjs`
 - `test/helpers/mcp-harness.js`
-- `test/integration/mcp-server.test.js`
+- `test/integration/mcp/mcp-server.test.js`
 
 Use this for real MCP-layer debugging. Do not make the server call itself
 through MCP in production code.
