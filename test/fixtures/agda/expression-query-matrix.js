@@ -1,7 +1,6 @@
-import { resolve } from "node:path";
 import { z } from "zod";
 
-import { loadJsonData } from "../../helpers/json-data.js";
+import { loadValidatedJsonData } from "../../helpers/json-data.js";
 
 const queryExpectationSchema = z.object({
   expr: z.string().min(1),
@@ -33,6 +32,8 @@ const expressionScenarioSchema = z.object({
   goal: goalExpectationSchema.optional(),
 });
 
-export const expressionQueryMatrix = z.array(expressionScenarioSchema).parse(
-  loadJsonData(resolve(import.meta.dirname, "./expression-query-matrix.json")),
+export const expressionQueryMatrix = loadValidatedJsonData(
+  import.meta.dirname,
+  "./expression-query-matrix.json",
+  z.array(expressionScenarioSchema),
 );

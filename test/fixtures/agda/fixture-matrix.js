@@ -1,6 +1,5 @@
-import { resolve } from "node:path";
 import { z } from "zod";
-import { loadJsonData } from "../../helpers/json-data.js";
+import { loadValidatedJsonData } from "../../helpers/json-data.js";
 
 const searchQuerySchema = z.object({
   query: z.string().min(1),
@@ -19,6 +18,8 @@ const fixtureSchema = z.object({
   searchQueries: z.array(searchQuerySchema).optional(),
 });
 
-export const fixtureMatrix = z.array(fixtureSchema).parse(
-  loadJsonData(resolve(import.meta.dirname, "./fixture-matrix.json")),
+export const fixtureMatrix = loadValidatedJsonData(
+  import.meta.dirname,
+  "./fixture-matrix.json",
+  z.array(fixtureSchema),
 );

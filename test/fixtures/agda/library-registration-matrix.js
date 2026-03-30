@@ -1,7 +1,6 @@
-import { resolve } from "node:path";
 import { z } from "zod";
 
-import { loadJsonData } from "../../helpers/json-data.js";
+import { loadValidatedJsonData } from "../../helpers/json-data.js";
 
 const fileSpecSchema = z.object({
   path: z.string().min(1),
@@ -22,6 +21,8 @@ const libraryRegistrationScenarioSchema = z.object({
   integration: integrationSpecSchema.optional(),
 });
 
-export const libraryRegistrationMatrix = z.array(libraryRegistrationScenarioSchema).parse(
-  loadJsonData(resolve(import.meta.dirname, "./library-registration-matrix.json")),
+export const libraryRegistrationMatrix = loadValidatedJsonData(
+  import.meta.dirname,
+  "./library-registration-matrix.json",
+  z.array(libraryRegistrationScenarioSchema),
 );
