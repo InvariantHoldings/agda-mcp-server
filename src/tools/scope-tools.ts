@@ -11,7 +11,6 @@ import {
   makeToolResult,
   okEnvelope,
   registerStructuredTool,
-  registerTextTool,
   validateGoalId,
 } from "./tool-helpers.js";
 
@@ -130,20 +129,60 @@ export function register(
     },
   });
 
-  registerTextTool({
+  registerStructuredTool({
     server,
     name: "agda_search_about",
     description: "Search for definitions in the loaded module matching a query string (searches by type components and name fragments).",
     category: "navigation",
     protocolCommands: ["Cmd_search_about_toplevel"],
     inputSchema: { query: z.string().describe("The search query (type components or name fragments)") },
+    outputDataSchema: z.object({
+      query: z.string(),
+      results: z.array(z.object({
+        name: z.string(),
+        term: z.string(),
+      })),
+      text: z.string(),
+    }),
     callback: async ({ query }: { query: string }) => {
-      const result = await session.query.searchAbout(query);
-      let output = `## Search about: "${query}"\n\n`;
-      output += result.results
-        ? `\`\`\`agda\n${result.results}\n\`\`\`\n`
-        : `No results found.\n`;
-      return output;
+      try {
+        const result = await session.query.searchAbout(query);
+        const rendered = result.text
+          ? `\`\`\`agda\n${result.text}\n\`\`\`\n`
+          : "No results found.\n";
+        let output = `## Search about: "${result.query}"\n\n`;
+        output += rendered;
+        return makeToolResult(
+          okEnvelope({
+            tool: "agda_search_about",
+            summary: result.results.length > 0
+              ? `Found ${result.results.length} search result(s) for ${result.query}.`
+              : `No search results found for ${result.query}.`,
+            classification: result.results.length > 0 ? "ok" : "no-results",
+            data: {
+              query: result.query,
+              results: result.results,
+              text: result.text,
+            },
+            stale: session.isFileStale() || undefined,
+          }),
+          output,
+        );
+      } catch (err) {
+        const message = `Error: ${err instanceof Error ? err.message : String(err)}`;
+        return makeToolResult(
+          errorEnvelope({
+            tool: "agda_search_about",
+            summary: message,
+            data: {
+              query,
+              results: [],
+              text: "",
+            },
+          }),
+          message,
+        );
+      }
     },
   });
 }

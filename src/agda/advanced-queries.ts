@@ -23,6 +23,7 @@ import {
 } from "./response-helpers.js";
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
 import { decodeSolveResponses } from "../protocol/responses/proof-actions.js";
+import { decodeSearchAboutResponses } from "../protocol/responses/search-about.js";
 import {
   command,
   goalCommand,
@@ -150,7 +151,16 @@ export async function searchAbout(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeTopLevelCommand("Cmd_search_about_toplevel", "Normalised", quoted(query))),
   );
-  return { results: lastDisplayMessage(responses), raw: responses };
+  const decoded = decodeSearchAboutResponses(responses);
+  const text = decoded.results
+    .map((entry) => `${entry.name} : ${entry.term}`)
+    .join("\n");
+  return {
+    query: decoded.query || query,
+    results: decoded.results,
+    text,
+    raw: responses,
+  };
 }
 
 /** Auto-solve all goals. */

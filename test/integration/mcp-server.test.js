@@ -68,7 +68,36 @@ test("MCP harness can call agda_protocol_parity", async () => {
     assert.equal(result.structuredContent.tool, "agda_protocol_parity");
     assert.ok(Array.isArray(result.structuredContent.data.entries));
     assert.ok(result.structuredContent.data.entries.some((entry) => entry.agdaCommand === "Cmd_load"));
-    assert.ok(result.structuredContent.data.knownGaps.some((entry) => entry.agdaCommand === "Cmd_search_about_toplevel"));
+    const searchAbout = result.structuredContent.data.entries.find((entry) => entry.agdaCommand === "Cmd_search_about_toplevel");
+    assert.ok(searchAbout);
+    assert.equal(searchAbout.parityStatus, "verified");
+  });
+});
+
+it("MCP harness can call agda_search_about after loading a fixture", async () => {
+  await withHarness(async (harness) => {
+    const load = await harness.callTool("agda_load", { file: "SearchAboutTargets.agda" });
+    assert.equal(load.isError, false);
+
+    const result = await harness.callTool("agda_search_about", { query: "Maybe" });
+    assert.equal(result.isError, false);
+    assert.equal(result.structuredContent.tool, "agda_search_about");
+    assert.equal(result.structuredContent.data.query, "Maybe");
+    assert.ok(result.structuredContent.data.results.some((entry) => entry.name === "mapMaybe"));
+  });
+});
+
+it("MCP harness surfaces search_about results from nested public modules", async () => {
+  await withHarness(async (harness) => {
+    const load = await harness.callTool("agda_load", { file: "SearchAboutNestedModules.agda" });
+    assert.equal(load.isError, false);
+
+    const result = await harness.callTool("agda_search_about", { query: "Flag" });
+    assert.equal(result.isError, false);
+    assert.equal(result.structuredContent.tool, "agda_search_about");
+    assert.equal(result.structuredContent.data.query, "Flag");
+    assert.ok(result.structuredContent.data.results.some((entry) => entry.name === "flip"));
+    assert.ok(result.structuredContent.data.results.some((entry) => entry.name === "mapFlagMaybe"));
   });
 });
 

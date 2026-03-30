@@ -30,9 +30,9 @@
     "issues": [4, 5]
   },
   "Cmd_search_about_toplevel": {
-    "parityStatus": "known-gap",
-    "coverageLevel": "unit",
-    "notes": "Known semantic gap: current MCP tool can still return empty results unexpectedly.",
+    "parityStatus": "verified",
+    "coverageLevel": "mcp",
+    "notes": "Covered by decoder, property tests, Agda-backed search fixtures, and MCP harness tests.",
     "issues": [7]
   },
   "Cmd_autoOne": {

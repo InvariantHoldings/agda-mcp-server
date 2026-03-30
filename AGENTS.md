@@ -14,6 +14,7 @@ Core goals for changes in this repo:
 - Prefer typed domain layers over tool-local ad hoc logic.
 - Preserve or improve MCP semantic output quality.
 - Add at least unit tests for every new module or helper.
+- All new features and bug fixes must follow property-based TDD.
 
 ## Architecture
 
@@ -42,7 +43,7 @@ Important files:
   Runtime SSOT for exposed tools, categories, and schema field names.
 - `src/protocol/command-builder.ts`
   Typed Agda command construction. Prefer this over hand-built command strings.
-- `test/fixtures/agda/fixture-matrix.js`
+- `test/fixtures/agda/fixture-matrix.json`
   SSOT for the expanding Agda fixture matrix.
 
 ## Testing
@@ -79,6 +80,9 @@ Notes:
 - Integration tests are intentionally gated by `RUN_AGDA_INTEGRATION=1`.
 - Some live commands can be slow. If a user is available to run them locally,
   prefer giving them the exact command and asking for the log file.
+- New features and bug fixes should start with failing tests.
+- Add property-based tests for invariants whenever the behavior can be stated
+  generatively.
 - Do not assume a functional fix is fully proven until it passes live
   Agda-backed tests, not just unit tests.
 - The fixture matrix is the preferred place to add new Agda cases before adding
@@ -115,7 +119,7 @@ Agda fixtures live in `test/fixtures/agda/`.
 
 Rules:
 
-- Add new fixtures through `test/fixtures/agda/fixture-matrix.js` when possible.
+- Add new fixtures through `test/fixtures/agda/fixture-matrix.json` when possible.
 - Prefer small, single-purpose modules that isolate one language or protocol
   behavior.
 - Keep fixtures useful for both direct `AgdaSession` tests and MCP harness tests.
@@ -162,3 +166,12 @@ Work from the lowest trustworthy layer upward:
 
 For reporting or issue updates, use the structured bug-bundle path rather than
 inventing a new format.
+
+## TDD discipline
+
+For all new features and bug fixes:
+
+1. Add or tighten failing tests first.
+2. Prefer including a property-based test for invariants and totality.
+3. Add or expand real Agda fixtures when the behavior depends on Agda semantics.
+4. Only then implement the fix.

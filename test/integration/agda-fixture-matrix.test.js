@@ -24,7 +24,7 @@ const it = agdaAvailable && process.env.RUN_AGDA_INTEGRATION === "1"
 function selectedPhases() {
   const rawPhases = process.env.AGDA_FIXTURE_PHASES?.trim();
   if (!rawPhases) {
-    return new Set(["load", "strict", "batch", "goal"]);
+    return new Set(["load", "strict", "batch", "goal", "search"]);
   }
 
   return new Set(
@@ -127,8 +127,29 @@ for (const fixture of selectedFixtures()) {
         const info = await timedStep(t, "goal", () => session.goal.typeContext(load.goals[0].goalId));
         assert.ok(info.type.length > 0, `expected non-empty goal type for ${fixture.name}`);
       }
+
+      if (phases.has("search") && fixture.searchQueries?.length) {
+        for (const expectation of fixture.searchQueries) {
+          const result = await timedStep(
+            t,
+            `search:${expectation.query}`,
+            () => session.query.searchAbout(expectation.query),
+          );
+          assert.equal(result.query, expectation.query);
+          if (expectation.minResults !== undefined) {
+            assert.ok(
+              result.results.length >= expectation.minResults,
+              `expected >=${expectation.minResults} search results for ${fixture.name} query ${expectation.query}, got ${result.results.length}`,
+            );
+          }
+          for (const expectedName of expectation.expectedNames) {
+            assert.ok(
+              result.results.some((entry) => entry.name === expectedName),
+              `expected search result ${expectedName} for ${fixture.name} query ${expectation.query}`,
+            );
+          }
+        }
+      }
     });
   });
 }
-
-test.todo("agda_search_about returns non-empty results for SearchAboutTargets.agda (#7)");

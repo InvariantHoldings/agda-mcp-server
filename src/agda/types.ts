@@ -132,7 +132,12 @@ export interface ModuleContentsResult {
 }
 
 export interface SearchAboutResult {
-  results: string;
+  query: string;
+  results: Array<{
+    name: string;
+    term: string;
+  }>;
+  text: string;
   raw: AgdaResponse[];
 }
 

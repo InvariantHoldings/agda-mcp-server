@@ -30,11 +30,14 @@ test("protocol parity summary counts are internally consistent", () => {
   );
 });
 
-test("protocol parity matrix records known search_about gap", () => {
+test("protocol parity matrix records search_about as verified", () => {
+  const entries = listProtocolParityMatrix();
   const knownGaps = getKnownProtocolGaps();
-  const searchAbout = knownGaps.find((entry) => entry.agdaCommand === "Cmd_search_about_toplevel");
+  const searchAbout = entries.find((entry) => entry.agdaCommand === "Cmd_search_about_toplevel");
 
   assert.ok(searchAbout);
-  assert.equal(searchAbout.parityStatus, "known-gap");
+  assert.equal(searchAbout.parityStatus, "verified");
+  assert.equal(searchAbout.coverageLevel, "mcp");
   assert.ok(searchAbout.issues.includes(7));
+  assert.ok(!knownGaps.some((entry) => entry.agdaCommand === "Cmd_search_about_toplevel"));
 });
