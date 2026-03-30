@@ -1,18 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 
 import {
   createLibraryRegistration,
   parseAgdaLibraryName,
 } from "../dist/agda/library-registration.js";
+import { libraryRegistrationMatrix } from "./fixtures/agda/library-registration-matrix.js";
+import { materializeLibraryRegistrationScenario } from "./helpers/library-registration-fixture.js";
 
 test("parseAgdaLibraryName extracts the declared library name", () => {
   const contents = [
@@ -25,46 +21,40 @@ test("parseAgdaLibraryName extracts the declared library name", () => {
   assert.equal(parseAgdaLibraryName(contents), "example-lib");
 });
 
-test("createLibraryRegistration filters broken global config and adds project libraries", () => {
-  const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-repo-"));
-  const agdaDir = mkdtempSync(join(tmpdir(), "agda-mcp-app-"));
-  const previousAgdaDir = process.env.AGDA_DIR;
+for (const scenario of libraryRegistrationMatrix) {
+  test(`createLibraryRegistration honors matrix scenario: ${scenario.name}`, () => {
+    const materialized = materializeLibraryRegistrationScenario(scenario);
+    const previousAgdaDir = process.env.AGDA_DIR;
 
-  try {
-    const validLibrary = join(agdaDir, "standard-library.agda-lib");
-    const missingLibrary = join(agdaDir, "missing.agda-lib");
-    const projectLibrary = join(repoRoot, "project.agda-lib");
-
-    writeFileSync(validLibrary, "name: standard-library\ninclude: src\n", "utf8");
-    writeFileSync(projectLibrary, "name: project\ninclude: .\n", "utf8");
-    writeFileSync(join(agdaDir, "libraries"), `${validLibrary}\n${missingLibrary}\n`, "utf8");
-    writeFileSync(join(agdaDir, "defaults"), "standard-library\nmissing\n", "utf8");
-
-    process.env.AGDA_DIR = agdaDir;
-
-    const registration = createLibraryRegistration(repoRoot);
     try {
-      assert.deepEqual(registration.agdaArgs, ["-l", "project"]);
+      process.env.AGDA_DIR = materialized.agdaDir;
 
-      const libraries = readFileSync(join(registration.agdaDir, "libraries"), "utf8")
-        .trim()
-        .split("\n");
-      const defaults = readFileSync(join(registration.agdaDir, "defaults"), "utf8")
-        .trim()
-        .split("\n");
+      const registration = createLibraryRegistration(materialized.repoRoot);
+      try {
+        assert.deepEqual(registration.agdaArgs, scenario.expectedAgdaArgs);
 
-      assert.deepEqual(libraries, [validLibrary, projectLibrary]);
-      assert.deepEqual(defaults, ["standard-library"]);
+        const libraryText = readFileSync(join(registration.agdaDir, "libraries"), "utf8");
+        const defaultsText = readFileSync(join(registration.agdaDir, "defaults"), "utf8");
+
+        const libraries = libraryText.trim().length === 0
+          ? []
+          : libraryText.trim().split("\n").map((entry) => basename(entry));
+        const defaults = defaultsText.trim().length === 0
+          ? []
+          : defaultsText.trim().split("\n");
+
+        assert.deepEqual(libraries, scenario.expectedLibraryBasenames);
+        assert.deepEqual(defaults, scenario.expectedDefaults);
+      } finally {
+        registration.cleanup();
+      }
     } finally {
-      registration.cleanup();
+      if (previousAgdaDir === undefined) {
+        delete process.env.AGDA_DIR;
+      } else {
+        process.env.AGDA_DIR = previousAgdaDir;
+      }
+      materialized.cleanup();
     }
-  } finally {
-    if (previousAgdaDir === undefined) {
-      delete process.env.AGDA_DIR;
-    } else {
-      process.env.AGDA_DIR = previousAgdaDir;
-    }
-    rmSync(repoRoot, { recursive: true, force: true });
-    rmSync(agdaDir, { recursive: true, force: true });
-  }
-});
+  });
+}
