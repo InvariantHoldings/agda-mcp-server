@@ -1,4 +1,6 @@
 import type { AgdaResponse } from "../../agda/types.js";
+import { goalTypeInfoSchema, parseResponseWithSchema } from "../response-schemas.js";
+import { decodeDisplayInfoEvents } from "./display-info.js";
 import { decodeExpressionDisplayResponses } from "./expression-display.js";
 import { decodeGoalDisplayResponses } from "./goal-display.js";
 
@@ -10,32 +12,18 @@ export interface DecodedGoalExpressionDisplay {
 }
 
 function decodeTypeAuxValue(responses: AgdaResponse[]): string {
-  for (const response of responses) {
-    if (response.kind !== "DisplayInfo") {
+  for (const event of decodeDisplayInfoEvents(responses)) {
+    const goalTypeInfo = parseResponseWithSchema(goalTypeInfoSchema, event.payload);
+    if (!goalTypeInfo?.typeAux) {
       continue;
     }
 
-    const info = response.info as Record<string, unknown> | undefined;
-    if (!info || info.kind !== "GoalSpecific") {
-      continue;
+    if (typeof goalTypeInfo.typeAux.expr === "string") {
+      return goalTypeInfo.typeAux.expr;
     }
 
-    const goalInfo = info.goalInfo as Record<string, unknown> | undefined;
-    if (!goalInfo || goalInfo.kind !== "GoalType") {
-      continue;
-    }
-
-    const typeAux = goalInfo.typeAux as Record<string, unknown> | undefined;
-    if (!typeAux) {
-      continue;
-    }
-
-    if (typeof typeAux.expr === "string") {
-      return typeAux.expr;
-    }
-
-    if (typeof typeAux.term === "string") {
-      return typeAux.term;
+    if (typeof goalTypeInfo.typeAux.term === "string") {
+      return goalTypeInfo.typeAux.term;
     }
   }
 

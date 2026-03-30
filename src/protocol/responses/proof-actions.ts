@@ -1,14 +1,17 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage } from "../../agda/response-parsing.js";
 import {
   displayInfoResponseSchema,
   giveActionResponseSchema,
   parseResponseWithSchema,
   solveAllResponseSchema,
 } from "../response-schemas.js";
+import { decodeDisplayInfoEvents } from "./display-info.js";
 
 export function decodeGiveLikeResponse(responses: AgdaResponse[]): string {
   let result = "";
+  const displayMessages = decodeDisplayInfoEvents(responses)
+    .map((event) => event.text)
+    .filter(Boolean);
 
   for (const resp of responses) {
     const give = parseResponseWithSchema(giveActionResponseSchema, resp);
@@ -18,14 +21,12 @@ export function decodeGiveLikeResponse(responses: AgdaResponse[]): string {
       continue;
     }
 
-    const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
-    if (!display) continue;
-
-    const msg = extractMessage(display.info);
-    if (msg && !result) result = msg;
+    if (parseResponseWithSchema(displayInfoResponseSchema, resp)) {
+      continue;
+    }
   }
 
-  return result;
+  return result || displayMessages.at(-1) || "";
 }
 
 export function decodeSolveResponses(responses: AgdaResponse[]): string[] {
@@ -42,11 +43,17 @@ export function decodeSolveResponses(responses: AgdaResponse[]): string[] {
       continue;
     }
 
-    const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
-    if (!display) continue;
+    if (parseResponseWithSchema(displayInfoResponseSchema, resp)) {
+      continue;
+    }
+  }
 
-    const msg = extractMessage(display.info);
-    if (msg) solutions.push(msg);
+  if (solutions.length === 0) {
+    solutions.push(
+      ...decodeDisplayInfoEvents(responses)
+        .map((event) => event.text)
+        .filter(Boolean),
+    );
   }
 
   return solutions;

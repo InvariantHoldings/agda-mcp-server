@@ -1,11 +1,11 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage } from "../../agda/response-parsing.js";
 import {
   displayInfoResponseSchema,
   parseResponseWithSchema,
   runningInfoResponseSchema,
   stderrOutputResponseSchema,
 } from "../response-schemas.js";
+import { decodeDisplayInfoEvents } from "./display-info.js";
 
 export interface DecodedBackendResponses {
   output: string;
@@ -15,7 +15,9 @@ export interface DecodedBackendResponses {
 export function decodeBackendResponses(
   responses: AgdaResponse[],
 ): DecodedBackendResponses {
-  const lines: string[] = [];
+  const lines = decodeDisplayInfoEvents(responses)
+    .map((event) => event.text.trim())
+    .filter(Boolean);
   let success = true;
 
   for (const resp of responses) {
@@ -24,9 +26,6 @@ export function decodeBackendResponses(
       if (display.info.kind === "Error") {
         success = false;
       }
-
-      const msg = extractMessage(display.info).trim();
-      if (msg) lines.push(msg);
       continue;
     }
 

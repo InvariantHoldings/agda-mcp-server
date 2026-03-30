@@ -1,5 +1,5 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage } from "../../agda/response-parsing.js";
+import { decodeDisplayInfoEvents } from "./display-info.js";
 
 export interface DisplayTextDecodeOptions {
   infoKinds?: string[];
@@ -15,31 +15,12 @@ export function decodeDisplayTextResponses(
   responses: AgdaResponse[],
   options: DisplayTextDecodeOptions = {},
 ): DisplayTextDecodeResult {
-  const messages: string[] = [];
-
-  for (const response of responses) {
-    if (response.kind !== "DisplayInfo") {
-      continue;
-    }
-
-    const info = response.info as Record<string, unknown> | undefined;
-    if (!info) {
-      continue;
-    }
-
-    if (
-      options.infoKinds &&
-      typeof info.kind === "string" &&
-      !options.infoKinds.includes(info.kind)
-    ) {
-      continue;
-    }
-
-    const message = extractMessage(info);
-    if (message) {
-      messages.push(message);
-    }
-  }
+  const messages = decodeDisplayInfoEvents(responses)
+    .filter((event) =>
+      !options.infoKinds || options.infoKinds.includes(event.infoKind)
+    )
+    .map((event) => event.text)
+    .filter((message) => message.length > 0);
 
   const text = options.position === "first"
     ? (messages[0] ?? "")

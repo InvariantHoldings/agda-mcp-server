@@ -14,12 +14,9 @@ import type {
   GiveResult,
   AutoResult,
 } from "./types.js";
-import {
-  lastDisplayMessage,
-  firstResponseField,
-} from "./response-helpers.js";
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
 import { decodeGiveLikeResponse } from "../protocol/responses/proof-actions.js";
+import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
 import { decodeGoalExpressionDisplayResponses } from "../protocol/responses/goal-expression-display.js";
 import { goalCommand, modeGoalCommand, quoted } from "../protocol/command-builder.js";
 
@@ -99,10 +96,12 @@ export async function caseSplit(
       if (Array.isArray(cs)) clauses.push(...cs);
     }
   }
-  // Fall back to DisplayInfo if no MakeCase response
   if (clauses.length === 0) {
-    const msg = lastDisplayMessage(responses);
-    if (msg) clauses.push(msg);
+    clauses.push(
+      ...decodeDisplayInfoEvents(responses)
+        .map((event) => event.text)
+        .filter(Boolean),
+    );
   }
 
   return { clauses, raw: responses };
@@ -118,10 +117,7 @@ export async function give(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_give", "WithoutForce", goalId, quoted(expr))),
   );
-  const result =
-    firstResponseField(responses, "GiveAction", "giveResult", "result") ||
-    lastDisplayMessage(responses);
-  return { result, raw: responses };
+  return { result: decodeGiveLikeResponse(responses), raw: responses };
 }
 
 /** Refine a goal — apply a function and create subgoals. */
@@ -172,10 +168,7 @@ export async function autoOne(
   const responses = await ctx.sendCommand(
     ctx.iotcm(goalCommand("Cmd_autoOne", goalId, quoted(""))),
   );
-  const solution =
-    firstResponseField(responses, "GiveAction", "giveResult", "result") ||
-    lastDisplayMessage(responses);
-  return { solution, raw: responses };
+  return { solution: decodeGiveLikeResponse(responses), raw: responses };
 }
 
 /** List all unsolved metavariables (goals). */
@@ -185,7 +178,10 @@ export async function metas(
   ctx.requireFile();
   const responses = await ctx.sendCommand(ctx.iotcm("Cmd_metas"));
 
-  const text = lastDisplayMessage(responses);
+  const text = decodeDisplayInfoEvents(responses)
+    .map((event) => event.text)
+    .filter(Boolean)
+    .at(-1) ?? "";
   const goals: AgdaGoal[] = [];
 
   for (const resp of responses) {

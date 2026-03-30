@@ -26,13 +26,57 @@ export const allGoalsWarningsInfoSchema = z.object({
   warnings: z.array(z.unknown()),
 }).passthrough();
 
+export const contextEntrySchema = z.object({
+  reifiedName: z.string().nullable().optional(),
+  originalName: z.string().nullable().optional(),
+  binding: z.string().optional(),
+}).passthrough();
+
+export const contextInfoSchema = z.object({
+  kind: z.literal("Context"),
+  context: z.array(contextEntrySchema),
+}).passthrough();
+
 const goalTypeAuxSchema = z.object({
   expr: z.string().optional(),
   term: z.string().optional(),
 }).passthrough();
 
+export const goalTypeInfoSchema = z.object({
+  kind: z.literal("GoalType"),
+  message: z.string().optional(),
+  type: z.string().optional(),
+  entries: z.array(contextEntrySchema).optional(),
+  typeAux: goalTypeAuxSchema.optional(),
+}).passthrough();
+
+export const normalFormInfoSchema = z.object({
+  kind: z.literal("NormalForm"),
+  expr: z.string().optional(),
+  normalForm: z.string().optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+export const inferredTypeInfoSchema = z.object({
+  kind: z.literal("InferredType"),
+  type: z.string().optional(),
+  expr: z.string().optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+export const searchAboutEntrySchema = z.object({
+  name: z.string(),
+  term: z.string(),
+}).passthrough();
+
+export const searchAboutInfoSchema = z.object({
+  kind: z.literal("SearchAbout"),
+  search: z.string().optional(),
+  results: z.array(z.unknown()).optional(),
+}).passthrough();
+
 export const goalInfoSchema = z.object({
-  kind: z.string(),
+  kind: z.string().optional(),
   type: z.string().optional(),
   expr: z.string().optional(),
   term: z.string().optional(),
@@ -47,6 +91,11 @@ export const goalSpecificInfoSchema = z.object({
 
 export const displayInfoPayloadSchema = z.union([
   allGoalsWarningsInfoSchema,
+  contextInfoSchema,
+  goalTypeInfoSchema,
+  normalFormInfoSchema,
+  inferredTypeInfoSchema,
+  searchAboutInfoSchema,
   goalSpecificInfoSchema,
   textBearingInfoSchema,
 ]);

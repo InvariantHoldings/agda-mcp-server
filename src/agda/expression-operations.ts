@@ -7,7 +7,6 @@ import type {
   ComputeResult,
   InferResult,
 } from "./types.js";
-import { firstDisplayMessage, lastDisplayMessage } from "./response-helpers.js";
 import { modeGoalCommand, modeTopLevelCommand, quoted } from "../protocol/command-builder.js";
 import { decodeExpressionDisplayResponses } from "../protocol/responses/expression-display.js";
 
@@ -24,11 +23,7 @@ export async function compute(
     ctx.iotcm(modeGoalCommand("Cmd_compute", "DefaultCompute", goalId, quoted(expr))),
   );
   const decoded = decodeExpressionDisplayResponses(responses);
-  const normalForm =
-    decoded.normalForm ||
-    firstDisplayMessage(responses, ["NormalForm", "GoalSpecific"]) ||
-    lastDisplayMessage(responses);
-  return { normalForm, raw: responses };
+  return { normalForm: decoded.normalForm, raw: responses };
 }
 
 /**
@@ -44,7 +39,7 @@ export async function computeTopLevel(
   );
   const decoded = decodeExpressionDisplayResponses(responses);
   return {
-    normalForm: decoded.normalForm || lastDisplayMessage(responses),
+    normalForm: decoded.normalForm,
     raw: responses,
   };
 }
@@ -62,11 +57,7 @@ export async function infer(
     ctx.iotcm(modeGoalCommand("Cmd_infer", "Normalised", goalId, quoted(expr))),
   );
   const decoded = decodeExpressionDisplayResponses(responses);
-  const type =
-    decoded.inferredType ||
-    firstDisplayMessage(responses, ["InferredType", "GoalSpecific"]) ||
-    lastDisplayMessage(responses);
-  return { type, raw: responses };
+  return { type: decoded.inferredType, raw: responses };
 }
 
 /**
@@ -82,7 +73,7 @@ export async function inferTopLevel(
   );
   const decoded = decodeExpressionDisplayResponses(responses);
   return {
-    type: decoded.inferredType || lastDisplayMessage(responses),
+    type: decoded.inferredType,
     raw: responses,
   };
 }

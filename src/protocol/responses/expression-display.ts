@@ -1,25 +1,14 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage } from "../../agda/response-parsing.js";
+import {
+  inferredTypeInfoSchema,
+  normalFormInfoSchema,
+  parseResponseWithSchema,
+} from "../response-schemas.js";
+import { decodeDisplayInfoEvents } from "./display-info.js";
 
 export interface DecodedExpressionDisplay {
   normalForm: string;
   inferredType: string;
-}
-
-function decodeInfoMessage(info: Record<string, unknown>): string {
-  if (typeof info.normalForm === "string") {
-    return info.normalForm;
-  }
-
-  if (typeof info.type === "string") {
-    return info.type;
-  }
-
-  if (typeof info.expr === "string") {
-    return info.expr;
-  }
-
-  return extractMessage(info);
 }
 
 export function decodeExpressionDisplayResponses(
@@ -28,42 +17,24 @@ export function decodeExpressionDisplayResponses(
   let normalForm = "";
   let inferredType = "";
 
-  for (const response of responses) {
-    if (response.kind !== "DisplayInfo") {
+  for (const event of decodeDisplayInfoEvents(responses)) {
+    const normalFormInfo = parseResponseWithSchema(normalFormInfoSchema, event.payload);
+    if (normalFormInfo) {
+      normalForm =
+        normalFormInfo.expr
+        ?? normalFormInfo.normalForm
+        ?? normalFormInfo.message
+        ?? event.text;
       continue;
     }
 
-    const info = response.info as Record<string, unknown> | undefined;
-    if (!info) {
-      continue;
-    }
-
-    if (info.kind === "NormalForm") {
-      normalForm = decodeInfoMessage(info);
-      continue;
-    }
-
-    if (info.kind === "InferredType") {
-      inferredType = decodeInfoMessage(info);
-      continue;
-    }
-
-    if (info.kind !== "GoalSpecific") {
-      continue;
-    }
-
-    const goalInfo = info.goalInfo as Record<string, unknown> | undefined;
-    if (!goalInfo) {
-      continue;
-    }
-
-    if (goalInfo.kind === "NormalForm") {
-      normalForm = decodeInfoMessage(goalInfo);
-      continue;
-    }
-
-    if (goalInfo.kind === "InferredType") {
-      inferredType = decodeInfoMessage(goalInfo);
+    const inferredTypeInfo = parseResponseWithSchema(inferredTypeInfoSchema, event.payload);
+    if (inferredTypeInfo) {
+      inferredType =
+        inferredTypeInfo.type
+        ?? inferredTypeInfo.expr
+        ?? inferredTypeInfo.message
+        ?? event.text;
     }
   }
 

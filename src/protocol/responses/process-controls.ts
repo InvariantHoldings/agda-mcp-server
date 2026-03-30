@@ -1,7 +1,5 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage } from "../../agda/response-parsing.js";
 import {
-  displayInfoResponseSchema,
   doneAbortingResponseSchema,
   doneExitingResponseSchema,
   parseResponseWithSchema,
@@ -9,6 +7,7 @@ import {
   statusResponseSchema,
   stderrOutputResponseSchema,
 } from "../response-schemas.js";
+import { decodeDisplayInfoEvents } from "./display-info.js";
 
 export interface DisplayStateSnapshot {
   checked: boolean | null;
@@ -54,17 +53,12 @@ function extractStatusState(resp: AgdaResponse): DisplayStateSnapshot {
 export function decodeProcessControlResponses(
   responses: AgdaResponse[],
 ): DecodedProcessControlResponses {
-  const messages: string[] = [];
+  const messages = decodeDisplayInfoEvents(responses)
+    .map((event) => event.text.trim())
+    .filter(Boolean);
   let state: DisplayStateSnapshot = { ...EMPTY_STATE };
 
   for (const resp of responses) {
-    const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
-    if (display) {
-      const msg = extractMessage(display.info).trim();
-      if (msg) messages.push(msg);
-      continue;
-    }
-
     const running = parseResponseWithSchema(runningInfoResponseSchema, resp);
     if (running) {
       const msg = (running.message ?? running.text ?? "").trim();

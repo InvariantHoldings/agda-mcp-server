@@ -1,4 +1,10 @@
 import type { AgdaResponse } from "../../agda/types.js";
+import {
+  parseResponseWithSchema,
+  searchAboutEntrySchema,
+  searchAboutInfoSchema,
+} from "../response-schemas.js";
+import { decodeDisplayInfoEvents } from "./display-info.js";
 
 export interface SearchAboutEntry {
   name: string;
@@ -16,39 +22,21 @@ export function decodeSearchAboutResponses(
   let query = "";
   const results: SearchAboutEntry[] = [];
 
-  for (const response of responses) {
-    if (response.kind !== "DisplayInfo") {
+  for (const event of decodeDisplayInfoEvents(responses)) {
+    const info = parseResponseWithSchema(searchAboutInfoSchema, event.payload);
+    if (!info) {
       continue;
     }
 
-    const info = response.info as Record<string, unknown> | undefined;
-    if (!info || info.kind !== "SearchAbout") {
-      continue;
-    }
-
-    if (typeof info.search === "string") {
+    if (info.search) {
       query = info.search;
     }
 
-    const rawResults = info.results;
-    if (!Array.isArray(rawResults)) {
-      continue;
-    }
-
-    for (const raw of rawResults) {
-      if (!raw || typeof raw !== "object") {
-        continue;
+    for (const rawEntry of info.results ?? []) {
+      const entry = searchAboutEntrySchema.safeParse(rawEntry);
+      if (entry.success) {
+        results.push({ name: entry.data.name, term: entry.data.term });
       }
-
-      const candidate = raw as Record<string, unknown>;
-      const name = candidate.name;
-      const term = candidate.term;
-
-      if (typeof name !== "string" || typeof term !== "string") {
-        continue;
-      }
-
-      results.push({ name, term });
     }
   }
 

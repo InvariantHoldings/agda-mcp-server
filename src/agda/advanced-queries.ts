@@ -16,13 +16,8 @@ import type {
   GoalTypeContextInferResult,
   ShowVersionResult,
 } from "./types.js";
-import {
-  lastDisplayMessage,
-  firstDisplayMessage,
-  firstResponseField,
-} from "./response-helpers.js";
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
-import { decodeSolveResponses } from "../protocol/responses/proof-actions.js";
+import { decodeGiveLikeResponse, decodeSolveResponses } from "../protocol/responses/proof-actions.js";
 import { decodeSearchAboutResponses } from "../protocol/responses/search-about.js";
 import { decodeGoalExpressionDisplayResponses } from "../protocol/responses/goal-expression-display.js";
 import { decodeDisplayTextResponses } from "../protocol/responses/text-display.js";
@@ -100,10 +95,7 @@ export async function elaborate(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_elaborate_give", "Normalised", goalId, quoted(expr))),
   );
-  const elaboration =
-    firstResponseField(responses, "GiveAction", "giveResult", "result") ||
-    decodeDisplayTextResponses(responses).text;
-  return { elaboration, raw: responses };
+  return { elaboration: decodeGiveLikeResponse(responses), raw: responses };
 }
 
 /** Generate a helper function type for an expression in a goal context. */
@@ -171,15 +163,7 @@ export async function autoAll(ctx: AgdaCommandContext): Promise<AutoResult> {
   const responses = await ctx.sendCommand(
     ctx.iotcm(topLevelCommand("Cmd_autoAll", "Normalised")),
   );
-  const give = firstResponseField(
-    responses,
-    "GiveAction",
-    "giveResult",
-    "result",
-  );
-  const display = lastDisplayMessage(responses);
-  const solution = give && display ? `${give}\n${display}` : give || display;
-  return { solution, raw: responses };
+  return { solution: decodeGiveLikeResponse(responses), raw: responses };
 }
 
 /** Show the running Agda version. */
@@ -192,9 +176,7 @@ export async function showVersion(
       infoKinds: ["Version"],
       position: "first",
     }).text ||
-    decodeDisplayTextResponses(responses).text ||
-    firstDisplayMessage(responses, ["Version"]) ||
-    lastDisplayMessage(responses);
+    decodeDisplayTextResponses(responses).text;
   return { version, raw: responses };
 }
 

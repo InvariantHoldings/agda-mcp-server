@@ -1,5 +1,11 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage } from "../../agda/response-parsing.js";
+import {
+  contextEntrySchema,
+  contextInfoSchema,
+  goalTypeInfoSchema,
+  parseResponseWithSchema,
+} from "../response-schemas.js";
+import { decodeDisplayInfoEvents } from "./display-info.js";
 
 export interface DecodedGoalDisplay {
     goalType: string;
@@ -18,9 +24,10 @@ function decodeContextEntries(entries: unknown[]): string[] {
     const context: string[] = [];
 
     for (const entry of entries) {
-        if (!entry || typeof entry !== "object") continue;
+        const parsed = contextEntrySchema.safeParse(entry);
+        if (!parsed.success) continue;
 
-        const record = entry as Record<string, unknown>;
+        const record = parsed.data;
         const name = typeof record.reifiedName === "string"
             ? record.reifiedName
             : typeof record.originalName === "string"
@@ -39,46 +46,27 @@ export function decodeGoalDisplayResponses(responses: AgdaResponse[]): DecodedGo
     let auxiliary = "";
     const context: string[] = [];
 
-    for (const resp of responses) {
-        if (resp.kind !== "DisplayInfo") continue;
-
-        const info = resp.info as Record<string, unknown> | undefined;
-        if (!info) continue;
-
-        if (info.kind === "Context" && Array.isArray(info.context)) {
-            context.push(...decodeContextEntries(info.context));
+    for (const event of decodeDisplayInfoEvents(responses)) {
+        const contextInfo = parseResponseWithSchema(contextInfoSchema, event.payload);
+        if (contextInfo) {
+            context.push(...decodeContextEntries(contextInfo.context));
             continue;
         }
 
-        if (info.kind === "GoalType") {
-            // Agda 2.8+ sends structured GoalType with type/entries fields
-            if (typeof info.type === "string") {
-                goalType = info.type;
-                // Extract context from entries if present
-                if (Array.isArray(info.entries) && context.length === 0) {
-                    context.push(...decodeContextEntries(info.entries));
+        const goalTypeInfo = parseResponseWithSchema(goalTypeInfoSchema, event.payload);
+        if (goalTypeInfo) {
+            if (goalTypeInfo.type) {
+                goalType = goalTypeInfo.type;
+                if (Array.isArray(goalTypeInfo.entries) && context.length === 0) {
+                    context.push(...decodeContextEntries(goalTypeInfo.entries));
                 }
-            } else {
-                goalType = extractMessage(info);
+            } else if (event.text) {
+                goalType = event.text;
             }
             continue;
         }
 
-        if (info.kind !== "GoalSpecific") continue;
-
-        const goalInfo = info.goalInfo as Record<string, unknown> | undefined;
-        if (!goalInfo) continue;
-
-        // Agda 2.8+: GoalSpecific wraps a structured GoalType with type/entries
-        if (goalInfo.kind === "GoalType" && typeof goalInfo.type === "string") {
-            goalType = goalInfo.type;
-            if (Array.isArray(goalInfo.entries) && context.length === 0) {
-                context.push(...decodeContextEntries(goalInfo.entries));
-            }
-            continue;
-        }
-
-        const fullText = extractMessage(goalInfo);
+        const fullText = event.text;
         const sections = splitSections(fullText);
 
         if (sections.length >= 2 && context.length === 0) {
@@ -88,9 +76,9 @@ export function decodeGoalDisplayResponses(responses: AgdaResponse[]): DecodedGo
             continue;
         }
 
-        if (!goalType) {
+        if (fullText && !goalType) {
             goalType = fullText;
-        } else if (!auxiliary) {
+        } else if (fullText && !auxiliary) {
             auxiliary = fullText;
         }
     }
