@@ -5,8 +5,13 @@
 // normalize-response.ts).
 
 import type { AgdaResponse, AgdaGoal, LoadResult } from "./types.js";
-import { extractMessage } from "./response-parsing.js";
 import { classifyCompleteness } from "./completeness.js";
+import {
+  allGoalsWarningsInfoSchema,
+  displayInfoResponseSchema,
+  parseResponseWithSchema,
+} from "../protocol/response-schemas.js";
+import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
 
 export interface ParsedLoadResult extends Omit<LoadResult, "raw"> {
   /** Goal IDs for atomic assignment to session state. */
@@ -31,6 +36,9 @@ export function parseLoadResponses(
   let allGoalsText = "";
   let success = true;
   let invisibleGoalCount = 0;
+  const displayEvents = decodeDisplayInfoEvents(responses);
+
+  let displayIndex = 0;
 
   for (const resp of responses) {
     // ── InteractionPoints (normalized: always number[]) ──
@@ -50,19 +58,25 @@ export function parseLoadResponses(
 
     // ── DisplayInfo ──────────────────────────────────────
     if (resp.kind === "DisplayInfo") {
-      const info = resp.info as Record<string, unknown> | undefined;
-      if (!info) continue;
+      const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
+      if (!display) continue;
+      const info = display.info;
+      const displayText = displayEvents[displayIndex]?.text ?? "";
+      displayIndex += 1;
 
       if (info.kind === "Error") {
         success = false;
-        errors.push(extractMessage(info));
+        if (displayText) {
+          errors.push(displayText);
+        }
       }
 
-      if (info.kind === "AllGoalsWarnings") {
-        allGoalsText = extractMessage(info);
+      const allGoalsWarnings = parseResponseWithSchema(allGoalsWarningsInfoSchema, info);
+      if (allGoalsWarnings) {
+        allGoalsText = displayText;
 
         // Errors (normalized: always an array)
-        const infoErrors = info.errors as unknown[];
+        const infoErrors = allGoalsWarnings.errors;
         if (infoErrors && infoErrors.length > 0) {
           success = false;
           for (const e of infoErrors) {
@@ -80,7 +94,7 @@ export function parseLoadResponses(
         }
 
         // Warnings (normalized: always an array)
-        const infoWarnings = info.warnings as unknown[];
+        const infoWarnings = allGoalsWarnings.warnings;
         if (infoWarnings && infoWarnings.length > 0) {
           for (const w of infoWarnings) {
             if (typeof w === "string") {
@@ -97,7 +111,7 @@ export function parseLoadResponses(
         }
 
         // Cross-check: visibleGoals may have entries not in InteractionPoints
-        const visGoals = info.visibleGoals as unknown[];
+        const visGoals = allGoalsWarnings.visibleGoals;
         if (visGoals) {
           const existingIds = new Set(goalIds);
           for (const vg of visGoals) {
@@ -127,7 +141,7 @@ export function parseLoadResponses(
         }
 
         // Track invisible goals (abstract blocks)
-        const invisGoals = info.invisibleGoals as unknown[];
+        const invisGoals = allGoalsWarnings.invisibleGoals;
         if (invisGoals) {
           invisibleGoalCount = invisGoals.length;
         }
