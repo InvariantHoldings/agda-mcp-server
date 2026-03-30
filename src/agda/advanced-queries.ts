@@ -16,7 +16,6 @@ import type {
   GoalTypeContextInferResult,
   ShowVersionResult,
 } from "./types.js";
-import { escapeAgdaString } from "./response-parsing.js";
 import {
   lastDisplayMessage,
   firstDisplayMessage,
@@ -24,6 +23,14 @@ import {
 } from "./response-helpers.js";
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
 import { decodeSolveResponses } from "../protocol/responses/proof-actions.js";
+import {
+  command,
+  goalCommand,
+  modeGoalCommand,
+  modeTopLevelCommand,
+  quoted,
+  topLevelCommand,
+} from "../protocol/command-builder.js";
 
 /** Show current constraints. */
 export async function constraints(
@@ -38,7 +45,7 @@ export async function constraints(
 export async function solveAll(ctx: AgdaCommandContext): Promise<SolveResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm("Cmd_solveAll Normalised"),
+    ctx.iotcm(topLevelCommand("Cmd_solveAll", "Normalised")),
   );
   return { solutions: decodeSolveResponses(responses), raw: responses };
 }
@@ -50,7 +57,7 @@ export async function solveOne(
 ): Promise<SolveResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_solveOne Normalised ${goalId} noRange ""`),
+    ctx.iotcm(modeGoalCommand("Cmd_solveOne", "Normalised", goalId, quoted(""))),
   );
   return { solutions: decodeSolveResponses(responses), raw: responses };
 }
@@ -63,7 +70,7 @@ export async function whyInScope(
 ): Promise<WhyInScopeResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_why_in_scope ${goalId} noRange "${escapeAgdaString(name)}"`),
+    ctx.iotcm(goalCommand("Cmd_why_in_scope", goalId, quoted(name))),
   );
   return { explanation: lastDisplayMessage(responses), raw: responses };
 }
@@ -75,7 +82,7 @@ export async function whyInScopeTopLevel(
 ): Promise<WhyInScopeResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_why_in_scope_toplevel "${escapeAgdaString(name)}"`),
+    ctx.iotcm(topLevelCommand("Cmd_why_in_scope_toplevel", quoted(name))),
   );
   return { explanation: lastDisplayMessage(responses), raw: responses };
 }
@@ -88,9 +95,7 @@ export async function elaborate(
 ): Promise<ElaborateResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(
-      `Cmd_elaborate_give Normalised ${goalId} noRange "${escapeAgdaString(expr)}"`,
-    ),
+    ctx.iotcm(modeGoalCommand("Cmd_elaborate_give", "Normalised", goalId, quoted(expr))),
   );
   const elaboration =
     firstResponseField(responses, "GiveAction", "giveResult", "result") ||
@@ -106,9 +111,7 @@ export async function helperFunction(
 ): Promise<HelperFunctionResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(
-      `Cmd_helper_function Normalised ${goalId} noRange "${escapeAgdaString(expr)}"`,
-    ),
+    ctx.iotcm(modeGoalCommand("Cmd_helper_function", "Normalised", goalId, quoted(expr))),
   );
   return { helperType: lastDisplayMessage(responses), raw: responses };
 }
@@ -121,9 +124,7 @@ export async function showModuleContents(
 ): Promise<ModuleContentsResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(
-      `Cmd_show_module_contents Normalised ${goalId} noRange "${escapeAgdaString(moduleName)}"`,
-    ),
+    ctx.iotcm(modeGoalCommand("Cmd_show_module_contents", "Normalised", goalId, quoted(moduleName))),
   );
   return { contents: lastDisplayMessage(responses), raw: responses };
 }
@@ -135,9 +136,7 @@ export async function showModuleContentsTopLevel(
 ): Promise<ModuleContentsResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(
-      `Cmd_show_module_contents_toplevel Normalised "${escapeAgdaString(moduleName)}"`,
-    ),
+    ctx.iotcm(modeTopLevelCommand("Cmd_show_module_contents_toplevel", "Normalised", quoted(moduleName))),
   );
   return { contents: lastDisplayMessage(responses), raw: responses };
 }
@@ -149,9 +148,7 @@ export async function searchAbout(
 ): Promise<SearchAboutResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(
-      `Cmd_search_about_toplevel Normalised "${escapeAgdaString(query)}"`,
-    ),
+    ctx.iotcm(modeTopLevelCommand("Cmd_search_about_toplevel", "Normalised", quoted(query))),
   );
   return { results: lastDisplayMessage(responses), raw: responses };
 }
@@ -160,7 +157,7 @@ export async function searchAbout(
 export async function autoAll(ctx: AgdaCommandContext): Promise<AutoResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm("Cmd_autoAll Normalised"),
+    ctx.iotcm(topLevelCommand("Cmd_autoAll", "Normalised")),
   );
   const give = firstResponseField(
     responses,
@@ -192,9 +189,7 @@ export async function goalTypeContextInfer(
 ): Promise<GoalTypeContextInferResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(
-      `Cmd_goal_type_context_infer Normalised ${goalId} noRange "${escapeAgdaString(expr)}"`,
-    ),
+    ctx.iotcm(modeGoalCommand("Cmd_goal_type_context_infer", "Normalised", goalId, quoted(expr))),
   );
   const decoded = decodeGoalDisplayResponses(responses);
   return {

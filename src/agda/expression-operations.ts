@@ -7,8 +7,8 @@ import type {
   ComputeResult,
   InferResult,
 } from "./types.js";
-import { escapeAgdaString } from "./response-parsing.js";
 import { firstDisplayMessage, lastDisplayMessage } from "./response-helpers.js";
+import { modeGoalCommand, modeTopLevelCommand, quoted } from "../protocol/command-builder.js";
 
 /**
  * Normalize (evaluate) a term in a goal context.
@@ -20,7 +20,7 @@ export async function compute(
 ): Promise<ComputeResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_compute DefaultCompute ${goalId} noRange "${escapeAgdaString(expr)}"`),
+    ctx.iotcm(modeGoalCommand("Cmd_compute", "DefaultCompute", goalId, quoted(expr))),
   );
   const normalForm =
     firstDisplayMessage(responses, ["NormalForm", "GoalSpecific"]) ||
@@ -37,7 +37,7 @@ export async function computeTopLevel(
 ): Promise<ComputeResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_compute_toplevel DefaultCompute "${escapeAgdaString(expr)}"`),
+    ctx.iotcm(modeTopLevelCommand("Cmd_compute_toplevel", "DefaultCompute", quoted(expr))),
   );
   return { normalForm: lastDisplayMessage(responses), raw: responses };
 }
@@ -52,7 +52,7 @@ export async function infer(
 ): Promise<InferResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_infer Normalised ${goalId} noRange "${escapeAgdaString(expr)}"`),
+    ctx.iotcm(modeGoalCommand("Cmd_infer", "Normalised", goalId, quoted(expr))),
   );
   const type =
     firstDisplayMessage(responses, ["InferredType", "GoalSpecific"]) ||
@@ -69,7 +69,7 @@ export async function inferTopLevel(
 ): Promise<InferResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_infer_toplevel Normalised "${escapeAgdaString(expr)}"`),
+    ctx.iotcm(modeTopLevelCommand("Cmd_infer_toplevel", "Normalised", quoted(expr))),
   );
   return { type: lastDisplayMessage(responses), raw: responses };
 }

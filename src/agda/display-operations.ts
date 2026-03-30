@@ -6,12 +6,8 @@ import type {
   AgdaCommandContext,
   DisplayControlResult,
 } from "./types.js";
-import { escapeAgdaString } from "./response-parsing.js";
 import { decodeProcessControlResponses } from "../protocol/responses/process-controls.js";
-
-function boolLiteral(value: boolean): "True" | "False" {
-  return value ? "True" : "False";
-}
+import { boolLiteral, command, goalCommand, quoted } from "../protocol/command-builder.js";
 
 function formatDisplayState(result: DisplayControlResult): string {
   const stateParts: string[] = [];
@@ -59,7 +55,7 @@ export async function loadHighlightingInfo(
 ): Promise<DisplayControlResult> {
   return runControl(
     ctx,
-    `Cmd_load_highlighting_info \"${escapeAgdaString(filePath)}\"`,
+    command("Cmd_load_highlighting_info", quoted(filePath)),
     `Loaded highlighting info for ${filePath}.`,
   );
 }
@@ -71,7 +67,7 @@ export async function tokenHighlighting(
 ): Promise<DisplayControlResult> {
   return runControl(
     ctx,
-    `Cmd_tokenHighlighting \"${escapeAgdaString(filePath)}\" ${remove ? "Remove" : "Keep"}`,
+    command("Cmd_tokenHighlighting", quoted(filePath), remove ? "Remove" : "Keep"),
     `${remove ? "Removed" : "Kept"} token highlighting for ${filePath}.`,
   );
 }
@@ -84,7 +80,7 @@ export async function highlight(
   ctx.requireFile();
   return runControl(
     ctx,
-    `Cmd_highlight ${goalId} noRange \"${escapeAgdaString(expr)}\"`,
+    goalCommand("Cmd_highlight", goalId, quoted(expr)),
     `Highlighting updated for ?${goalId}.`,
   );
 }
@@ -95,7 +91,7 @@ export async function showImplicitArgs(
 ): Promise<DisplayControlResult> {
   return runControl(
     ctx,
-    `ShowImplicitArgs ${boolLiteral(show)}`,
+    command("ShowImplicitArgs", boolLiteral(show)),
     `ShowImplicitArgs set to ${show}.`,
   );
 }
@@ -112,7 +108,7 @@ export async function showIrrelevantArgs(
 ): Promise<DisplayControlResult> {
   return runControl(
     ctx,
-    `ShowIrrelevantArgs ${boolLiteral(show)}`,
+    command("ShowIrrelevantArgs", boolLiteral(show)),
     `ShowIrrelevantArgs set to ${show}.`,
   );
 }

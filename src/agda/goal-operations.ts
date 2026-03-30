@@ -14,13 +14,13 @@ import type {
   GiveResult,
   AutoResult,
 } from "./types.js";
-import { escapeAgdaString } from "./response-parsing.js";
 import {
   lastDisplayMessage,
   firstResponseField,
 } from "./response-helpers.js";
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
 import { decodeGiveLikeResponse } from "../protocol/responses/proof-actions.js";
+import { goalCommand, modeGoalCommand, quoted } from "../protocol/command-builder.js";
 
 /** Get the type and local context for a specific goal. */
 export async function goalTypeContext(
@@ -29,7 +29,7 @@ export async function goalTypeContext(
 ): Promise<GoalInfo> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_goal_type_context Normalised ${goalId} noRange ""`),
+    ctx.iotcm(modeGoalCommand("Cmd_goal_type_context", "Normalised", goalId, quoted(""))),
   );
   const decoded = decodeGoalDisplayResponses(responses);
   return { goalId, type: decoded.goalType, context: decoded.context, raw: responses };
@@ -42,7 +42,7 @@ export async function goalType(
 ): Promise<GoalTypeResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_goal_type Normalised ${goalId} noRange ""`),
+    ctx.iotcm(modeGoalCommand("Cmd_goal_type", "Normalised", goalId, quoted(""))),
   );
   const decoded = decodeGoalDisplayResponses(responses);
   return { goalId, type: decoded.goalType, raw: responses };
@@ -55,7 +55,7 @@ export async function context(
 ): Promise<ContextResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_context Normalised ${goalId} noRange ""`),
+    ctx.iotcm(modeGoalCommand("Cmd_context", "Normalised", goalId, quoted(""))),
   );
   const decoded = decodeGoalDisplayResponses(responses);
   return { goalId, context: decoded.context, raw: responses };
@@ -69,7 +69,7 @@ export async function goalTypeContextCheck(
 ): Promise<GoalTypeContextCheckResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_goal_type_context_check Normalised ${goalId} noRange "${escapeAgdaString(expr)}"`),
+    ctx.iotcm(modeGoalCommand("Cmd_goal_type_context_check", "Normalised", goalId, quoted(expr))),
   );
   const decoded = decodeGoalDisplayResponses(responses);
   return {
@@ -88,7 +88,7 @@ export async function caseSplit(
 ): Promise<CaseSplitResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_make_case ${goalId} noRange "${variable}"`),
+    ctx.iotcm(goalCommand("Cmd_make_case", goalId, quoted(variable))),
   );
 
   const clauses: string[] = [];
@@ -115,7 +115,7 @@ export async function give(
 ): Promise<GiveResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_give WithoutForce ${goalId} noRange "${escapeAgdaString(expr)}"`),
+    ctx.iotcm(modeGoalCommand("Cmd_give", "WithoutForce", goalId, quoted(expr))),
   );
   const result =
     firstResponseField(responses, "GiveAction", "giveResult", "result") ||
@@ -131,7 +131,7 @@ export async function refine(
 ): Promise<GiveResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_refine_or_intro True ${goalId} noRange "${escapeAgdaString(expr)}"`),
+    ctx.iotcm(modeGoalCommand("Cmd_refine_or_intro", "True", goalId, quoted(expr))),
   );
   return { result: decodeGiveLikeResponse(responses), raw: responses };
 }
@@ -144,7 +144,7 @@ export async function refineExact(
 ): Promise<GiveResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_refine ${goalId} noRange "${escapeAgdaString(expr)}"`),
+    ctx.iotcm(goalCommand("Cmd_refine", goalId, quoted(expr))),
   );
   return { result: decodeGiveLikeResponse(responses), raw: responses };
 }
@@ -157,7 +157,7 @@ export async function intro(
 ): Promise<GiveResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_intro True ${goalId} noRange "${escapeAgdaString(expr)}"`),
+    ctx.iotcm(modeGoalCommand("Cmd_intro", "True", goalId, quoted(expr))),
   );
   return { result: decodeGiveLikeResponse(responses), raw: responses };
 }
@@ -169,7 +169,7 @@ export async function autoOne(
 ): Promise<AutoResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(`Cmd_autoOne ${goalId} noRange ""`),
+    ctx.iotcm(goalCommand("Cmd_autoOne", goalId, quoted(""))),
   );
   const solution =
     firstResponseField(responses, "GiveAction", "giveResult", "result") ||
