@@ -1,0 +1,43 @@
+{
+  "responseKinds": [
+    "HighlightingInfo",
+    "Status",
+    "JumpToError",
+    "InteractionPoints",
+    "GiveAction",
+    "MakeCase",
+    "SolveAll",
+    "Mimer",
+    "DisplayInfo",
+    "RunningInfo",
+    "ClearRunningInfo",
+    "ClearHighlighting",
+    "DoneAborting",
+    "DoneExiting"
+  ],
+  "displayInfoKinds": [
+    "CompilationOk",
+    "Constraints",
+    "AllGoalsWarnings",
+    "Time",
+    "Error",
+    "Intro_NotFound",
+    "Intro_ConstructorUnknown",
+    "Auto",
+    "ModuleContents",
+    "SearchAbout",
+    "WhyInScope",
+    "NormalForm",
+    "InferredType",
+    "Context",
+    "Version",
+    "GoalSpecific"
+  ],
+  "goalDisplayInfoKinds": [
+    "HelperFunction",
+    "NormalForm",
+    "GoalType",
+    "CurrentGoal",
+    "InferredType"
+  ]
+}

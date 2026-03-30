@@ -6,6 +6,10 @@ export const agdaResponseSchema = z.object({
   kind: z.string(),
 }).passthrough();
 
+export const highlightingInfoResponseSchema = agdaResponseSchema.extend({
+  kind: z.literal("HighlightingInfo"),
+});
+
 const textBearingInfoSchema = z.object({
   kind: z.string(),
   message: z.string().optional(),
@@ -99,26 +103,18 @@ export const goalSpecificInfoSchema = z.object({
   goalInfo: goalInfoSchema,
 }).passthrough();
 
-export const displayInfoPayloadSchema = z.union([
-  allGoalsWarningsInfoSchema,
-  contextInfoSchema,
-  goalTypeInfoSchema,
-  normalFormInfoSchema,
-  inferredTypeInfoSchema,
-  searchAboutInfoSchema,
-  goalSpecificInfoSchema,
-  textBearingInfoSchema,
-]);
-
-export const displayInfoResponseSchema = agdaResponseSchema.extend({
-  kind: z.literal("DisplayInfo"),
-  info: displayInfoPayloadSchema,
-});
-
 export const interactionPointsResponseSchema = agdaResponseSchema.extend({
   kind: z.literal("InteractionPoints"),
   interactionPoints: z.array(z.number()),
 });
+
+export const jumpToErrorResponseSchema = agdaResponseSchema.extend({
+  kind: z.literal("JumpToError"),
+  filepath: z.string().optional(),
+  file: z.string().optional(),
+  position: z.number().optional(),
+  offset: z.number().optional(),
+}).passthrough();
 
 export const giveActionResponseSchema = agdaResponseSchema.extend({
   kind: z.literal("GiveAction"),
@@ -137,6 +133,14 @@ export const runningInfoResponseSchema = agdaResponseSchema.extend({
   text: z.string().optional(),
 });
 
+export const clearRunningInfoResponseSchema = agdaResponseSchema.extend({
+  kind: z.literal("ClearRunningInfo"),
+}).passthrough();
+
+export const clearHighlightingResponseSchema = agdaResponseSchema.extend({
+  kind: z.literal("ClearHighlighting"),
+}).passthrough();
+
 export const stderrOutputResponseSchema = agdaResponseSchema.extend({
   kind: z.literal("StderrOutput"),
   text: z.string(),
@@ -151,6 +155,13 @@ export const solveAllResponseSchema = agdaResponseSchema.extend({
   kind: z.literal("SolveAll"),
   solutions: z.array(solveAllSolutionSchema).optional(),
 });
+
+export const mimerResponseSchema = agdaResponseSchema.extend({
+  kind: z.literal("Mimer"),
+  interactionPoint: z.number().optional(),
+  content: z.string().nullable().optional(),
+  mime: z.string().nullable().optional(),
+}).passthrough();
 
 const statusBodySchema = z.object({
   checked: z.unknown().optional(),
@@ -172,6 +183,113 @@ export const doneAbortingResponseSchema = agdaResponseSchema.extend({
 
 export const doneExitingResponseSchema = agdaResponseSchema.extend({
   kind: z.literal("DoneExiting"),
+});
+
+export const compilationOkInfoSchema = z.object({
+  kind: z.literal("CompilationOk"),
+}).passthrough();
+
+export const constraintsInfoSchema = z.object({
+  kind: z.literal("Constraints"),
+  constraints: z.array(z.unknown()).optional(),
+}).passthrough();
+
+export const timeInfoSchema = z.object({
+  kind: z.literal("Time"),
+  cpuTime: z.unknown().optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+export const infoErrorInnerSchema = z.object({
+  message: z.string().optional(),
+  kind: z.string().optional(),
+}).passthrough();
+
+export const errorInfoSchema = z.object({
+  kind: z.literal("Error"),
+  error: infoErrorInnerSchema.optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+export const introNotFoundInfoSchema = z.object({
+  kind: z.literal("Intro_NotFound"),
+  message: z.string().optional(),
+}).passthrough();
+
+export const introConstructorUnknownInfoSchema = z.object({
+  kind: z.literal("Intro_ConstructorUnknown"),
+  constructors: z.array(z.string()).optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+export const autoInfoSchema = z.object({
+  kind: z.literal("Auto"),
+  message: z.string().optional(),
+  text: z.string().optional(),
+}).passthrough();
+
+export const moduleContentsEntrySchema = z.object({
+  name: z.string().optional(),
+  type: z.string().optional(),
+}).passthrough();
+
+export const moduleContentsInfoSchema = z.object({
+  kind: z.literal("ModuleContents"),
+  names: z.array(z.string()).optional(),
+  telescope: z.unknown().optional(),
+  contents: z.array(moduleContentsEntrySchema).optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+export const whyInScopeInfoSchema = z.object({
+  kind: z.literal("WhyInScope"),
+  message: z.string().optional(),
+  contents: z.string().optional(),
+  text: z.string().optional(),
+}).passthrough();
+
+export const versionInfoSchema = z.object({
+  kind: z.literal("Version"),
+  message: z.string().optional(),
+  text: z.string().optional(),
+}).passthrough();
+
+export const goalHelperFunctionInfoSchema = z.object({
+  kind: z.literal("HelperFunction"),
+  message: z.string().optional(),
+  type: z.string().optional(),
+}).passthrough();
+
+export const goalCurrentGoalInfoSchema = z.object({
+  kind: z.literal("CurrentGoal"),
+  message: z.string().optional(),
+  type: z.string().optional(),
+}).passthrough();
+
+export const displayInfoPayloadSchema = z.union([
+  compilationOkInfoSchema,
+  constraintsInfoSchema,
+  allGoalsWarningsInfoSchema,
+  timeInfoSchema,
+  errorInfoSchema,
+  introNotFoundInfoSchema,
+  introConstructorUnknownInfoSchema,
+  autoInfoSchema,
+  moduleContentsInfoSchema,
+  whyInScopeInfoSchema,
+  contextInfoSchema,
+  goalTypeInfoSchema,
+  normalFormInfoSchema,
+  inferredTypeInfoSchema,
+  searchAboutInfoSchema,
+  versionInfoSchema,
+  goalSpecificInfoSchema,
+  textBearingInfoSchema,
+]);
+
+export const displayInfoResponseSchema = agdaResponseSchema.extend({
+  kind: z.literal("DisplayInfo"),
+  info: displayInfoPayloadSchema,
 });
 
 export function parseResponseWithSchema<T>(
