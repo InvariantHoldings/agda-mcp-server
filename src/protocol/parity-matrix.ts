@@ -13,7 +13,7 @@ import {
   type ProtocolParityStatus,
 } from "./metadata.js";
 import { z } from "zod";
-import { loadJsonData } from "./json-data.js";
+import { loadJsonData } from "../json-data.js";
 
 export interface ProtocolParityEntry {
   agdaCommand: string;

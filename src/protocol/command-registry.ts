@@ -3,7 +3,7 @@ import {
   protocolCommandDefinitionSchema,
   type ProtocolCommandDefinition,
 } from "./metadata.js";
-import { loadJsonData } from "./json-data.js";
+import { loadJsonData } from "../json-data.js";
 
 const upstreamParityVerificationSchema = z.object({
   source: z.string().url(),
