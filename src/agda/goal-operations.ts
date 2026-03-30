@@ -15,7 +15,10 @@ import type {
   AutoResult,
 } from "./types.js";
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
-import { decodeGiveLikeResponse } from "../protocol/responses/proof-actions.js";
+import {
+  decodeCaseSplitResponses,
+  decodeGiveLikeResponse,
+} from "../protocol/responses/proof-actions.js";
 import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
 import { decodeLoadDisplayResponses } from "../protocol/responses/load-display.js";
 import { decodeGoalExpressionDisplayResponses } from "../protocol/responses/goal-expression-display.js";
@@ -89,23 +92,7 @@ export async function caseSplit(
   const responses = await ctx.sendCommand(
     ctx.iotcm(goalCommand("Cmd_make_case", goalId, quoted(variable))),
   );
-
-  const clauses: string[] = [];
-  for (const resp of responses) {
-    if (resp.kind === "MakeCase") {
-      const cs = resp.clauses as string[] | undefined;
-      if (Array.isArray(cs)) clauses.push(...cs);
-    }
-  }
-  if (clauses.length === 0) {
-    clauses.push(
-      ...decodeDisplayInfoEvents(responses)
-        .map((event) => event.text)
-        .filter(Boolean),
-    );
-  }
-
-  return { clauses, raw: responses };
+  return { clauses: decodeCaseSplitResponses(responses), raw: responses };
 }
 
 /** Give (fill) a goal with an expression. */

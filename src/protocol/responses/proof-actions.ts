@@ -2,6 +2,7 @@ import type { AgdaResponse } from "../../agda/types.js";
 import {
   displayInfoResponseSchema,
   giveActionResponseSchema,
+  makeCaseResponseSchema,
   parseResponseWithSchema,
   solveAllResponseSchema,
 } from "../response-schemas.js";
@@ -57,4 +58,25 @@ export function decodeSolveResponses(responses: AgdaResponse[]): string[] {
   }
 
   return solutions;
+}
+
+export function decodeCaseSplitResponses(responses: AgdaResponse[]): string[] {
+  const clauses: string[] = [];
+
+  for (const response of responses) {
+    const makeCase = parseResponseWithSchema(makeCaseResponseSchema, response);
+    if (!makeCase) {
+      continue;
+    }
+
+    clauses.push(...(makeCase.clauses ?? []).filter(Boolean));
+  }
+
+  if (clauses.length > 0) {
+    return clauses;
+  }
+
+  return decodeDisplayInfoEvents(responses)
+    .map((event) => event.text)
+    .filter(Boolean);
 }

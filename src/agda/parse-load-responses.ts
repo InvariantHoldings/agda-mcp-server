@@ -12,6 +12,10 @@ import {
 } from "../protocol/response-schemas.js";
 import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
 import { decodeLoadDisplayResponses } from "../protocol/responses/load-display.js";
+import {
+  decodeInteractionPointIds,
+  decodeStderrOutputs,
+} from "../protocol/responses/process-output.js";
 
 export interface ParsedLoadResult extends Omit<LoadResult, "raw"> {
   /** Goal IDs for atomic assignment to session state. */
@@ -37,23 +41,10 @@ export function parseLoadResponses(
   const allGoalsText = loadDisplay.text;
   let success = true;
   let invisibleGoalCount = loadDisplay.invisibleGoalCount;
+  const interactionPointIds = decodeInteractionPointIds(responses);
+  const stderrTexts = decodeStderrOutputs(responses);
 
   for (const resp of responses) {
-    // ── InteractionPoints (normalized: always number[]) ──
-    if (resp.kind === "InteractionPoints") {
-      const points = resp.interactionPoints as number[];
-      if (Array.isArray(points)) {
-        const seen = new Set(goalIds);
-        for (const id of points) {
-          if (!seen.has(id)) {
-            seen.add(id);
-            goalIds.push(id);
-            goals.push({ goalId: id, type: "?", context: [] });
-          }
-        }
-      }
-    }
-
     // ── DisplayInfo ──────────────────────────────────────
     if (resp.kind === "DisplayInfo") {
       const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
@@ -68,14 +59,21 @@ export function parseLoadResponses(
         }
       }
     }
+  }
 
-    // ── StderrOutput (normalized: text is always string) ─
-    if (resp.kind === "StderrOutput") {
-      const text = ((resp.text as string) ?? "").trim();
-      if (text && /\berror\b/i.test(text)) {
-        errors.push(text);
-        success = false;
-      }
+  const seenInteractionPoints = new Set(goalIds);
+  for (const id of interactionPointIds) {
+    if (!seenInteractionPoints.has(id)) {
+      seenInteractionPoints.add(id);
+      goalIds.push(id);
+      goals.push({ goalId: id, type: "?", context: [] });
+    }
+  }
+
+  for (const text of stderrTexts) {
+    if (/\berror\b/i.test(text)) {
+      errors.push(text);
+      success = false;
     }
   }
 

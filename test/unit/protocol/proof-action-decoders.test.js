@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  decodeCaseSplitResponses,
   decodeGiveLikeResponse,
   decodeSolveResponses,
 } from "../../../dist/protocol/responses/proof-actions.js";
@@ -26,4 +27,15 @@ test("decodeSolveResponses formats SolveAll object payloads", () => {
   ]);
 
   assert.deepEqual(result, ["?3 := refl"]);
+});
+
+test("decodeCaseSplitResponses prefers MakeCase clauses", () => {
+  const result = decodeCaseSplitResponses([
+    {
+      kind: "MakeCase",
+      clauses: ["f zero = ?", "f (suc n) = ?"],
+    },
+  ]);
+
+  assert.deepEqual(result, ["f zero = ?", "f (suc n) = ?"]);
 });
