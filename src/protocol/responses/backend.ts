@@ -1,5 +1,11 @@
 import type { AgdaResponse } from "../../agda/types.js";
 import { extractMessage } from "../../agda/response-parsing.js";
+import {
+  displayInfoResponseSchema,
+  parseResponseWithSchema,
+  runningInfoResponseSchema,
+  stderrOutputResponseSchema,
+} from "../response-schemas.js";
 
 export interface DecodedBackendResponses {
   output: string;
@@ -13,27 +19,27 @@ export function decodeBackendResponses(
   let success = true;
 
   for (const resp of responses) {
-    if (resp.kind === "DisplayInfo") {
-      const info = resp.info as Record<string, unknown> | undefined;
-      if (!info) continue;
-
-      if (info.kind === "Error") {
+    const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
+    if (display) {
+      if (display.info.kind === "Error") {
         success = false;
       }
 
-      const msg = extractMessage(info).trim();
+      const msg = extractMessage(display.info).trim();
       if (msg) lines.push(msg);
       continue;
     }
 
-    if (resp.kind === "RunningInfo") {
-      const message = ((resp.message as string) ?? "").trim();
+    const running = parseResponseWithSchema(runningInfoResponseSchema, resp);
+    if (running) {
+      const message = (running.message ?? running.text ?? "").trim();
       if (message) lines.push(message);
       continue;
     }
 
-    if (resp.kind === "StderrOutput") {
-      const text = ((resp.text as string) ?? "").trim();
+    const stderr = parseResponseWithSchema(stderrOutputResponseSchema, resp);
+    if (stderr) {
+      const text = stderr.text.trim();
       if (text) {
         lines.push(text);
         if (/\berror\b/i.test(text)) {
