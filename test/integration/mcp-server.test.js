@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 
 import { createMcpHarness } from "../helpers/mcp-harness.js";
+import { navigationQueryMatrix } from "../fixtures/agda/navigation-query-matrix.js";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../..");
 const FIXTURES = resolve(import.meta.dirname, "../fixtures/agda");
@@ -134,6 +135,82 @@ it("MCP harness can call compute, infer, and context tools on expression fixture
     const goalCompute = await callToolStep(harness, "goal compute", "agda_compute", { goalId, expr: "add zero m" });
     assert.equal(goalCompute.isError, false);
     assert.ok(goalCompute.structuredContent.data.normalForm.includes("m"));
+  });
+});
+
+it("MCP harness can call navigation and query tools on navigation fixtures", async () => {
+  const scenario = navigationQueryMatrix[0];
+
+  await withHarness(async (harness) => {
+    const load = await callToolStep(harness, "load navigation fixture", "agda_load", { file: scenario.file });
+    assert.equal(load.isError, false);
+    assert.ok(load.structuredContent.data.goalIds.length >= 1);
+
+    const topLevelWhy = await callToolStep(
+      harness,
+      "top-level why_in_scope",
+      "agda_why_in_scope",
+      { name: scenario.topLevel.whyInScope[0].name },
+    );
+    assert.equal(topLevelWhy.isError, false);
+    assert.ok(topLevelWhy.structuredContent.data.explanation.includes("flip"));
+
+    const topLevelModule = await callToolStep(
+      harness,
+      "top-level show_module",
+      "agda_show_module",
+      { moduleName: scenario.topLevel.showModule[0].moduleName },
+    );
+    assert.equal(topLevelModule.isError, false);
+    assert.ok(topLevelModule.structuredContent.data.contents.includes("flip"));
+
+    const goalId = load.structuredContent.data.goalIds[0];
+
+    const goalWhy = await callToolStep(
+      harness,
+      "goal why_in_scope",
+      "agda_why_in_scope",
+      { goalId, name: scenario.goal.whyInScope[0].name },
+    );
+    assert.equal(goalWhy.isError, false);
+    assert.ok(goalWhy.structuredContent.data.explanation.includes("n"));
+
+    const goalModule = await callToolStep(
+      harness,
+      "goal show_module",
+      "agda_show_module",
+      { goalId, moduleName: scenario.goal.showModule[0].moduleName },
+    );
+    assert.equal(goalModule.isError, false);
+    assert.ok(goalModule.structuredContent.data.contents.includes("Flag"));
+
+    const elaborate = await callToolStep(
+      harness,
+      "goal elaborate",
+      "agda_elaborate",
+      { goalId, expr: scenario.goal.elaborate[0].expr },
+    );
+    assert.equal(elaborate.isError, false);
+    assert.ok(elaborate.content[0].text.includes("add"));
+
+    const helper = await callToolStep(
+      harness,
+      "goal helper_function",
+      "agda_helper_function",
+      { goalId, expr: scenario.goal.helperFunction[0].expr },
+    );
+    assert.equal(helper.isError, false);
+    assert.ok(helper.content[0].text.includes("Nat"));
+  });
+});
+
+it("MCP harness can call agda_show_version", async () => {
+  await withHarness(async (harness) => {
+    const version = await callToolStep(harness, "show version", "agda_show_version", {});
+
+    assert.equal(version.isError, false);
+    assert.equal(version.structuredContent.tool, "agda_show_version");
+    assert.match(version.structuredContent.data.version, /[0-9]+\.[0-9]+/);
   });
 });
 
