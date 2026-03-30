@@ -23,6 +23,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
+    "mcp:local": "node scripts/mcp-local-client.mjs",
     "pretest": "npm run build",
     "test": "node --test test/*.test.js test/**/*.test.js",
     "test:examples": "node --test test/examples/*.test.js test/examples/**/*.test.js",
