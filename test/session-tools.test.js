@@ -53,6 +53,7 @@ test("session and reporting registrations populate manifest entries", () => {
     const loadEntry = getToolManifestEntry("agda_load");
     const statusEntry = getToolManifestEntry("agda_session_status");
     const catalogEntry = getToolManifestEntry("agda_tools_catalog");
+    const parityEntry = getToolManifestEntry("agda_protocol_parity");
     const bugEntry = getToolManifestEntry("agda_bug_report_bundle");
 
     assert.ok(loadEntry);
@@ -64,6 +65,10 @@ test("session and reporting registrations populate manifest entries", () => {
 
     assert.ok(catalogEntry);
     assert.equal(catalogEntry.category, "reporting");
+
+    assert.ok(parityEntry);
+    assert.equal(parityEntry.category, "reporting");
+    assert.ok(parityEntry.outputFields.includes("knownGapCount"));
 
     assert.ok(bugEntry);
     assert.ok(bugEntry.outputFields.includes("bugFingerprint"));

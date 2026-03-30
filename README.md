@@ -187,14 +187,19 @@ If you only want a quick compile check and do not need goals, use
 
 ## Protocol coverage
 
-This repository now tracks full parity with Agda's interactive IOTCM command
-constructors listed in `Agda.Interaction.Base` (verification date: 2026-03-24).
+This repository now tracks full command-inventory parity with Agda's interactive
+IOTCM command constructors listed in `Agda.Interaction.Base`
+(verification date: 2026-03-24).
 
 - The current protocol inventory lives in `src/protocol/command-registry.ts`.
-- That inventory and tests enforce that all tracked upstream commands are
-  implemented and MCP-exposed.
+- The protocol parity matrix lives in `src/protocol/parity-matrix.ts`.
+- The inventory and parity tests enforce that every tracked upstream command has
+  a parity row, but semantic parity is tracked separately from mere command
+  mapping.
 - Architecture still keeps a clean separation between transport, protocol
   decoding, and MCP presentation layers.
+
+Use `agda_protocol_parity` for the current matrix, including known gaps.
 
 At the current milestone, the server now exposes:
 

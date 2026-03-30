@@ -6,6 +6,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { AgdaSession } from "../agda-process.js";
+import {
+  getKnownProtocolGaps,
+  getProtocolParitySummary,
+  listProtocolParityMatrix,
+} from "../protocol/parity-matrix.js";
 import { getServerVersion } from "../server-version.js";
 import { buildBugReportBundle } from "../reporting/bug-report.js";
 import { listToolManifest } from "./manifest.js";
@@ -28,6 +33,31 @@ const manifestEntrySchema = z.object({
 const toolsCatalogDataSchema = z.object({
   serverVersion: z.string(),
   tools: z.array(manifestEntrySchema),
+});
+
+const protocolParityEntrySchema = z.object({
+  agdaCommand: z.string(),
+  category: z.string(),
+  exposure: z.string(),
+  implemented: z.boolean(),
+  mcpTool: z.string().optional(),
+  parityStatus: z.enum(["verified", "mapped", "known-gap"]),
+  coverageLevel: z.enum(["none", "unit", "integration", "mcp"]),
+  notes: z.string().optional(),
+  issues: z.array(z.number()),
+});
+
+const protocolParityDataSchema = z.object({
+  serverVersion: z.string(),
+  source: z.string(),
+  verifiedAt: z.string(),
+  upstreamCommandCount: z.number(),
+  trackedCommandCount: z.number(),
+  verifiedCount: z.number(),
+  mappedCount: z.number(),
+  knownGapCount: z.number(),
+  knownGaps: z.array(protocolParityEntrySchema),
+  entries: z.array(protocolParityEntrySchema),
 });
 
 const bugDiagnosticSchema = z.object({
@@ -127,6 +157,66 @@ export function register(
           data: {
             serverVersion,
             tools,
+          },
+        }),
+        output,
+      );
+    },
+  });
+
+  registerStructuredTool({
+    server,
+    name: "agda_protocol_parity",
+    description: "Return the current Agda IOTCM parity matrix, distinguishing mapped commands from semantically verified commands and known gaps.",
+    category: "reporting",
+    outputDataSchema: protocolParityDataSchema,
+    callback: async () => {
+      const summary = getProtocolParitySummary();
+      const entries = listProtocolParityMatrix();
+      const knownGaps = getKnownProtocolGaps();
+      const serverVersion = getServerVersion();
+
+      let output = "## Protocol parity\n\n";
+      output += `**Server version:** ${serverVersion}\n`;
+      output += `**Upstream source:** ${summary.source}\n`;
+      output += `**Verified at:** ${summary.verifiedAt}\n`;
+      output += `**Tracked commands:** ${summary.trackedCommandCount}/${summary.upstreamCommandCount}\n`;
+      output += `**Verified:** ${summary.verifiedCount}\n`;
+      output += `**Mapped:** ${summary.mappedCount}\n`;
+      output += `**Known gaps:** ${summary.knownGapCount}\n\n`;
+
+      if (knownGaps.length > 0) {
+        output += "### Known gaps\n";
+        for (const entry of knownGaps) {
+          const issueText = entry.issues.length > 0
+            ? ` (#${entry.issues.join(", #")})`
+            : "";
+          output += `- \`${entry.agdaCommand}\` -> \`${entry.mcpTool ?? "(no MCP tool)"}\`${issueText}\n`;
+        }
+        output += "\n";
+      }
+
+      output += "### Matrix\n";
+      for (const entry of entries) {
+        output += `- \`${entry.agdaCommand}\` [${entry.parityStatus}/${entry.coverageLevel}]`;
+        if (entry.mcpTool) {
+          output += ` -> \`${entry.mcpTool}\``;
+        }
+        if (entry.notes) {
+          output += ` — ${entry.notes}`;
+        }
+        output += "\n";
+      }
+
+      return makeToolResult(
+        okEnvelope({
+          tool: "agda_protocol_parity",
+          summary: `Tracked ${summary.trackedCommandCount} Agda commands with ${summary.knownGapCount} known gaps.`,
+          data: {
+            serverVersion,
+            ...summary,
+            knownGaps,
+            entries,
           },
         }),
         output,

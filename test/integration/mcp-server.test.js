@@ -60,6 +60,18 @@ test("MCP harness can call agda_tools_catalog", async () => {
   });
 });
 
+test("MCP harness can call agda_protocol_parity", async () => {
+  await withHarness(async (harness) => {
+    const result = await harness.callTool("agda_protocol_parity", {});
+
+    assert.equal(result.isError, false);
+    assert.equal(result.structuredContent.tool, "agda_protocol_parity");
+    assert.ok(Array.isArray(result.structuredContent.data.entries));
+    assert.ok(result.structuredContent.data.entries.some((entry) => entry.agdaCommand === "Cmd_load"));
+    assert.ok(result.structuredContent.data.knownGaps.some((entry) => entry.agdaCommand === "Cmd_search_about_toplevel"));
+  });
+});
+
 it("MCP harness can load a fixture and inspect a goal through the built server", async () => {
   await withHarness(async (harness) => {
     const load = await harness.callTool("agda_load", { file: "WithHoles.agda" });
