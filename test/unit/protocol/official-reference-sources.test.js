@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   getOfficialReferenceCachePolicy,
   listOfficialReferenceSources,
-} from "../../../dist/protocol/official-reference.js";
+} from "../../../tooling/protocol/official-reference.js";
 
 test("official reference sources are unique and official", () => {
   const sources = listOfficialReferenceSources();

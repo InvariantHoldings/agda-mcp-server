@@ -7,8 +7,8 @@ import {
   extractOfficialReferenceSummary,
   pageIdFromUrl,
   prettifyOfficialHtml,
-} from "../dist/protocol/official-reference-cache.js";
-import { getOfficialReferenceCachePolicy, listOfficialReferenceSources } from "../dist/protocol/official-reference.js";
+} from "../tooling/protocol/official-reference-cache.js";
+import { getOfficialReferenceCachePolicy, listOfficialReferenceSources } from "../tooling/protocol/official-reference.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");

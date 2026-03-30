@@ -6,7 +6,7 @@ import {
   collectOfficialReferenceLinks,
   extractOfficialReferenceSummary,
   prettifyOfficialHtml,
-} from "../../../dist/protocol/official-reference-cache.js";
+} from "../../../tooling/protocol/official-reference-cache.js";
 
 const policy = {
   maxDepth: 1,

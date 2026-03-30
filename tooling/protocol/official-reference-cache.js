@@ -23,18 +23,7 @@ export const officialReferenceSourcesSchema = z.object({
   sources: z.array(officialReferenceSourceSchema),
 });
 
-export type OfficialReferenceCachePolicy = z.infer<typeof officialReferenceCachePolicySchema>;
-export type OfficialReferenceSource = z.infer<typeof officialReferenceSourceSchema>;
-export type OfficialReferenceSources = z.infer<typeof officialReferenceSourcesSchema>;
-
-export type OfficialReferenceSummary = {
-  pageId: string;
-  title: string;
-  headings: string[];
-  text: string;
-};
-
-const COMMON_HTML_ENTITIES: Record<string, string> = {
+const COMMON_HTML_ENTITIES = {
   amp: "&",
   apos: "'",
   gt: ">",
@@ -43,7 +32,7 @@ const COMMON_HTML_ENTITIES: Record<string, string> = {
   quot: "\"",
 };
 
-export function pageIdFromUrl(rawUrl: string): string {
+export function pageIdFromUrl(rawUrl) {
   const url = new URL(rawUrl);
   const pathname = url.pathname.replace(/\/+$/, "");
   const withoutExtension = pathname.replace(/\.html?$/i, "");
@@ -52,20 +41,20 @@ export function pageIdFromUrl(rawUrl: string): string {
   return base.replace(/[\/\\]+/g, "__");
 }
 
-export function decodeHtmlEntities(input: string): string {
-  return input.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (_match, entity) => {
+export function decodeHtmlEntities(input) {
+  return input.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, entity) => {
     if (entity[0] === "#") {
       const isHex = entity[1]?.toLowerCase() === "x";
       const rawValue = isHex ? entity.slice(2) : entity.slice(1);
       const codePoint = Number.parseInt(rawValue, isHex ? 16 : 10);
-      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : _match;
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
     }
 
-    return COMMON_HTML_ENTITIES[entity] ?? _match;
+    return COMMON_HTML_ENTITIES[entity] ?? match;
   });
 }
 
-function stripMarkupToText(html: string): string {
+function stripMarkupToText(html) {
   return html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "\n")
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "\n")
@@ -75,7 +64,7 @@ function stripMarkupToText(html: string): string {
     .replace(/<[^>]+>/g, " ");
 }
 
-export function extractOfficialReferenceSummary(rawUrl: string, html: string): OfficialReferenceSummary {
+export function extractOfficialReferenceSummary(rawUrl, html) {
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const headings = Array.from(
     html.matchAll(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi),
@@ -96,7 +85,7 @@ export function extractOfficialReferenceSummary(rawUrl: string, html: string): O
   };
 }
 
-export function prettifyOfficialHtml(html: string): string {
+export function prettifyOfficialHtml(html) {
   return html
     .replace(/\r\n/g, "\n")
     .replace(/>\s*</g, ">\n<")
@@ -105,13 +94,9 @@ export function prettifyOfficialHtml(html: string): string {
     .concat("\n");
 }
 
-export function collectOfficialReferenceLinks(
-  baseUrl: string,
-  html: string,
-  policy: OfficialReferenceCachePolicy,
-): string[] {
+export function collectOfficialReferenceLinks(baseUrl, html, policy) {
   const base = new URL(baseUrl);
-  const links = new Set<string>();
+  const links = new Set();
   const allowedOrigins = new Set(policy.allowedOrigins);
 
   for (const match of html.matchAll(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi)) {
@@ -120,7 +105,7 @@ export function collectOfficialReferenceLinks(
       continue;
     }
 
-    let resolved: URL;
+    let resolved;
     try {
       resolved = new URL(href, base);
     } catch {

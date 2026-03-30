@@ -5,7 +5,7 @@ import {
   listOfficialDisplayInfoKinds,
   listOfficialGoalDisplayInfoKinds,
   listOfficialResponseKinds,
-} from "../../../dist/protocol/official-response-inventory.js";
+} from "../../../tooling/protocol/official-response-inventory.js";
 import {
   allGoalsWarningsInfoSchema,
   autoInfoSchema,

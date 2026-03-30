@@ -150,7 +150,7 @@ This writes into `.local-reference/agda-protocol/` with:
 
 Committed source metadata for that cache lives in:
 
-- `src/protocol/data/official-reference-sources.json`
+- `tooling/protocol/data/official-reference-sources.json`
 
 Use the local cache as the day-to-day protocol SSOT when doing parity work, but
 remember the ultimate source of truth is the official Agda documentation those

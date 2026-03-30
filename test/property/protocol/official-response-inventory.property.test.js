@@ -6,7 +6,7 @@ import {
   listOfficialDisplayInfoKinds,
   listOfficialGoalDisplayInfoKinds,
   listOfficialResponseKinds,
-} from "../../../dist/protocol/official-response-inventory.js";
+} from "../../../tooling/protocol/official-response-inventory.js";
 
 test("official response inventory families are unique", async () => {
   await fc.assert(
