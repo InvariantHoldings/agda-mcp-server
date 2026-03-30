@@ -31,7 +31,6 @@ export async function typeCheckBatch(
       hasHoles: result.hasHoles,
       isComplete: result.isComplete,
       classification: result.classification,
-      raw: result.raw,
     };
   } finally {
     session.destroy();

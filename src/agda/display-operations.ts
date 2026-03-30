@@ -42,7 +42,6 @@ async function runControl(
     checked: decoded.state.checked,
     showImplicitArguments: decoded.state.showImplicitArguments,
     showIrrelevantArguments: decoded.state.showIrrelevantArguments,
-    raw: responses,
   };
 
   result.output = formatDisplayState(result);

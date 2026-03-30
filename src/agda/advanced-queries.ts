@@ -33,10 +33,10 @@ import {
 /** Show current constraints. */
 export async function constraints(
   ctx: AgdaCommandContext,
-): Promise<{ text: string; raw: AgdaResponse[] }> {
+): Promise<{ text: string }> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(ctx.iotcm("Cmd_constraints"));
-  return { text: decodeDisplayTextResponses(responses).text, raw: responses };
+  return { text: decodeDisplayTextResponses(responses).text };
 }
 
 /** Solve all goals that have unique solutions. */
@@ -45,7 +45,7 @@ export async function solveAll(ctx: AgdaCommandContext): Promise<SolveResult> {
   const responses = await ctx.sendCommand(
     ctx.iotcm(topLevelCommand("Cmd_solveAll", "Normalised")),
   );
-  return { solutions: decodeSolveResponses(responses), raw: responses };
+  return { solutions: decodeSolveResponses(responses) };
 }
 
 /** Solve one goal that has a unique solution. */
@@ -57,7 +57,7 @@ export async function solveOne(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_solveOne", "Normalised", goalId, quoted(""))),
   );
-  return { solutions: decodeSolveResponses(responses), raw: responses };
+  return { solutions: decodeSolveResponses(responses) };
 }
 
 /** Explain why a name is in scope at a given goal. */
@@ -70,7 +70,7 @@ export async function whyInScope(
   const responses = await ctx.sendCommand(
     ctx.iotcm(goalCommand("Cmd_why_in_scope", goalId, quoted(name))),
   );
-  return { explanation: decodeDisplayTextResponses(responses).text, raw: responses };
+  return { explanation: decodeDisplayTextResponses(responses).text };
 }
 
 /** Explain why a name is in scope at the top level. */
@@ -82,7 +82,7 @@ export async function whyInScopeTopLevel(
   const responses = await ctx.sendCommand(
     ctx.iotcm(topLevelCommand("Cmd_why_in_scope_toplevel", quoted(name))),
   );
-  return { explanation: decodeDisplayTextResponses(responses).text, raw: responses };
+  return { explanation: decodeDisplayTextResponses(responses).text };
 }
 
 /** Elaborate an expression in a goal context. */
@@ -95,7 +95,7 @@ export async function elaborate(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_elaborate_give", "Normalised", goalId, quoted(expr))),
   );
-  return { elaboration: decodeGiveLikeResponse(responses), raw: responses };
+  return { elaboration: decodeGiveLikeResponse(responses) };
 }
 
 /** Generate a helper function type for an expression in a goal context. */
@@ -108,7 +108,7 @@ export async function helperFunction(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_helper_function", "Normalised", goalId, quoted(expr))),
   );
-  return { helperType: decodeDisplayTextResponses(responses).text, raw: responses };
+  return { helperType: decodeDisplayTextResponses(responses).text };
 }
 
 /** Show the contents of a module in a goal context. */
@@ -121,7 +121,7 @@ export async function showModuleContents(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_show_module_contents", "Normalised", goalId, quoted(moduleName))),
   );
-  return { contents: decodeDisplayTextResponses(responses).text, raw: responses };
+  return { contents: decodeDisplayTextResponses(responses).text };
 }
 
 /** Show the contents of a module at the top level. */
@@ -133,7 +133,7 @@ export async function showModuleContentsTopLevel(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeTopLevelCommand("Cmd_show_module_contents_toplevel", "Normalised", quoted(moduleName))),
   );
-  return { contents: decodeDisplayTextResponses(responses).text, raw: responses };
+  return { contents: decodeDisplayTextResponses(responses).text };
 }
 
 /** Search for definitions matching a query string. */
@@ -153,7 +153,6 @@ export async function searchAbout(
     query: decoded.query || query,
     results: decoded.results,
     text,
-    raw: responses,
   };
 }
 
@@ -163,7 +162,7 @@ export async function autoAll(ctx: AgdaCommandContext): Promise<AutoResult> {
   const responses = await ctx.sendCommand(
     ctx.iotcm(topLevelCommand("Cmd_autoAll", "Normalised")),
   );
-  return { solution: decodeGiveLikeResponse(responses), raw: responses };
+  return { solution: decodeGiveLikeResponse(responses) };
 }
 
 /** Show the running Agda version. */
@@ -177,7 +176,7 @@ export async function showVersion(
       position: "first",
     }).text ||
     decodeDisplayTextResponses(responses).text;
-  return { version, raw: responses };
+  return { version };
 }
 
 /** Get the goal type, context, and inferred type of an expression. */
@@ -195,6 +194,5 @@ export async function goalTypeContextInfer(
     goalType: decoded.goalType,
     context: decoded.context,
     inferredType: decoded.inferredType,
-    raw: responses,
   };
 }

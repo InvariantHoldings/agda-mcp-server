@@ -58,18 +58,21 @@ test(
 
     try {
       const compileResult = await session.compile(backendExpr, noHolePath, []);
-      assert.ok(Array.isArray(compileResult.raw));
+      assert.equal(typeof compileResult.success, "boolean");
+      assert.equal(typeof compileResult.output, "string");
 
       const loadResult = await session.load(holePath);
-      assert.ok(loadResult.raw.length >= 0);
+      assert.equal(loadResult.success, true);
 
       const topResult = await session.backendTop(backendExpr, "ping");
-      assert.ok(Array.isArray(topResult.raw));
+      assert.equal(typeof topResult.success, "boolean");
+      assert.equal(typeof topResult.output, "string");
 
       if (loadResult.goals.length > 0) {
         const goalId = loadResult.goals[0].goalId;
         const holeResult = await session.backendHole(goalId, "", backendExpr, "ping-hole");
-        assert.ok(Array.isArray(holeResult.raw));
+        assert.equal(typeof holeResult.success, "boolean");
+        assert.equal(typeof holeResult.output, "string");
       }
     } finally {
       session.destroy();

@@ -21,7 +21,6 @@ async function runBackendCommand(
   return {
     success: decoded.success,
     output: decoded.output || fallbackOutput,
-    raw: responses,
   };
 }
 

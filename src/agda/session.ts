@@ -390,7 +390,6 @@ export class AgdaSession {
     allGoalsText: "", invisibleGoalCount: 0,
     goalCount: 0, hasHoles: false, isComplete: false,
     classification: "type-error",
-    raw: [],
   });
 
   private mergeGoals(
@@ -494,7 +493,6 @@ export class AgdaSession {
       hasHoles,
       isComplete,
       classification,
-      raw: responses,
     };
   }
 
@@ -528,7 +526,6 @@ export class AgdaSession {
       hasHoles: parsed.hasHoles,
       isComplete: parsed.isComplete,
       classification: parsed.classification,
-      raw: responses,
     };
   }
 

@@ -34,7 +34,7 @@ export async function goalTypeContext(
     ctx.iotcm(modeGoalCommand("Cmd_goal_type_context", "Normalised", goalId, quoted(""))),
   );
   const decoded = decodeGoalDisplayResponses(responses);
-  return { goalId, type: decoded.goalType, context: decoded.context, raw: responses };
+  return { goalId, type: decoded.goalType, context: decoded.context };
 }
 
 /** Get only the current goal type for a specific goal. */
@@ -47,7 +47,7 @@ export async function goalType(
     ctx.iotcm(modeGoalCommand("Cmd_goal_type", "Normalised", goalId, quoted(""))),
   );
   const decoded = decodeGoalDisplayResponses(responses);
-  return { goalId, type: decoded.goalType, raw: responses };
+  return { goalId, type: decoded.goalType };
 }
 
 /** Get only the local context for a specific goal. */
@@ -60,7 +60,7 @@ export async function context(
     ctx.iotcm(modeGoalCommand("Cmd_context", "Normalised", goalId, quoted(""))),
   );
   const decoded = decodeGoalDisplayResponses(responses);
-  return { goalId, context: decoded.context, raw: responses };
+  return { goalId, context: decoded.context };
 }
 
 /** Get goal, context, and checked elaborated term for an expression in a goal. */
@@ -78,7 +78,6 @@ export async function goalTypeContextCheck(
     goalType: decoded.goalType,
     context: decoded.context,
     checkedExpr: decoded.checkedExpr,
-    raw: responses,
   };
 }
 
@@ -92,7 +91,7 @@ export async function caseSplit(
   const responses = await ctx.sendCommand(
     ctx.iotcm(goalCommand("Cmd_make_case", goalId, quoted(variable))),
   );
-  return { clauses: decodeCaseSplitResponses(responses), raw: responses };
+  return { clauses: decodeCaseSplitResponses(responses) };
 }
 
 /** Give (fill) a goal with an expression. */
@@ -105,7 +104,7 @@ export async function give(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_give", "WithoutForce", goalId, quoted(expr))),
   );
-  return { result: decodeGiveLikeResponse(responses), raw: responses };
+  return { result: decodeGiveLikeResponse(responses) };
 }
 
 /** Refine a goal — apply a function and create subgoals. */
@@ -118,7 +117,7 @@ export async function refine(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_refine_or_intro", "True", goalId, quoted(expr))),
   );
-  return { result: decodeGiveLikeResponse(responses), raw: responses };
+  return { result: decodeGiveLikeResponse(responses) };
 }
 
 /** Refine a goal using Agda's exact Cmd_refine command. */
@@ -131,7 +130,7 @@ export async function refineExact(
   const responses = await ctx.sendCommand(
     ctx.iotcm(goalCommand("Cmd_refine", goalId, quoted(expr))),
   );
-  return { result: decodeGiveLikeResponse(responses), raw: responses };
+  return { result: decodeGiveLikeResponse(responses) };
 }
 
 /** Introduce a lambda or constructor using Agda's exact Cmd_intro command. */
@@ -144,7 +143,7 @@ export async function intro(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_intro", "True", goalId, quoted(expr))),
   );
-  return { result: decodeGiveLikeResponse(responses), raw: responses };
+  return { result: decodeGiveLikeResponse(responses) };
 }
 
 /** Auto-solve a single goal. */
@@ -156,13 +155,13 @@ export async function autoOne(
   const responses = await ctx.sendCommand(
     ctx.iotcm(goalCommand("Cmd_autoOne", goalId, quoted(""))),
   );
-  return { solution: decodeGiveLikeResponse(responses), raw: responses };
+  return { solution: decodeGiveLikeResponse(responses) };
 }
 
 /** List all unsolved metavariables (goals). */
 export async function metas(
   ctx: AgdaCommandContext,
-): Promise<{ goals: AgdaGoal[]; text: string; raw: AgdaResponse[] }> {
+): Promise<{ goals: AgdaGoal[]; text: string }> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(ctx.iotcm("Cmd_metas"));
 
@@ -181,5 +180,5 @@ export async function metas(
     goals.push(...ctx.goalIds.map((id) => ({ goalId: id, type: "?", context: [] as string[] })));
   }
 
-  return { goals, text, raw: responses };
+  return { goals, text };
 }

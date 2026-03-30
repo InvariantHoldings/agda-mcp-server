@@ -23,7 +23,7 @@ export async function compute(
     ctx.iotcm(modeGoalCommand("Cmd_compute", "DefaultCompute", goalId, quoted(expr))),
   );
   const decoded = decodeExpressionDisplayResponses(responses);
-  return { normalForm: decoded.normalForm, raw: responses };
+  return { normalForm: decoded.normalForm };
 }
 
 /**
@@ -40,7 +40,6 @@ export async function computeTopLevel(
   const decoded = decodeExpressionDisplayResponses(responses);
   return {
     normalForm: decoded.normalForm,
-    raw: responses,
   };
 }
 
@@ -57,7 +56,7 @@ export async function infer(
     ctx.iotcm(modeGoalCommand("Cmd_infer", "Normalised", goalId, quoted(expr))),
   );
   const decoded = decodeExpressionDisplayResponses(responses);
-  return { type: decoded.inferredType, raw: responses };
+  return { type: decoded.inferredType };
 }
 
 /**
@@ -74,6 +73,5 @@ export async function inferTopLevel(
   const decoded = decodeExpressionDisplayResponses(responses);
   return {
     type: decoded.inferredType,
-    raw: responses,
   };
 }

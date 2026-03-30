@@ -26,14 +26,6 @@ function assertIncludesAll(text, expected, message) {
   }
 }
 
-function rawPreview(raw) {
-  const serialized = JSON.stringify(raw, null, 2);
-  if (serialized.length <= 2000) {
-    return serialized;
-  }
-  return `${serialized.slice(0, 2000)}\n...<truncated>`;
-}
-
 for (const scenario of expressionQueryMatrix) {
   it(`expression parity: ${scenario.file}`, async () => {
     const session = new AgdaSession(FIXTURES);
@@ -107,7 +99,7 @@ for (const scenario of expressionQueryMatrix) {
         for (const fragment of scenario.goal.goalTypeContextInfer.inferredTypeIncludes) {
           assert.ok(
             result.inferredType.includes(fragment),
-            `inferred type for ${scenario.file}: missing ${fragment} in ${result.inferredType}\nraw:\n${rawPreview(result.raw)}`,
+            `inferred type for ${scenario.file}: missing ${fragment} in ${result.inferredType}`,
           );
         }
         if (scenario.goal.goalTypeContextInfer.contextIncludes) {
@@ -132,7 +124,7 @@ for (const scenario of expressionQueryMatrix) {
         for (const fragment of scenario.goal.goalTypeContextCheck.checkedExprIncludes) {
           assert.ok(
             result.checkedExpr.includes(fragment),
-            `checked expr for ${scenario.file}: missing ${fragment} in ${result.checkedExpr}\nraw:\n${rawPreview(result.raw)}`,
+            `checked expr for ${scenario.file}: missing ${fragment} in ${result.checkedExpr}`,
           );
         }
         if (scenario.goal.goalTypeContextCheck.contextIncludes) {

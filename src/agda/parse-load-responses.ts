@@ -17,7 +17,7 @@ import {
   decodeStderrOutputs,
 } from "../protocol/responses/process-output.js";
 
-export interface ParsedLoadResult extends Omit<LoadResult, "raw"> {
+export interface ParsedLoadResult extends LoadResult {
   /** Goal IDs for atomic assignment to session state. */
   goalIds: number[];
 }

@@ -59,76 +59,62 @@ export interface LoadResult {
   hasHoles: boolean;
   isComplete: boolean;
   classification: string;
-  raw: AgdaResponse[];
 }
 
 export interface GoalInfo {
   goalId: number;
   type: string;
   context: string[];
-  raw: AgdaResponse[];
 }
 
 export interface GoalTypeResult {
   goalId: number;
   type: string;
-  raw: AgdaResponse[];
 }
 
 export interface ContextResult {
   goalId: number;
   context: string[];
-  raw: AgdaResponse[];
 }
 
 export interface CaseSplitResult {
   clauses: string[];
-  raw: AgdaResponse[];
 }
 
 export interface GiveResult {
   result: string;
-  raw: AgdaResponse[];
 }
 
 export interface ComputeResult {
   normalForm: string;
-  raw: AgdaResponse[];
 }
 
 export interface InferResult {
   type: string;
-  raw: AgdaResponse[];
 }
 
 export interface AutoResult {
   solution: string;
-  raw: AgdaResponse[];
 }
 
 export interface SolveResult {
   solutions: string[];
-  raw: AgdaResponse[];
 }
 
 export interface WhyInScopeResult {
   explanation: string;
-  raw: AgdaResponse[];
 }
 
 export interface ElaborateResult {
   elaboration: string;
-  raw: AgdaResponse[];
 }
 
 export interface HelperFunctionResult {
   helperType: string;
-  raw: AgdaResponse[];
 }
 
 export interface ModuleContentsResult {
   contents: string;
-  raw: AgdaResponse[];
 }
 
 export interface SearchAboutResult {
@@ -138,26 +124,22 @@ export interface SearchAboutResult {
     term: string;
   }>;
   text: string;
-  raw: AgdaResponse[];
 }
 
 export interface GoalTypeContextInferResult {
   goalType: string;
   context: string[];
   inferredType: string;
-  raw: AgdaResponse[];
 }
 
 export interface GoalTypeContextCheckResult {
   goalType: string;
   context: string[];
   checkedExpr: string;
-  raw: AgdaResponse[];
 }
 
 export interface ShowVersionResult {
   version: string;
-  raw: AgdaResponse[];
 }
 
 export interface DisplayControlResult {
@@ -165,13 +147,11 @@ export interface DisplayControlResult {
   checked: boolean | null;
   showImplicitArguments: boolean | null;
   showIrrelevantArguments: boolean | null;
-  raw: AgdaResponse[];
 }
 
 export interface BackendCommandResult {
   success: boolean;
   output: string;
-  raw: AgdaResponse[];
 }
 
 export interface TypeCheckResult {
@@ -184,5 +164,4 @@ export interface TypeCheckResult {
   hasHoles: boolean;
   isComplete: boolean;
   classification: string;
-  raw: AgdaResponse[];
 }
