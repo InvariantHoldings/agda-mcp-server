@@ -95,6 +95,29 @@ it("MCP harness preserves goal access for imported-context holes", async () => {
   });
 });
 
+it("MCP harness reports strict-load failure for ordinary holes", async () => {
+  await withHarness(async (harness) => {
+    const result = await harness.callTool("agda_load_no_metas", { file: "WithHoles.agda" });
+
+    assert.equal(result.isError, false);
+    assert.equal(result.structuredContent.tool, "agda_load_no_metas");
+    assert.equal(result.structuredContent.classification, "type-error");
+    assert.equal(result.structuredContent.data.success, false);
+    assert.equal(result.structuredContent.data.isComplete, false);
+  });
+});
+
+it("MCP harness reports strict-load failure for invisible-hole fixtures", async () => {
+  await withHarness(async (harness) => {
+    const result = await harness.callTool("agda_load_no_metas", { file: "WithAbstract.agda" });
+
+    assert.equal(result.isError, false);
+    assert.equal(result.structuredContent.tool, "agda_load_no_metas");
+    assert.equal(result.structuredContent.classification, "type-error");
+    assert.equal(result.structuredContent.data.success, false);
+  });
+});
+
 it("MCP harness reports complete success for a clean fixture", async () => {
   await withHarness(async (harness) => {
     const load = await harness.callTool("agda_load", { file: "Clean.agda" });

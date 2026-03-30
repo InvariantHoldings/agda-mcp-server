@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 *.tsbuildinfo
+test/fixtures/agda/_build/
 
 # Test and coverage output
 coverage/

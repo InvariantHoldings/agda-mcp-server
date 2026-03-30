@@ -3,7 +3,10 @@ export function incompleteFixture(name, overrides = {}) {
     name,
     expectedSuccess: true,
     expectedClassification: "ok-with-holes",
-    minGoalCount: 1,
+    minVisibleGoalCount: 1,
+    minHoleCount: 1,
+    expectedStrictSuccess: false,
+    expectedStrictClassification: "type-error",
     ...overrides,
   };
 }
@@ -13,7 +16,10 @@ export function completeFixture(name, overrides = {}) {
     name,
     expectedSuccess: true,
     expectedClassification: "ok-complete",
-    minGoalCount: 0,
+    minVisibleGoalCount: 0,
+    minHoleCount: 0,
+    expectedStrictSuccess: true,
+    expectedStrictClassification: "ok-complete",
     ...overrides,
   };
 }
@@ -23,14 +29,17 @@ export function errorFixture(name, overrides = {}) {
     name,
     expectedSuccess: false,
     expectedClassification: "type-error",
-    minGoalCount: 0,
+    minVisibleGoalCount: 0,
+    minHoleCount: 0,
+    expectedStrictSuccess: false,
+    expectedStrictClassification: "type-error",
     ...overrides,
   };
 }
 
 export const fixtureMatrix = [
   incompleteFixture("WithHoles.agda"),
-  incompleteFixture("MultipleHoles.agda", { minGoalCount: 2 }),
+  incompleteFixture("MultipleHoles.agda", { minVisibleGoalCount: 2, minHoleCount: 2 }),
   incompleteFixture("PatternMatch.agda"),
   incompleteFixture("TrulyUnsolvable.agda"),
   incompleteFixture("HoleLambda.agda"),
@@ -56,6 +65,8 @@ export const fixtureMatrix = [
   completeFixture("MultiFileImports.agda"),
   completeFixture("TransitiveImport.agda"),
   completeFixture("SearchAboutTargets.agda"),
+  incompleteFixture("InferredMeta.agda", { minVisibleGoalCount: 0 }),
 
   errorFixture("ImportedTypeError.agda"),
+  incompleteFixture("WithAbstract.agda", { minVisibleGoalCount: 0 }),
 ];

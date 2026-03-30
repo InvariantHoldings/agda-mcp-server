@@ -1,10 +1,10 @@
--- Agda successfully infers _ as Nat from context
+-- This remains an interaction meta under live Agda in our test setup.
 module InferredMeta where
 
 data Nat : Set where
   zero : Nat
   suc  : Nat → Nat
 
--- _ is inferred as Nat from the return type and f's domain
+-- The expected fixture behavior is "typechecks with holes", not "fully inferred".
 inferred : (Nat → Nat) → Nat
 inferred f = f _

@@ -30,6 +30,15 @@ async function loadFixture(name) {
   }
 }
 
+async function loadFixtureNoMetas(name) {
+  const session = new AgdaSession(FIXTURES);
+  try {
+    return await session.loadNoMetas(name);
+  } finally {
+    session.destroy();
+  }
+}
+
 // ── Clean files ──────────────────────────────────────────
 
 it("Clean.agda: success, 0 goals", async () => {
@@ -63,6 +72,16 @@ it("WithHoles.agda: success, >=1 goal with valid ID", async () => {
   assert.equal(r.success, true);
   assert.ok(r.goals.length >= 1, `expected >=1 goal, got ${r.goals.length}`);
   assert.ok(r.goals[0].goalId >= 0);
+});
+
+it("WithHoles.agda: agda_load succeeds but agda_load_no_metas fails", async () => {
+  const load = await loadFixture("WithHoles.agda");
+  const strict = await loadFixtureNoMetas("WithHoles.agda");
+
+  assert.equal(load.success, true);
+  assert.equal(load.classification, "ok-with-holes");
+  assert.equal(strict.success, false);
+  assert.equal(strict.classification, "type-error");
 });
 
 it("MultipleHoles.agda: >=2 goals with distinct IDs", async () => {
@@ -140,10 +159,10 @@ it("TrulyUnsolvable.agda: hole that auto cannot solve", async () => {
   }
 });
 
-it("InferredMeta.agda: Agda resolves _ from context", async () => {
+it("InferredMeta.agda: typechecks but still exposes an interaction meta", async () => {
   const r = await loadFixture("InferredMeta.agda");
-  assert.equal(r.success, true, "Agda infers the meta from context");
-  assert.equal(r.goals.length, 0);
+  assert.equal(r.success, true);
+  assert.ok(r.goalCount >= 1, `expected unresolved meta, got ${r.goalCount} goals`);
 });
 
 it("MixedGoalsErrors.agda: success=false with errors", async () => {
@@ -210,6 +229,28 @@ it("WithAbstract.agda: detects invisible goals in abstract block", async () => {
   // Abstract holes may or may not show as visible goals depending on Agda version
   // but the file should load
   assert.equal(typeof r.invisibleGoalCount, "number");
+});
+
+it("WithAbstract.agda: invisible holes fail strict load", async () => {
+  const load = await loadFixture("WithAbstract.agda");
+  const strict = await loadFixtureNoMetas("WithAbstract.agda");
+
+  assert.equal(load.success, true);
+  assert.equal(strict.success, false);
+  assert.ok(
+    strict.errors.length >= 1 || strict.invisibleGoalCount > 0 || strict.goalCount > 0,
+    "strict load should expose unresolved metas or holes",
+  );
+});
+
+it("InferredMeta.agda: unresolved inferred-style metas fail strict load", async () => {
+  const load = await loadFixture("InferredMeta.agda");
+  const strict = await loadFixtureNoMetas("InferredMeta.agda");
+
+  assert.equal(load.success, true);
+  assert.ok(load.goalCount >= 1);
+  assert.equal(strict.success, false);
+  assert.equal(strict.classification, "type-error");
 });
 
 // ── Universe levels ──────────────────────────────────────

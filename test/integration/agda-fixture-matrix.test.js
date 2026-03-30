@@ -24,7 +24,7 @@ const it = agdaAvailable && process.env.RUN_AGDA_INTEGRATION === "1"
 function selectedPhases() {
   const rawPhases = process.env.AGDA_FIXTURE_PHASES?.trim();
   if (!rawPhases) {
-    return new Set(["load", "batch", "goal"]);
+    return new Set(["load", "strict", "batch", "goal"]);
   }
 
   return new Set(
@@ -67,6 +67,10 @@ async function timedStep(t, label, run) {
   return result;
 }
 
+function holeCount(result) {
+  return result.goalCount + result.invisibleGoalCount;
+}
+
 test("fixture matrix entries reference existing files", () => {
   for (const fixture of fixtureMatrix) {
     assert.equal(
@@ -90,8 +94,12 @@ for (const fixture of selectedFixtures()) {
         assert.equal(load.success, fixture.expectedSuccess);
         assert.equal(load.classification, fixture.expectedClassification);
         assert.ok(
-          load.goalCount >= fixture.minGoalCount,
-          `expected >=${fixture.minGoalCount} goals for ${fixture.name}, got ${load.goalCount}`,
+          load.goalCount >= fixture.minVisibleGoalCount,
+          `expected >=${fixture.minVisibleGoalCount} visible goals for ${fixture.name}, got ${load.goalCount}`,
+        );
+        assert.ok(
+          holeCount(load) >= fixture.minHoleCount,
+          `expected >=${fixture.minHoleCount} total holes for ${fixture.name}, got ${holeCount(load)}`,
         );
       }
 
@@ -100,9 +108,19 @@ for (const fixture of selectedFixtures()) {
         assert.equal(batch.success, fixture.expectedSuccess);
         assert.equal(batch.classification, fixture.expectedClassification);
         assert.ok(
-          batch.goalCount >= fixture.minGoalCount,
-          `expected >=${fixture.minGoalCount} batch goals for ${fixture.name}, got ${batch.goalCount}`,
+          batch.goalCount >= fixture.minVisibleGoalCount,
+          `expected >=${fixture.minVisibleGoalCount} batch visible goals for ${fixture.name}, got ${batch.goalCount}`,
         );
+        assert.ok(
+          holeCount(batch) >= fixture.minHoleCount,
+          `expected >=${fixture.minHoleCount} batch total holes for ${fixture.name}, got ${holeCount(batch)}`,
+        );
+      }
+
+      if (phases.has("strict")) {
+        const strict = await timedStep(t, "strict", () => session.loadNoMetas(fixture.name));
+        assert.equal(strict.success, fixture.expectedStrictSuccess);
+        assert.equal(strict.classification, fixture.expectedStrictClassification);
       }
 
       if (phases.has("goal") && load.goalCount > 0) {
