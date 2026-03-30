@@ -41,3 +41,21 @@ test("protocol parity matrix records search_about as verified", () => {
   assert.ok(searchAbout.issues.includes(7));
   assert.ok(!knownGaps.some((entry) => entry.agdaCommand === "Cmd_search_about_toplevel"));
 });
+
+test("protocol parity matrix records expression and context commands as verified", () => {
+  const entries = listProtocolParityMatrix();
+
+  for (const agdaCommand of [
+    "Cmd_context",
+    "Cmd_infer",
+    "Cmd_infer_toplevel",
+    "Cmd_compute",
+    "Cmd_compute_toplevel",
+    "Cmd_goal_type_context_infer",
+    "Cmd_goal_type_context_check",
+  ]) {
+    const entry = entries.find((candidate) => candidate.agdaCommand === agdaCommand);
+    assert.ok(entry, `missing parity entry for ${agdaCommand}`);
+    assert.equal(entry.parityStatus, "verified");
+  }
+});

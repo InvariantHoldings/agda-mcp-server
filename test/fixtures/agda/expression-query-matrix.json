@@ -1,0 +1,36 @@
+[
+  {
+    "file": "ExpressionQueries.agda",
+    "topLevelCompute": {
+      "expr": "add (suc zero) (suc zero)",
+      "expectedIncludes": ["suc", "zero"]
+    },
+    "topLevelInfer": {
+      "expr": "add",
+      "expectedIncludes": ["Nat", "->"]
+    },
+    "goal": {
+      "contextIncludes": ["n : Nat", "m : Nat"],
+      "compute": {
+        "expr": "add zero m",
+        "expectedIncludes": ["m"]
+      },
+      "infer": {
+        "expr": "add n m",
+        "expectedIncludes": ["Nat"]
+      },
+      "goalTypeContextInfer": {
+        "expr": "n",
+        "goalTypeIncludes": ["Nat"],
+        "inferredTypeIncludes": ["Nat"],
+        "contextIncludes": ["n : Nat", "m : Nat"]
+      },
+      "goalTypeContextCheck": {
+        "expr": "zero",
+        "goalTypeIncludes": ["Nat"],
+        "checkedExprIncludes": ["zero"],
+        "contextIncludes": ["n : Nat", "m : Nat"]
+      }
+    }
+  }
+]

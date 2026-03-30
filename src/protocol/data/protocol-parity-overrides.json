@@ -47,6 +47,48 @@
     "notes": "Covered by live analysis/case-split fixture path.",
     "issues": []
   },
+  "Cmd_context": {
+    "parityStatus": "verified",
+    "coverageLevel": "mcp",
+    "notes": "Covered by expression-parity fixtures and MCP harness context queries.",
+    "issues": []
+  },
+  "Cmd_infer": {
+    "parityStatus": "verified",
+    "coverageLevel": "mcp",
+    "notes": "Covered by expression-display decoder tests, expression-parity fixtures, and MCP harness infer queries.",
+    "issues": []
+  },
+  "Cmd_infer_toplevel": {
+    "parityStatus": "verified",
+    "coverageLevel": "mcp",
+    "notes": "Covered by expression-display decoder tests, expression-parity fixtures, and MCP harness infer queries.",
+    "issues": []
+  },
+  "Cmd_goal_type_context_infer": {
+    "parityStatus": "verified",
+    "coverageLevel": "integration",
+    "notes": "Covered by expression-parity fixtures for goal/context/type inference.",
+    "issues": []
+  },
+  "Cmd_goal_type_context_check": {
+    "parityStatus": "verified",
+    "coverageLevel": "integration",
+    "notes": "Covered by expression-parity fixtures for goal/context/type checking.",
+    "issues": []
+  },
+  "Cmd_compute": {
+    "parityStatus": "verified",
+    "coverageLevel": "mcp",
+    "notes": "Covered by expression-display decoder tests, expression-parity fixtures, and MCP harness compute queries.",
+    "issues": []
+  },
+  "Cmd_compute_toplevel": {
+    "parityStatus": "verified",
+    "coverageLevel": "mcp",
+    "notes": "Covered by expression-display decoder tests, expression-parity fixtures, and MCP harness compute queries.",
+    "issues": []
+  },
   "Cmd_compile": {
     "parityStatus": "mapped",
     "coverageLevel": "integration",

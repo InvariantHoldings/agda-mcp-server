@@ -87,6 +87,39 @@ it("MCP harness can call agda_search_about after loading a fixture", async () =>
   });
 });
 
+it("MCP harness can call compute, infer, and context tools on expression fixtures", async () => {
+  await withHarness(async (harness) => {
+    const load = await harness.callTool("agda_load", { file: "ExpressionQueries.agda" });
+    assert.equal(load.isError, false);
+    assert.equal(load.structuredContent.classification, "ok-with-holes");
+    assert.ok(load.structuredContent.data.goalIds.length >= 1);
+
+    const topInfer = await harness.callTool("agda_infer", { expr: "add" });
+    assert.equal(topInfer.isError, false);
+    assert.equal(topInfer.structuredContent.tool, "agda_infer");
+    assert.ok(topInfer.structuredContent.data.inferredType.includes("Nat"));
+
+    const topCompute = await harness.callTool("agda_compute", { expr: "add (suc zero) (suc zero)" });
+    assert.equal(topCompute.isError, false);
+    assert.equal(topCompute.structuredContent.tool, "agda_compute");
+    assert.ok(topCompute.structuredContent.data.normalForm.includes("suc"));
+
+    const goalId = load.structuredContent.data.goalIds[0];
+    const context = await harness.callTool("agda_context", { goalId });
+    assert.equal(context.isError, false);
+    assert.ok(context.content[0].text.includes("n : Nat"));
+    assert.ok(context.content[0].text.includes("m : Nat"));
+
+    const goalInfer = await harness.callTool("agda_infer", { goalId, expr: "add n m" });
+    assert.equal(goalInfer.isError, false);
+    assert.ok(goalInfer.structuredContent.data.inferredType.includes("Nat"));
+
+    const goalCompute = await harness.callTool("agda_compute", { goalId, expr: "add zero m" });
+    assert.equal(goalCompute.isError, false);
+    assert.ok(goalCompute.structuredContent.data.normalForm.includes("m"));
+  });
+});
+
 it("MCP harness surfaces search_about results from nested public modules", async () => {
   await withHarness(async (harness) => {
     const load = await harness.callTool("agda_load", { file: "SearchAboutNestedModules.agda" });

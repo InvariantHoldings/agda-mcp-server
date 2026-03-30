@@ -290,6 +290,15 @@
     "expectedStrictClassification": "type-error"
   },
   {
+    "name": "ExpressionQueries.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
     "name": "WithAbstract.agda",
     "expectedSuccess": true,
     "expectedClassification": "ok-with-holes",

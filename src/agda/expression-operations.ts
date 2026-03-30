@@ -9,6 +9,7 @@ import type {
 } from "./types.js";
 import { firstDisplayMessage, lastDisplayMessage } from "./response-helpers.js";
 import { modeGoalCommand, modeTopLevelCommand, quoted } from "../protocol/command-builder.js";
+import { decodeExpressionDisplayResponses } from "../protocol/responses/expression-display.js";
 
 /**
  * Normalize (evaluate) a term in a goal context.
@@ -22,7 +23,9 @@ export async function compute(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_compute", "DefaultCompute", goalId, quoted(expr))),
   );
+  const decoded = decodeExpressionDisplayResponses(responses);
   const normalForm =
+    decoded.normalForm ||
     firstDisplayMessage(responses, ["NormalForm", "GoalSpecific"]) ||
     lastDisplayMessage(responses);
   return { normalForm, raw: responses };
@@ -39,7 +42,11 @@ export async function computeTopLevel(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeTopLevelCommand("Cmd_compute_toplevel", "DefaultCompute", quoted(expr))),
   );
-  return { normalForm: lastDisplayMessage(responses), raw: responses };
+  const decoded = decodeExpressionDisplayResponses(responses);
+  return {
+    normalForm: decoded.normalForm || lastDisplayMessage(responses),
+    raw: responses,
+  };
 }
 
 /**
@@ -54,7 +61,9 @@ export async function infer(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_infer", "Normalised", goalId, quoted(expr))),
   );
+  const decoded = decodeExpressionDisplayResponses(responses);
   const type =
+    decoded.inferredType ||
     firstDisplayMessage(responses, ["InferredType", "GoalSpecific"]) ||
     lastDisplayMessage(responses);
   return { type, raw: responses };
@@ -71,5 +80,9 @@ export async function inferTopLevel(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeTopLevelCommand("Cmd_infer_toplevel", "Normalised", quoted(expr))),
   );
-  return { type: lastDisplayMessage(responses), raw: responses };
+  const decoded = decodeExpressionDisplayResponses(responses);
+  return {
+    type: decoded.inferredType || lastDisplayMessage(responses),
+    raw: responses,
+  };
 }
