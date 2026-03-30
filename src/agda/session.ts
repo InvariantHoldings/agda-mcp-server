@@ -37,6 +37,7 @@ import {
   tailResponsePreview,
   trailingResponseDelay,
 } from "../session/command-completion.js";
+import { parseAgdaStdoutLine } from "../session/stdout-line.js";
 import {
   createLibraryRegistration,
   type LibraryRegistration,
@@ -188,16 +189,26 @@ export class AgdaSession {
     let newlineIdx: number;
 
     while ((newlineIdx = this.buffer.indexOf("\n", start)) !== -1) {
-      const line = this.buffer.slice(start, newlineIdx).trim();
+      const line = this.buffer.slice(start, newlineIdx);
       start = newlineIdx + 1;
 
-      if (!line) continue;
+      const parsedLine = parseAgdaStdoutLine(line);
+      if (parsedLine.noticeText) {
+        if (this.collecting) {
+          this.responseQueue.push({
+            kind: "StderrOutput",
+            text: parsedLine.noticeText,
+          });
+          this.lastResponseAt = Date.now();
+          this.lastResponseKind = "StderrOutput";
+        }
+        this.bumpIdleCompletionTimer();
+      }
 
-      // Agda may emit non-JSON preamble lines (e.g. "Agda2>")
-      if (!line.startsWith("{") && !line.startsWith("[")) continue;
+      if (!parsedLine.jsonText) continue;
 
       try {
-        const resp: AgdaResponse = normalizeAgdaResponse(JSON.parse(line));
+        const resp: AgdaResponse = normalizeAgdaResponse(JSON.parse(parsedLine.jsonText));
         if (this.collecting) {
           this.responseQueue.push(resp);
           this.lastResponseAt = Date.now();
@@ -206,14 +217,11 @@ export class AgdaSession {
 
         this.bumpIdleCompletionTimer();
 
-        // A Status response signals definitive command completion
+        // Record status transitions for diagnostics, but do not complete
+        // immediately. Live Agda often emits Status/ClearRunningInfo before
+        // the final DisplayInfo / InteractionPoints payloads for a command.
         if (resp.kind === "Status") {
           this.sawStatusDone = true;
-          this.emitter.emit("done");
-        }
-        // ClearRunningInfo can also signal end of response
-        if (resp.kind === "ClearRunningInfo") {
-          setTimeout(() => this.emitter.emit("done"), 100);
         }
       } catch {
         logger.trace("Skipped unparseable line", { line: line.slice(0, 120) });
@@ -313,6 +321,8 @@ export class AgdaSession {
         if (waitingSentry) {
           clearInterval(waitingSentry);
         }
+        this.emitter.removeListener("done", onDone);
+        this.emitter.removeListener("error", onError);
         resolveCmd([...this.responseQueue]);
       }, timeoutMs);
 

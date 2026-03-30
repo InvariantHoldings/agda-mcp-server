@@ -56,12 +56,12 @@ export function summarizeResponseKinds(
   return counts;
 }
 
-function previewText(value: string | undefined, limit = 120): string | undefined {
-  if (!value) {
+function previewText(value: unknown, limit = 120): string | undefined {
+  if (value === undefined || value === null) {
     return undefined;
   }
 
-  const compact = value.replace(/\s+/g, " ").trim();
+  const compact = String(value).replace(/\s+/g, " ").trim();
   if (compact.length <= limit) {
     return compact;
   }
