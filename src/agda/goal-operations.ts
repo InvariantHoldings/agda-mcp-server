@@ -20,6 +20,7 @@ import {
 } from "./response-helpers.js";
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
 import { decodeGiveLikeResponse } from "../protocol/responses/proof-actions.js";
+import { decodeGoalExpressionDisplayResponses } from "../protocol/responses/goal-expression-display.js";
 import { goalCommand, modeGoalCommand, quoted } from "../protocol/command-builder.js";
 
 /** Get the type and local context for a specific goal. */
@@ -71,11 +72,11 @@ export async function goalTypeContextCheck(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_goal_type_context_check", "Normalised", goalId, quoted(expr))),
   );
-  const decoded = decodeGoalDisplayResponses(responses);
+  const decoded = decodeGoalExpressionDisplayResponses(responses);
   return {
     goalType: decoded.goalType,
     context: decoded.context,
-    checkedExpr: decoded.auxiliary,
+    checkedExpr: decoded.checkedExpr,
     raw: responses,
   };
 }

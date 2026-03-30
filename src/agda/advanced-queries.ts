@@ -24,6 +24,7 @@ import {
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
 import { decodeSolveResponses } from "../protocol/responses/proof-actions.js";
 import { decodeSearchAboutResponses } from "../protocol/responses/search-about.js";
+import { decodeGoalExpressionDisplayResponses } from "../protocol/responses/goal-expression-display.js";
 import {
   command,
   goalCommand,
@@ -201,11 +202,11 @@ export async function goalTypeContextInfer(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_goal_type_context_infer", "Normalised", goalId, quoted(expr))),
   );
-  const decoded = decodeGoalDisplayResponses(responses);
+  const decoded = decodeGoalExpressionDisplayResponses(responses);
   return {
     goalType: decoded.goalType,
     context: decoded.context,
-    inferredType: decoded.auxiliary,
+    inferredType: decoded.inferredType,
     raw: responses,
   };
 }
