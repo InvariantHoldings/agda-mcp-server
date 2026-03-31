@@ -18,7 +18,7 @@ test("fingerprintBugReport is stable for equivalent semantic payloads", () => {
       { severity: "error", code: "goal-missing", message: "No goals returned" },
     ],
     toolPayload: { goalCount: 0, goalIds: [] },
-    serverVersion: "0.6.1",
+    serverVersion: "0.6.2",
   });
 
   const second = fingerprintBugReport({
@@ -32,7 +32,7 @@ test("fingerprintBugReport is stable for equivalent semantic payloads", () => {
       { message: "No goals returned", severity: "error", code: "goal-missing" },
     ],
     toolPayload: { goalIds: [], goalCount: 0 },
-    serverVersion: "0.6.1",
+    serverVersion: "0.6.2",
   });
 
   assert.equal(first, second);
@@ -49,7 +49,7 @@ test("buildBugReportBundle includes deterministic fingerprint and defaults", () 
     reproduction: ["run agda_load", "call agda_goal_type"],
     diagnostics: [],
     evidence: { goalCount: 0 },
-    serverVersion: "0.6.1",
+    serverVersion: "0.6.2",
   });
 
   assert.equal(bundle.kind, "update");
