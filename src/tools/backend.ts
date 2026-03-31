@@ -7,7 +7,11 @@ import { z } from "zod";
 import { resolve, relative } from "node:path";
 import { existsSync } from "node:fs";
 import { AgdaSession } from "../agda-process.js";
-import { registerGoalTextTool, registerTextTool } from "./tool-helpers.js";
+import {
+  missingPathToolError,
+  registerGoalTextTool,
+  registerTextTool,
+} from "./tool-helpers.js";
 
 function backendExpressionHelp(): string {
   return "Backend constructor expression (for example: GHC, GHCNoMain, LaTeX, QuickLaTeX, or OtherBackend \"JS\").";
@@ -31,7 +35,9 @@ export function register(
     },
     callback: async ({ backend, file, args }: { backend: string; file: string; args?: string[] }) => {
       const filePath = resolve(repoRoot, file);
-      if (!existsSync(filePath)) return `File not found: ${filePath}`;
+      if (!existsSync(filePath)) {
+        throw missingPathToolError("file", filePath);
+      }
       const result = await session.backend.compile(backend, filePath, args);
       return [
         "## Compile", "",

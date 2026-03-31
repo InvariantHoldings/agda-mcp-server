@@ -7,7 +7,11 @@ import { z } from "zod";
 import { resolve, relative } from "node:path";
 import { existsSync } from "node:fs";
 import { AgdaSession } from "../agda-process.js";
-import { registerGoalTextTool, registerTextTool } from "./tool-helpers.js";
+import {
+  missingPathToolError,
+  registerGoalTextTool,
+  registerTextTool,
+} from "./tool-helpers.js";
 
 export function register(
   server: McpServer,
@@ -23,7 +27,9 @@ export function register(
     inputSchema: { file: z.string().describe("Path to the .agda file (relative to repo root or absolute)") },
     callback: async ({ file }: { file: string }) => {
       const filePath = resolve(repoRoot, file);
-      if (!existsSync(filePath)) return `File not found: ${filePath}`;
+      if (!existsSync(filePath)) {
+        throw missingPathToolError("file", filePath);
+      }
       const result = await session.display.loadHighlightingInfo(filePath);
       return `## Highlighting info loaded\n\nFile: ${relative(repoRoot, filePath)}\n\n${result.output}\n`;
     },
@@ -41,7 +47,9 @@ export function register(
     },
     callback: async ({ file, remove }: { file: string; remove?: boolean }) => {
       const filePath = resolve(repoRoot, file);
-      if (!existsSync(filePath)) return `File not found: ${filePath}`;
+      if (!existsSync(filePath)) {
+        throw missingPathToolError("file", filePath);
+      }
       const result = await session.display.tokenHighlighting(filePath, Boolean(remove));
       return `## Token highlighting\n\nFile: ${relative(repoRoot, filePath)}\n\n${result.output}\n`;
     },

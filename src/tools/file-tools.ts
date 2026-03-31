@@ -8,7 +8,7 @@ import { z } from "zod";
 import { resolve, relative } from "node:path";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import type { AgdaSession } from "../agda-process.js";
-import { registerTextTool } from "./tool-helpers.js";
+import { missingPathToolError, ToolInvocationError, registerTextTool } from "./tool-helpers.js";
 
 export function register(
   server: McpServer,
@@ -23,7 +23,9 @@ export function register(
     inputSchema: { file: z.string().describe("Path to the .agda file") },
     callback: async ({ file }: { file: string }) => {
       const filePath = resolve(repoRoot, file);
-      if (!existsSync(filePath)) return `File not found: ${filePath}`;
+      if (!existsSync(filePath)) {
+        throw missingPathToolError("file", filePath);
+      }
       const fileContent = readFileSync(filePath, "utf-8");
       const numbered = fileContent
         .split("\n")
@@ -42,7 +44,24 @@ export function register(
     callback: async ({ tier }: { tier: string }) => {
       const tierDir = resolve(repoRoot, "agda", tier);
       if (!existsSync(tierDir)) {
-        return `Tier directory not found: agda/${tier}\nAvailable: MathLib, Foundation, Kernel, Research, Extensions, TrustedCompute`;
+        throw new ToolInvocationError({
+          message: `Tier directory not found: agda/${tier}`,
+          classification: "not-found",
+          diagnostics: [
+            {
+              severity: "error",
+              message: `Tier directory not found: agda/${tier}`,
+              code: "not-found",
+            },
+            {
+              severity: "info",
+              message: "Available tiers: MathLib, Foundation, Kernel, Research, Extensions, TrustedCompute",
+              code: "available-tiers",
+            },
+          ],
+          data: { tier },
+          text: `Tier directory not found: agda/${tier}\nAvailable: MathLib, Foundation, Kernel, Research, Extensions, TrustedCompute`,
+        });
       }
       const modules: string[] = [];
       function walk(dir: string): void {
@@ -66,7 +85,9 @@ export function register(
     inputSchema: { file: z.string().describe("Path to the .agda file") },
     callback: async ({ file }: { file: string }) => {
       const filePath = resolve(repoRoot, file);
-      if (!existsSync(filePath)) return `File not found: ${filePath}`;
+      if (!existsSync(filePath)) {
+        throw missingPathToolError("file", filePath);
+      }
       const fileContent = readFileSync(filePath, "utf-8");
       const lines = fileContent.split("\n");
       const postulates: string[] = [];
@@ -101,7 +122,9 @@ export function register(
     },
     callback: async ({ query, tier }: { query: string; tier?: string }) => {
       const searchRoot = tier ? resolve(repoRoot, "agda", tier) : resolve(repoRoot, "agda");
-      if (!existsSync(searchRoot)) return `Directory not found: ${searchRoot}`;
+      if (!existsSync(searchRoot)) {
+        throw missingPathToolError("directory", searchRoot);
+      }
       const matches: Array<{ file: string; line: number; text: string }> = [];
       function searchDir(dir: string): void {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {

@@ -28,6 +28,28 @@ export interface ToolEnvelope<T extends Record<string, unknown>> {
   provenance?: Record<string, unknown>;
 }
 
+export class ToolInvocationError<T extends Record<string, unknown> = Record<string, unknown>> extends Error {
+  classification: string;
+  diagnostics: ToolDiagnostic[];
+  data: T;
+  text?: string;
+
+  constructor(args: {
+    message: string;
+    classification?: string;
+    diagnostics?: ToolDiagnostic[];
+    data?: T;
+    text?: string;
+  }) {
+    super(args.message);
+    this.name = "ToolInvocationError";
+    this.classification = args.classification ?? "tool-error";
+    this.diagnostics = args.diagnostics ?? [errorDiagnostic(args.message)];
+    this.data = args.data ?? ({} as T);
+    this.text = args.text;
+  }
+}
+
 type ToolResult<T extends Record<string, unknown> = Record<string, unknown>> = {
   content: { type: "text"; text: string }[];
   structuredContent: ToolEnvelope<T>;
@@ -123,6 +145,16 @@ export function errorEnvelope<T extends Record<string, unknown>>(args: {
   };
 }
 
+export function missingPathToolError(kind: "file" | "directory", path: string): ToolInvocationError<{ path: string }> {
+  const message = `${kind === "file" ? "File" : "Directory"} not found: ${path}`;
+  return new ToolInvocationError({
+    message,
+    classification: "not-found",
+    diagnostics: [errorDiagnostic(message, "not-found")],
+    data: { path },
+  });
+}
+
 /** Return a staleness warning if the loaded file was modified on disk. */
 export function stalenessWarning(session: AgdaSession): string {
   if (session.isFileStale()) {
@@ -173,7 +205,7 @@ export function validateGoalId(
         tool,
         summary: `Invalid goal ID ?${goalId}. Available goals: ${available}`,
         classification: "invalid-goal",
-        data: { goalId, availableGoalIds: ids },
+        data: { text: "", goalId, availableGoalIds: ids },
         diagnostics: [
           errorDiagnostic(
             `Invalid goal ID ?${goalId}. Available goals: ${available}`,
@@ -192,6 +224,33 @@ export function validateGoalId(
   return null;
 }
 
+function toToolInvocationError(err: unknown): ToolInvocationError {
+  if (err instanceof ToolInvocationError) {
+    return err;
+  }
+
+  const message = err instanceof Error ? err.message : String(err);
+  return new ToolInvocationError({ message: `Error: ${message}` });
+}
+
+function makeTextToolErrorResult(
+  tool: string,
+  err: unknown,
+  defaultData: Record<string, unknown>,
+): ToolResult<Record<string, unknown>> {
+  const toolError = toToolInvocationError(err);
+  return makeToolResult(
+    errorEnvelope({
+      tool,
+      summary: toolError.message,
+      classification: toolError.classification,
+      data: { ...defaultData, ...toolError.data },
+      diagnostics: toolError.diagnostics,
+    }),
+    toolError.text ?? toolError.message,
+  );
+}
+
 /**
  * Wrap a session tool handler with staleness warning and error handling.
  * The handler returns a complete structured envelope.
@@ -206,16 +265,7 @@ export function wrapStructuredHandler<T extends Record<string, unknown>>(
       const result = await handler();
       return makeToolResult(result.envelope, result.text);
     } catch (err) {
-      const message = `Error: ${err instanceof Error ? err.message : String(err)}`;
-      return makeToolResult(
-        errorEnvelope({
-          tool,
-          summary: message,
-          classification: "tool-error",
-          data: {},
-        }),
-        message,
-      );
+      return makeTextToolErrorResult(tool, err, {});
     }
   };
 }
@@ -260,16 +310,7 @@ export function wrapStructuredGoalHandler<A extends Record<string, unknown>, T e
       const result = await handler(args);
       return makeToolResult(result.envelope, result.text);
     } catch (err) {
-      const message = `Error: ${err instanceof Error ? err.message : String(err)}`;
-      return makeToolResult(
-        errorEnvelope({
-          tool,
-          summary: message,
-          classification: "tool-error",
-          data: { goalId: args.goalId },
-        }),
-        message,
-      );
+      return makeTextToolErrorResult(tool, err, { text: "", goalId: args.goalId });
     }
   };
 }
@@ -355,15 +396,19 @@ export function registerTextTool(args: {
     annotations: args.annotations,
     outputDataSchema,
     callback: async (cbArgs: any) => {
-      const textValue = await args.callback(cbArgs);
-      return makeToolResult(
-        okEnvelope({
-          tool: args.name,
-          summary: textValue,
-          data: { text: textValue },
-        }),
-        textValue,
-      );
+      try {
+        const textValue = await args.callback(cbArgs);
+        return makeToolResult(
+          okEnvelope({
+            tool: args.name,
+            summary: textValue,
+            data: { text: textValue },
+          }),
+          textValue,
+        );
+      } catch (err) {
+        return makeTextToolErrorResult(args.name, err, { text: "" });
+      }
     },
   });
 }
@@ -413,16 +458,10 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
           textValue,
         );
       } catch (err) {
-        const message = `Error: ${err instanceof Error ? err.message : String(err)}`;
-        return makeToolResult(
-          errorEnvelope({
-            tool: args.name,
-            summary: message,
-            classification: "tool-error",
-            data: { goalId: cbArgs.goalId },
-          }),
-          message,
-        );
+        return makeTextToolErrorResult(args.name, err, {
+          text: "",
+          goalId: cbArgs.goalId,
+        });
       }
     },
   });
