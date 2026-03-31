@@ -162,7 +162,9 @@ it("TrulyUnsolvable.agda: hole that auto cannot solve", async () => {
 it("InferredMeta.agda: typechecks but still exposes an interaction meta", async () => {
   const r = await loadFixture("InferredMeta.agda");
   assert.equal(r.success, true);
-  assert.ok(r.goalCount >= 1, `expected unresolved meta, got ${r.goalCount} goals`);
+  assert.equal(r.classification, "ok-with-holes");
+  assert.equal(r.goalCount, 0);
+  assert.ok(r.invisibleGoalCount >= 1, `expected invisible unresolved meta, got ${r.invisibleGoalCount}`);
 });
 
 it("MixedGoalsErrors.agda: success=false with errors", async () => {
@@ -248,7 +250,9 @@ it("InferredMeta.agda: unresolved inferred-style metas fail strict load", async 
   const strict = await loadFixtureNoMetas("InferredMeta.agda");
 
   assert.equal(load.success, true);
-  assert.ok(load.goalCount >= 1);
+  assert.equal(load.classification, "ok-with-holes");
+  assert.equal(load.goalCount, 0);
+  assert.ok(load.invisibleGoalCount >= 1);
   assert.equal(strict.success, false);
   assert.equal(strict.classification, "type-error");
 });

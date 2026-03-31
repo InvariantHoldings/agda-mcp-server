@@ -5,12 +5,12 @@
       "whyInScope": [
         {
           "name": "flip",
-          "expectedIncludes": ["flip", "Flag"]
+          "expectedIncludes": ["flip", "NavigationQueries.Local.flip"]
         }
       ],
       "showModule": [
         {
-          "moduleName": "NavigationQueries.Local",
+          "moduleName": "Local",
           "expectedIncludes": ["Flag", "flip"]
         }
       ]
@@ -24,7 +24,7 @@
       ],
       "showModule": [
         {
-          "moduleName": "NavigationQueries.Local",
+          "moduleName": "Local",
           "expectedIncludes": ["Flag", "flip"]
         }
       ],

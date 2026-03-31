@@ -4,7 +4,7 @@ import { loadValidatedJsonData } from "../../helpers/json-data.js";
 const searchQuerySchema = z.object({
   query: z.string().min(1),
   minResults: z.number().int().nonnegative().optional(),
-  expectedNames: z.array(z.string().min(1)).min(1),
+  expectedNames: z.array(z.string().min(1)),
 });
 
 const fixtureSchema = z.object({

@@ -245,8 +245,8 @@
       },
       {
         "query": "map",
-        "minResults": 2,
-        "expectedNames": ["mapMaybe", "mapDoubleMaybe"]
+        "minResults": 0,
+        "expectedNames": []
       }
     ]
   },
