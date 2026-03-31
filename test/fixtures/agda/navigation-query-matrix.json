@@ -1,0 +1,45 @@
+[
+  {
+    "file": "NavigationQueries.agda",
+    "topLevel": {
+      "whyInScope": [
+        {
+          "name": "flip",
+          "expectedIncludes": ["flip", "NavigationQueries.Local.flip"]
+        }
+      ],
+      "showModule": [
+        {
+          "moduleName": "Local",
+          "expectedIncludes": ["Flag", "flip"]
+        }
+      ]
+    },
+    "goal": {
+      "whyInScope": [
+        {
+          "name": "n",
+          "expectedIncludes": ["n", "variable bound"]
+        }
+      ],
+      "showModule": [
+        {
+          "moduleName": "Local",
+          "expectedIncludes": ["Flag", "flip"]
+        }
+      ],
+      "elaborate": [
+        {
+          "expr": "add n m",
+          "expectedIncludes": ["add n m"]
+        }
+      ],
+      "helperFunction": [
+        {
+          "expr": "add n m",
+          "expectedIncludes": ["Nat"]
+        }
+      ]
+    }
+  }
+]

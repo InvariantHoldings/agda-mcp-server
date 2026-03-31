@@ -4,6 +4,8 @@ node_modules/
 # Build output
 dist/
 *.tsbuildinfo
+test/fixtures/agda/_build/
+test/fixtures/agda/MAlonzo/
 
 # Test and coverage output
 coverage/
@@ -15,11 +17,13 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.log
+test-output/
 
 # Environment and local config
 .env
 .env.*
 !.env.example
+.local-reference/
 
 # Editor and OS files
 .DS_Store

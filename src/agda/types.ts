@@ -16,6 +16,7 @@ export interface AgdaCommandContext {
   sendCommand(cmd: string): Promise<AgdaResponse[]>;
   iotcm(agdaCmd: string): string;
   requireFile(): string;
+  syncGoalIdsFromResponses(responses: AgdaResponse[]): void;
   readonly goalIds: number[];
 }
 
@@ -55,100 +56,91 @@ export interface LoadResult {
   goals: AgdaGoal[];
   allGoalsText: string;
   invisibleGoalCount: number;
-  raw: AgdaResponse[];
+  goalCount: number;
+  hasHoles: boolean;
+  isComplete: boolean;
+  classification: string;
 }
 
 export interface GoalInfo {
   goalId: number;
   type: string;
   context: string[];
-  raw: AgdaResponse[];
 }
 
 export interface GoalTypeResult {
   goalId: number;
   type: string;
-  raw: AgdaResponse[];
 }
 
 export interface ContextResult {
   goalId: number;
   context: string[];
-  raw: AgdaResponse[];
 }
 
 export interface CaseSplitResult {
   clauses: string[];
-  raw: AgdaResponse[];
 }
 
 export interface GiveResult {
   result: string;
-  raw: AgdaResponse[];
 }
 
 export interface ComputeResult {
   normalForm: string;
-  raw: AgdaResponse[];
 }
 
 export interface InferResult {
   type: string;
-  raw: AgdaResponse[];
 }
 
 export interface AutoResult {
   solution: string;
-  raw: AgdaResponse[];
 }
 
 export interface SolveResult {
   solutions: string[];
-  raw: AgdaResponse[];
 }
 
 export interface WhyInScopeResult {
   explanation: string;
-  raw: AgdaResponse[];
 }
 
 export interface ElaborateResult {
   elaboration: string;
-  raw: AgdaResponse[];
 }
 
 export interface HelperFunctionResult {
   helperType: string;
-  raw: AgdaResponse[];
 }
 
 export interface ModuleContentsResult {
   contents: string;
-  raw: AgdaResponse[];
 }
 
 export interface SearchAboutResult {
-  results: string;
-  raw: AgdaResponse[];
+  query: string;
+  results: Array<{
+    name: string;
+    term: string;
+  }>;
+  text: string;
 }
 
 export interface GoalTypeContextInferResult {
   goalType: string;
   context: string[];
   inferredType: string;
-  raw: AgdaResponse[];
 }
 
 export interface GoalTypeContextCheckResult {
   goalType: string;
   context: string[];
   checkedExpr: string;
-  raw: AgdaResponse[];
 }
 
 export interface ShowVersionResult {
   version: string;
-  raw: AgdaResponse[];
 }
 
 export interface DisplayControlResult {
@@ -156,13 +148,11 @@ export interface DisplayControlResult {
   checked: boolean | null;
   showImplicitArguments: boolean | null;
   showIrrelevantArguments: boolean | null;
-  raw: AgdaResponse[];
 }
 
 export interface BackendCommandResult {
   success: boolean;
   output: string;
-  raw: AgdaResponse[];
 }
 
 export interface TypeCheckResult {
@@ -170,5 +160,9 @@ export interface TypeCheckResult {
   errors: string[];
   warnings: string[];
   goals: AgdaGoal[];
-  raw: AgdaResponse[];
+  invisibleGoalCount: number;
+  goalCount: number;
+  hasHoles: boolean;
+  isComplete: boolean;
+  classification: string;
 }

@@ -1,6 +1,6 @@
 {
   "name": "agda-mcp-server",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "MCP server for interactive Agda proof development — type-checking, goal inspection, case splitting, proof search, and more via the Model Context Protocol",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,14 +20,27 @@
     "agda-mcp-server": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-json-assets.mjs",
+    "protocol:refresh:official": "npm run build && node scripts/refresh-official-protocol-references.mjs",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
+    "mcp:local": "node scripts/mcp-local-client.mjs",
     "pretest": "npm run build",
-    "test": "node --test test/*.test.js test/**/*.test.js",
-    "test:examples": "node --test test/examples/*.test.js test/examples/**/*.test.js",
-    "test:property": "node --test test/property/*.test.js test/property/**/*.test.js",
-    "test:integration": "node --test test/integration/*.test.js test/integration/**/*.test.js",
+    "test": "node --test test/examples/**/*.test.js test/unit/**/*.test.js test/property/**/*.test.js test/integration/**/*.test.js",
+    "test:all": "node scripts/test-all-continuing.mjs",
+    "test:compiler": "node scripts/test-all-continuing.mjs",
+    "test:with-sentinel": "node scripts/test-with-sentinel.mjs",
+    "test:examples": "node --test test/examples/**/*.test.js",
+    "test:property": "node --test test/property/**/*.test.js",
+    "test:integration": "node scripts/test-all-continuing.mjs",
+    "test:integration:raw": "node --test test/integration/**/*.test.js",
+    "test:integration:fixtures": "node --test test/integration/agda/agda-fixture-matrix.test.js",
+    "test:integration:mcp": "node --test test/integration/mcp/mcp-server.test.js",
+    "test:e2e": "npm run build && node --test test/integration/mcp/**/*.test.js",
+    "test:e2e:raw": "node --test test/integration/mcp/**/*.test.js",
+    "test:release:full": "node scripts/test-release-full.mjs",
+    "test:release:bugs": "node --test test/unit/agda/completeness.test.js test/unit/protocol/protocol-parity.test.js test/unit/reporting/release-bug-matrix.test.js test/unit/tools/library-registration-matrix.test.js test/integration/agda/agda-load.test.js test/integration/agda/agda-fixture-matrix.test.js test/integration/agda/agda-search-about.test.js test/integration/agda/agda-library-registration.test.js test/integration/mcp/mcp-server.test.js",
+    "test:release:bugs:sentinel": "node scripts/test-with-sentinel.mjs --label release-bugs test/unit/agda/completeness.test.js test/unit/protocol/protocol-parity.test.js test/unit/reporting/release-bug-matrix.test.js test/unit/tools/library-registration-matrix.test.js test/integration/agda/agda-load.test.js test/integration/agda/agda-fixture-matrix.test.js test/integration/agda/agda-search-about.test.js test/integration/agda/agda-library-registration.test.js test/integration/mcp/mcp-server.test.js",
     "verify": "npm test && npm pack --dry-run",
     "prepublishOnly": "npm run verify"
   },
@@ -53,7 +66,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "zod": "^3.25 || ^4.0"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",

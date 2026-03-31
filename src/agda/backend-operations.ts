@@ -6,21 +6,9 @@ import type {
   AgdaCommandContext,
   BackendCommandResult,
 } from "./types.js";
-import { escapeAgdaString } from "./response-parsing.js";
 import { decodeBackendResponses } from "../protocol/responses/backend.js";
 import { parseBackendExpression } from "./backend-expression.js";
-
-function renderStringList(values: string[]): string {
-  if (values.length === 0) {
-    return "[]";
-  }
-
-  const rendered = values
-    .map((value) => `\"${escapeAgdaString(value)}\"`)
-    .join(", ");
-
-  return `[${rendered}]`;
-}
+import { command, goalCommand, quoted, stringList } from "../protocol/command-builder.js";
 
 async function runBackendCommand(
   ctx: AgdaCommandContext,
@@ -33,7 +21,6 @@ async function runBackendCommand(
   return {
     success: decoded.success,
     output: decoded.output || fallbackOutput,
-    raw: responses,
   };
 }
 
@@ -47,7 +34,7 @@ export async function compile(
 
   return runBackendCommand(
     ctx,
-    `Cmd_compile ${parsedBackend.expression} "${escapeAgdaString(filePath)}" ${renderStringList(argv)}`,
+    command("Cmd_compile", parsedBackend.expression, quoted(filePath), stringList(argv)),
     `Compile command sent using backend ${parsedBackend.displayName}.`,
   );
 }
@@ -62,7 +49,7 @@ export async function backendTop(
 
   return runBackendCommand(
     ctx,
-    `Cmd_backend_top ${parsedBackend.expression} "${escapeAgdaString(payload)}"`,
+    command("Cmd_backend_top", parsedBackend.expression, quoted(payload)),
     `Backend top-level command sent using ${parsedBackend.displayName}.`,
   );
 }
@@ -79,7 +66,7 @@ export async function backendHole(
 
   return runBackendCommand(
     ctx,
-    `Cmd_backend_hole ${goalId} noRange "${escapeAgdaString(holeContents)}" ${parsedBackend.expression} "${escapeAgdaString(payload)}"`,
+    goalCommand("Cmd_backend_hole", goalId, quoted(holeContents), parsedBackend.expression, quoted(payload)),
     `Backend hole command sent for ?${goalId} using ${parsedBackend.displayName}.`,
   );
 }

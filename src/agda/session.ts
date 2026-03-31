@@ -26,24 +26,25 @@
 import { spawn, ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import { existsSync, statSync } from "node:fs";
-import { EventEmitter } from "node:events";
 import { deriveSessionPhase, type SessionPhase } from "../session/session-state.js";
+import {
+  configuredCommandTimeoutMs,
+} from "../session/command-completion.js";
+import { AgdaTransport } from "../session/agda-transport.js";
+import { extractGoalIdsFromResponses } from "../session/goal-state.js";
+import { createSessionNamespaces } from "../session/session-namespaces.js";
+import {
+  createLibraryRegistration,
+  type LibraryRegistration,
+} from "./library-registration.js";
 import type {
   AgdaResponse,
   AgdaGoal,
   LoadResult,
 } from "./types.js";
-// response-parsing.js is used by delegate modules, not directly here
-import { normalizeAgdaResponse } from "./normalize-response.js";
 import { parseLoadResponses } from "./parse-load-responses.js";
 import { logger } from "./logger.js";
-
-// Delegate modules
-import * as GoalOps from "./goal-operations.js";
-import * as ExprOps from "./expression-operations.js";
-import * as AdvancedOps from "./advanced-queries.js";
-import * as DisplayOps from "./display-operations.js";
-import * as BackendOps from "./backend-operations.js";
+import { command, quoted } from "../protocol/command-builder.js";
 
 // ── Binary discovery ──────────────────────────────────────────────────
 
@@ -80,16 +81,24 @@ export class AgdaSession {
   repoRoot: string;
   currentFile: string | null = null;
   goalIds: number[] = [];
-  buffer = "";
-  responseQueue: AgdaResponse[] = [];
-  emitter = new EventEmitter();
-  collecting = false;
   exiting = false;
   private lastLoadedMtime: number | null = null;
-  private sawStatusDone = false;
+  private libraryRegistration: LibraryRegistration | null = null;
+  private readonly transport = new AgdaTransport();
+  readonly goal;
+  readonly expr;
+  readonly query;
+  readonly display;
+  readonly backend;
 
   constructor(repoRoot: string) {
     this.repoRoot = repoRoot;
+    const namespaces = createSessionNamespaces(this);
+    this.goal = namespaces.goal;
+    this.expr = namespaces.expr;
+    this.query = namespaces.query;
+    this.display = namespaces.display;
+    this.backend = namespaces.backend;
   }
 
   /** Check if the loaded file has been modified on disk since last load. */
@@ -114,26 +123,19 @@ export class AgdaSession {
     this.goalIds = [];
 
     const agdaBin = findAgdaBinary(this.repoRoot);
-    this.proc = spawn(agdaBin, ["--interaction-json"], {
+    const registration = this.getLibraryRegistration();
+    this.proc = spawn(agdaBin, ["--interaction-json", ...registration.agdaArgs], {
       cwd: this.repoRoot,
-      env: { ...process.env },
+      env: { ...process.env, AGDA_DIR: registration.agdaDir },
       stdio: ["pipe", "pipe", "pipe"],
     });
 
     this.proc.stdout?.on("data", (chunk: Buffer) => {
-      this.buffer += chunk.toString();
-      this.drainBuffer();
+      this.transport.handleStdout(chunk);
     });
 
     this.proc.stderr?.on("data", (chunk: Buffer) => {
-      // Agda prints progress/warnings to stderr — capture for diagnostics
-      const text = chunk.toString();
-      if (this.collecting) {
-        this.responseQueue.push({
-          kind: "StderrOutput",
-          text,
-        });
-      }
+      this.transport.handleStderr(chunk);
     });
 
     this.proc.on("close", () => {
@@ -141,59 +143,21 @@ export class AgdaSession {
       this.currentFile = null;
       this.goalIds = [];
       this.exiting = false;
-      // Signal any waiting command
-      this.emitter.emit("done");
+      this.transport.handleProcessClose();
     });
 
     this.proc.on("error", (err) => {
-      this.emitter.emit("error", err);
+      this.transport.handleProcessError(err);
     });
 
     return this.proc;
   }
 
-  /**
-   * Parse newline-delimited JSON from the stdout buffer.
-   * Uses indexOf-based scanning instead of split() so we only
-   * process new data on each chunk — O(n) total, not O(n²).
-   */
-  private drainBuffer(): void {
-    let start = 0;
-    let newlineIdx: number;
-
-    while ((newlineIdx = this.buffer.indexOf("\n", start)) !== -1) {
-      const line = this.buffer.slice(start, newlineIdx).trim();
-      start = newlineIdx + 1;
-
-      if (!line) continue;
-
-      // Agda may emit non-JSON preamble lines (e.g. "Agda2>")
-      if (!line.startsWith("{") && !line.startsWith("[")) continue;
-
-      try {
-        const resp: AgdaResponse = normalizeAgdaResponse(JSON.parse(line));
-        if (this.collecting) {
-          this.responseQueue.push(resp);
-        }
-
-        // A Status response signals definitive command completion
-        if (resp.kind === "Status") {
-          this.sawStatusDone = true;
-          this.emitter.emit("done");
-        }
-        // ClearRunningInfo can also signal end of response
-        if (resp.kind === "ClearRunningInfo") {
-          setTimeout(() => this.emitter.emit("done"), 100);
-        }
-      } catch {
-        logger.trace("Skipped unparseable line", { line: line.slice(0, 120) });
-      }
+  private getLibraryRegistration(): LibraryRegistration {
+    if (!this.libraryRegistration) {
+      this.libraryRegistration = createLibraryRegistration(this.repoRoot);
     }
-
-    // Keep only the unparsed remainder
-    if (start > 0) {
-      this.buffer = this.buffer.slice(start);
-    }
+    return this.libraryRegistration;
   }
 
   /**
@@ -202,49 +166,10 @@ export class AgdaSession {
    */
   sendCommand(
     command: string,
-    timeoutMs = 120_000,
+    timeoutMs = configuredCommandTimeoutMs(),
   ): Promise<AgdaResponse[]> {
     const proc = this.ensureProcess();
-    logger.trace("sendCommand", { command: command.slice(0, 200), timeoutMs });
-    const startTime = Date.now();
-
-    this.responseQueue = [];
-    this.collecting = true;
-    this.sawStatusDone = false;
-
-    return new Promise<AgdaResponse[]>((resolveCmd, rejectCmd) => {
-      const timeout = setTimeout(() => {
-        logger.warn("sendCommand timed out", { command: command.slice(0, 100), timeoutMs });
-        this.collecting = false;
-        resolveCmd([...this.responseQueue]);
-      }, timeoutMs);
-
-      const onDone = () => {
-        // Short delay for trailing responses; shorter if Status (definitive) was seen
-        const trailingDelay = this.sawStatusDone ? 50 : 200;
-        setTimeout(() => {
-          clearTimeout(timeout);
-          this.collecting = false;
-          this.emitter.removeListener("done", onDone);
-          this.emitter.removeListener("error", onError);
-          const responses = [...this.responseQueue];
-          logger.trace("sendCommand done", { responses: responses.length, durationMs: Date.now() - startTime });
-          resolveCmd(responses);
-        }, trailingDelay);
-      };
-
-      const onError = (err: Error) => {
-        clearTimeout(timeout);
-        this.collecting = false;
-        this.emitter.removeListener("done", onDone);
-        rejectCmd(err);
-      };
-
-      this.emitter.on("done", onDone);
-      this.emitter.on("error", onError);
-
-      proc.stdin?.write(command + "\n");
-    });
+    return this.transport.sendCommand(proc, command, timeoutMs);
   }
 
   /**
@@ -264,6 +189,13 @@ export class AgdaSession {
     return this.currentFile;
   }
 
+  syncGoalIdsFromResponses(responses: AgdaResponse[]): void {
+    const goalIds = extractGoalIdsFromResponses(responses);
+    if (goalIds !== null) {
+      this.goalIds = goalIds;
+    }
+  }
+
   private buildIotcm(filePath: string, agdaCmd: string): string {
     return `IOTCM "${filePath}" NonInteractive Direct (${agdaCmd})`;
   }
@@ -279,8 +211,39 @@ export class AgdaSession {
 
   private static readonly NOT_FOUND_RESULT: LoadResult = Object.freeze({
     success: false, errors: [], warnings: [], goals: [],
-    allGoalsText: "", invisibleGoalCount: 0, raw: [],
+    allGoalsText: "", invisibleGoalCount: 0,
+    goalCount: 0, hasHoles: false, isComplete: false,
+    classification: "type-error",
   });
+
+  private mergeGoals(
+    primaryGoals: AgdaGoal[],
+    secondaryGoals: AgdaGoal[],
+  ): AgdaGoal[] {
+    const merged = new Map<number, AgdaGoal>();
+
+    for (const goal of primaryGoals) {
+      merged.set(goal.goalId, { ...goal, context: [...goal.context] });
+    }
+
+    for (const goal of secondaryGoals) {
+      const existing = merged.get(goal.goalId);
+      if (!existing) {
+        merged.set(goal.goalId, { ...goal, context: [...goal.context] });
+        continue;
+      }
+
+      if (existing.type === "?" && goal.type !== "?") {
+        existing.type = goal.type;
+      }
+
+      if (existing.context.length === 0 && goal.context.length > 0) {
+        existing.context = [...goal.context];
+      }
+    }
+
+    return [...merged.values()].sort((left, right) => left.goalId - right.goalId);
+  }
 
   /**
    * Load (type-check) a file. This is always the first command — it
@@ -298,19 +261,48 @@ export class AgdaSession {
     // Use buildIotcm with absPath directly — don't set currentFile yet
     // because ensureProcess() (called inside sendCommand) resets it
     const responses = await this.sendCommand(
-      this.buildIotcm(absPath, `Cmd_load "${absPath}" []`),
+      this.buildIotcm(absPath, command("Cmd_load", quoted(absPath), "[]")),
     );
     const parsed = parseLoadResponses(responses);
 
-    // Set session state atomically AFTER command completes
+    // Set session state before reconciling metas so follow-up queries can run
     this.currentFile = absPath;
     this.goalIds = parsed.goalIds;
     this.lastLoadedMtime = statSync(absPath).mtimeMs;
 
+    let goals = parsed.goals;
+    let goalIds = parsed.goalIds;
+
+    if (parsed.success) {
+      try {
+        const metas = await this.goal.metas();
+        if (metas.goals.length > 0) {
+          goals = this.mergeGoals(parsed.goals, metas.goals);
+          goalIds = goals.map((goal) => goal.goalId);
+        }
+      } catch (err) {
+        logger.warn("post-load metas reconciliation failed", {
+          file: absPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const goalCount = goals.length;
+    const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0;
+    const isComplete = parsed.success && !hasHoles;
+    const classification = parsed.success
+      ? hasHoles
+        ? "ok-with-holes"
+        : "ok-complete"
+      : "type-error";
+
+    this.goalIds = goalIds;
+
     logger.trace("load complete", {
       file: absPath,
       success: parsed.success,
-      goals: parsed.goals.length,
+      goals: goals.length,
       errors: parsed.errors.length,
     });
 
@@ -318,10 +310,13 @@ export class AgdaSession {
       success: parsed.success,
       errors: parsed.errors,
       warnings: parsed.warnings,
-      goals: parsed.goals,
+      goals,
       allGoalsText: parsed.allGoalsText,
       invisibleGoalCount: parsed.invisibleGoalCount,
-      raw: responses,
+      goalCount,
+      hasHoles,
+      isComplete,
+      classification,
     };
   }
 
@@ -335,7 +330,7 @@ export class AgdaSession {
     }
 
     const responses = await this.sendCommand(
-      this.buildIotcm(absPath, `Cmd_load_no_metas "${absPath}"`),
+      this.buildIotcm(absPath, command("Cmd_load_no_metas", quoted(absPath))),
     );
     const parsed = parseLoadResponses(responses);
 
@@ -351,69 +346,36 @@ export class AgdaSession {
       goals: parsed.goals,
       allGoalsText: parsed.allGoalsText,
       invisibleGoalCount: parsed.invisibleGoalCount,
-      raw: responses,
+      goalCount: parsed.goalCount,
+      hasHoles: parsed.hasHoles,
+      isComplete: parsed.isComplete,
+      classification: parsed.classification,
     };
   }
 
-  // ── Grouped command namespaces ──────────────────────────────────
+  async compile(
+    backendExpr: string,
+    filePath: string,
+    argv: string[] = [],
+  ) {
+    return this.backend.compile(backendExpr, filePath, argv);
+  }
 
-  /** Goal interaction commands. */
-  readonly goal = Object.freeze({
-    typeContext: (id: number) => GoalOps.goalTypeContext(this, id),
-    type: (id: number) => GoalOps.goalType(this, id),
-    context: (id: number) => GoalOps.context(this, id),
-    typeContextCheck: (id: number, expr: string) => GoalOps.goalTypeContextCheck(this, id, expr),
-    caseSplit: (id: number, variable: string) => GoalOps.caseSplit(this, id, variable),
-    give: (id: number, expr: string) => GoalOps.give(this, id, expr),
-    refine: (id: number, expr: string) => GoalOps.refine(this, id, expr),
-    refineExact: (id: number, expr: string) => GoalOps.refineExact(this, id, expr),
-    intro: (id: number, expr?: string) => GoalOps.intro(this, id, expr),
-    autoOne: (id: number) => GoalOps.autoOne(this, id),
-    metas: () => GoalOps.metas(this),
-  });
+  async backendTop(
+    backendExpr: string,
+    payload: string,
+  ) {
+    return this.backend.top(backendExpr, payload);
+  }
 
-  /** Expression-level commands. */
-  readonly expr = Object.freeze({
-    compute: (id: number, expr: string) => ExprOps.compute(this, id, expr),
-    computeTopLevel: (expr: string) => ExprOps.computeTopLevel(this, expr),
-    infer: (id: number, expr: string) => ExprOps.infer(this, id, expr),
-    inferTopLevel: (expr: string) => ExprOps.inferTopLevel(this, expr),
-  });
-
-  /** Advanced queries: constraints, scope, solve, elaborate, modules, search. */
-  readonly query = Object.freeze({
-    constraints: () => AdvancedOps.constraints(this),
-    solveAll: () => AdvancedOps.solveAll(this),
-    solveOne: (goalId: number) => AdvancedOps.solveOne(this, goalId),
-    whyInScope: (goalId: number, name: string) => AdvancedOps.whyInScope(this, goalId, name),
-    whyInScopeTopLevel: (name: string) => AdvancedOps.whyInScopeTopLevel(this, name),
-    elaborate: (goalId: number, expr: string) => AdvancedOps.elaborate(this, goalId, expr),
-    helperFunction: (goalId: number, expr: string) => AdvancedOps.helperFunction(this, goalId, expr),
-    showModuleContents: (goalId: number, moduleName: string) => AdvancedOps.showModuleContents(this, goalId, moduleName),
-    showModuleContentsTopLevel: (moduleName: string) => AdvancedOps.showModuleContentsTopLevel(this, moduleName),
-    searchAbout: (query: string) => AdvancedOps.searchAbout(this, query),
-    autoAll: () => AdvancedOps.autoAll(this),
-    showVersion: () => AdvancedOps.showVersion(this),
-    goalTypeContextInfer: (goalId: number, expr: string) => AdvancedOps.goalTypeContextInfer(this, goalId, expr),
-  });
-
-  /** Display and highlighting controls. */
-  readonly display = Object.freeze({
-    loadHighlightingInfo: (filePath: string) => DisplayOps.loadHighlightingInfo(this, filePath),
-    tokenHighlighting: (filePath: string, remove?: boolean) => DisplayOps.tokenHighlighting(this, filePath, remove),
-    highlight: (goalId: number, expr: string) => DisplayOps.highlight(this, goalId, expr),
-    showImplicitArgs: (show: boolean) => DisplayOps.showImplicitArgs(this, show),
-    toggleImplicitArgs: () => DisplayOps.toggleImplicitArgs(this),
-    showIrrelevantArgs: (show: boolean) => DisplayOps.showIrrelevantArgs(this, show),
-    toggleIrrelevantArgs: () => DisplayOps.toggleIrrelevantArgs(this),
-  });
-
-  /** Backend and compilation commands. */
-  readonly backend = Object.freeze({
-    compile: (backendExpr: string, filePath: string, argv?: string[]) => BackendOps.compile(this, backendExpr, filePath, argv ?? []),
-    top: (backendExpr: string, payload: string) => BackendOps.backendTop(this, backendExpr, payload),
-    hole: (goalId: number, holeContents: string, backendExpr: string, payload: string) => BackendOps.backendHole(this, goalId, holeContents, backendExpr, payload),
-  });
+  async backendHole(
+    goalId: number,
+    holeContents: string,
+    backendExpr: string,
+    payload: string,
+  ) {
+    return this.backend.hole(goalId, holeContents, backendExpr, payload);
+  }
 
   /** Send Cmd_abort to the running Agda process. */
   async abort(): Promise<AgdaResponse[]> {
@@ -454,12 +416,40 @@ export class AgdaSession {
       this.proc.kill();
       this.proc = null;
     }
+    this.libraryRegistration?.cleanup();
+    this.libraryRegistration = null;
     this.currentFile = null;
     this.goalIds = [];
     this.lastLoadedMtime = null;
-    this.buffer = "";
-    this.responseQueue = [];
-    this.collecting = false;
+    this.transport.destroy();
     this.exiting = false;
+  }
+
+  get buffer(): string {
+    return this.transport.buffer;
+  }
+
+  set buffer(value: string) {
+    this.transport.buffer = value;
+  }
+
+  get responseQueue(): AgdaResponse[] {
+    return this.transport.responseQueue;
+  }
+
+  set responseQueue(value: AgdaResponse[]) {
+    this.transport.responseQueue = value;
+  }
+
+  get emitter() {
+    return this.transport.emitter;
+  }
+
+  get collecting(): boolean {
+    return this.transport.collecting;
+  }
+
+  set collecting(value: boolean) {
+    this.transport.collecting = value;
   }
 }

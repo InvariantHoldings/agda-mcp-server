@@ -20,52 +20,34 @@ import { existsSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { AgdaSession } from "./agda-process.js";
+import { PROJECT_ROOT, SERVER_REPO_ROOT, resolveProjectPath } from "./repo-root.js";
+import { getServerVersion } from "./server-version.js";
 
-import { register as registerSession } from "./tools/session.js";
-import { register as registerGoalTools } from "./tools/goal-tools.js";
-import { register as registerExpressionTools } from "./tools/expression-tools.js";
-import { register as registerQueryTools } from "./tools/query-tools.js";
-import { register as registerFileTools } from "./tools/file-tools.js";
-import { register as registerScopeTools } from "./tools/scope-tools.js";
-import { register as registerDisplay } from "./tools/display.js";
-import { register as registerBackend } from "./tools/backend.js";
-import { register as registerAnalysis } from "./tools/analysis-tools.js";
+import { registerCoreTools } from "./tools/register-core-tools.js";
 
 type ExtensionRegister = (
   server: McpServer,
   session: AgdaSession,
-  repoRoot: string,
+  projectRoot: string,
 ) => void | Promise<void>;
 
-const REPO_ROOT = process.env.AGDA_MCP_ROOT ?? process.cwd();
-
 // Single shared session — Agda is stateful, one file at a time
-const session = new AgdaSession(REPO_ROOT);
+const session = new AgdaSession(PROJECT_ROOT);
 
 const server = new McpServer({
   name: "agda-mcp-server",
-  version: "0.6.1",
+  version: getServerVersion(),
 });
 
 // ── Core tools (generic Agda) ──────────────────────────────────────
-registerSession(server, session, REPO_ROOT);
-registerGoalTools(server, session, REPO_ROOT);
-registerExpressionTools(server, session, REPO_ROOT);
-registerQueryTools(server, session, REPO_ROOT);
-registerFileTools(server, session, REPO_ROOT);
-registerScopeTools(server, session, REPO_ROOT);
-registerDisplay(server, session, REPO_ROOT);
-registerBackend(server, session, REPO_ROOT);
-registerAnalysis(server, session, REPO_ROOT);
+registerCoreTools(server, session, PROJECT_ROOT);
 
 function resolveExtensionSpecifier(modulePath: string): string {
   if (modulePath.startsWith("file://")) {
     return modulePath;
   }
 
-  const filesystemPath = isAbsolute(modulePath)
-    ? modulePath
-    : resolve(REPO_ROOT, modulePath);
+  const filesystemPath = resolveProjectPath(PROJECT_ROOT, modulePath);
 
   if (existsSync(filesystemPath)) {
     return pathToFileURL(filesystemPath).href;
@@ -108,7 +90,7 @@ async function loadExternalExtensions(): Promise<void> {
     }
 
     for (const [, register] of registerFunctions) {
-      await register(server, session, REPO_ROOT);
+      await register(server, session, PROJECT_ROOT);
     }
   }
 }
@@ -133,4 +115,4 @@ process.on("SIGTERM", () => { session.destroy(); process.exit(0); });
 export { AgdaSession } from "./agda-process.js";
 export type { AgdaResponse, AgdaGoal, LoadResult, GoalInfo } from "./agda-process.js";
 export type { ExtensionRegister };
-export { server, session, REPO_ROOT };
+export { server, session, PROJECT_ROOT, SERVER_REPO_ROOT };

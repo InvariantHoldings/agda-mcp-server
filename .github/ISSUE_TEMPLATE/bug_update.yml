@@ -1,0 +1,71 @@
+name: Bug update
+description: Add new evidence, regression details, or reproduction changes to an existing bug.
+title: "update issue #: "
+labels:
+  - bug
+body:
+  - type: input
+    id: existing_issue
+    attributes:
+      label: Existing issue
+      description: Issue number being updated.
+      placeholder: "4"
+    validations:
+      required: true
+
+  - type: input
+    id: affected_tool
+    attributes:
+      label: Affected tool
+      description: The MCP tool affected by the update.
+      placeholder: agda_load
+    validations:
+      required: true
+
+  - type: input
+    id: classification
+    attributes:
+      label: Classification
+      description: Normalized semantic classification, if available.
+      placeholder: ok-with-holes
+
+  - type: input
+    id: bug_fingerprint
+    attributes:
+      label: Bug fingerprint
+      description: Fingerprint from `agda_bug_report_update_bundle`.
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: New observed behavior
+      description: What new evidence or behavior was observed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Updated reproduction steps or confirmation steps.
+      placeholder: |
+        1. Run ...
+        2. Call ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: structured_bundle
+    attributes:
+      label: Structured update bundle
+      description: Paste the JSON output from `agda_bug_report_update_bundle` when available.
+      render: json

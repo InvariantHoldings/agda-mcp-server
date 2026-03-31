@@ -26,7 +26,11 @@ export async function typeCheckBatch(
       errors: result.errors,
       warnings: result.warnings,
       goals: result.goals,
-      raw: result.raw,
+      invisibleGoalCount: result.invisibleGoalCount,
+      goalCount: result.goalCount,
+      hasHoles: result.hasHoles,
+      isComplete: result.isComplete,
+      classification: result.classification,
     };
   } finally {
     session.destroy();

@@ -1,56 +1,82 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage } from "../../agda/response-parsing.js";
+import {
+  displayInfoResponseSchema,
+  giveActionResponseSchema,
+  makeCaseResponseSchema,
+  parseResponseWithSchema,
+  solveAllResponseSchema,
+} from "../response-schemas.js";
+import { decodeDisplayInfoEvents } from "./display-info.js";
 
 export function decodeGiveLikeResponse(responses: AgdaResponse[]): string {
   let result = "";
+  const displayMessages = decodeDisplayInfoEvents(responses)
+    .map((event) => event.text)
+    .filter(Boolean);
 
   for (const resp of responses) {
-    if (resp.kind === "GiveAction") {
-      // After normalization: giveResult/result are always strings
-      const val = (resp.giveResult ?? resp.result ?? "") as string;
+    const give = parseResponseWithSchema(giveActionResponseSchema, resp);
+    if (give) {
+      const val = give.giveResult ?? give.result ?? "";
       if (val) result = val;
       continue;
     }
 
-    if (resp.kind !== "DisplayInfo") continue;
-
-    const info = resp.info as Record<string, unknown> | undefined;
-    if (!info) continue;
-
-    const msg = extractMessage(info);
-    if (msg && !result) result = msg;
+    if (parseResponseWithSchema(displayInfoResponseSchema, resp)) {
+      continue;
+    }
   }
 
-  return result;
+  return result || displayMessages.at(-1) || "";
 }
 
 export function decodeSolveResponses(responses: AgdaResponse[]): string[] {
   const solutions: string[] = [];
 
   for (const resp of responses) {
-    if (resp.kind === "SolveAll") {
-      // After normalization: solutions is always {interactionPoint, expression}[]
-      const rawSolutions = resp.solutions as Array<{ interactionPoint?: number; expression?: string }> | undefined;
-      if (Array.isArray(rawSolutions)) {
-        for (const solution of rawSolutions) {
-          const id = typeof solution.interactionPoint === "number" ? solution.interactionPoint : undefined;
-          const expr = typeof solution.expression === "string" ? solution.expression : undefined;
-          if (id !== undefined && expr) {
-            solutions.push(`?${id} := ${expr}`);
-          }
+    const solveAll = parseResponseWithSchema(solveAllResponseSchema, resp);
+    if (solveAll) {
+      for (const solution of solveAll.solutions ?? []) {
+        if (solution.expression) {
+          solutions.push(`?${solution.interactionPoint} := ${solution.expression}`);
         }
       }
       continue;
     }
 
-    if (resp.kind !== "DisplayInfo") continue;
+    if (parseResponseWithSchema(displayInfoResponseSchema, resp)) {
+      continue;
+    }
+  }
 
-    const info = resp.info as Record<string, unknown> | undefined;
-    if (!info) continue;
-
-    const msg = extractMessage(info);
-    if (msg) solutions.push(msg);
+  if (solutions.length === 0) {
+    solutions.push(
+      ...decodeDisplayInfoEvents(responses)
+        .map((event) => event.text)
+        .filter(Boolean),
+    );
   }
 
   return solutions;
+}
+
+export function decodeCaseSplitResponses(responses: AgdaResponse[]): string[] {
+  const clauses: string[] = [];
+
+  for (const response of responses) {
+    const makeCase = parseResponseWithSchema(makeCaseResponseSchema, response);
+    if (!makeCase) {
+      continue;
+    }
+
+    clauses.push(...(makeCase.clauses ?? []).filter(Boolean));
+  }
+
+  if (clauses.length > 0) {
+    return clauses;
+  }
+
+  return decodeDisplayInfoEvents(responses)
+    .map((event) => event.text)
+    .filter(Boolean);
 }

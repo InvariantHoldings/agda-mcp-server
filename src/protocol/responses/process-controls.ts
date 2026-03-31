@@ -1,5 +1,13 @@
 import type { AgdaResponse } from "../../agda/types.js";
-import { extractMessage } from "../../agda/response-parsing.js";
+import {
+  doneAbortingResponseSchema,
+  doneExitingResponseSchema,
+  parseResponseWithSchema,
+  runningInfoResponseSchema,
+  statusResponseSchema,
+  stderrOutputResponseSchema,
+} from "../response-schemas.js";
+import { decodeDisplayInfoEvents } from "./display-info.js";
 
 export interface DisplayStateSnapshot {
   checked: boolean | null;
@@ -23,17 +31,17 @@ function parseBoolean(value: unknown): boolean | null {
 }
 
 function extractStatusState(resp: AgdaResponse): DisplayStateSnapshot {
-  if (resp.kind !== "Status") {
+  const status = parseResponseWithSchema(statusResponseSchema, resp);
+  if (!status) {
     return EMPTY_STATE;
   }
 
-  // After normalization: fields are at top level. Fallback for nested format.
   const src =
-    resp.checked !== undefined
-      ? (resp as Record<string, unknown>)
-      : resp.status && typeof resp.status === "object"
-        ? (resp.status as Record<string, unknown>)
-        : (resp as Record<string, unknown>);
+    status.checked !== undefined
+      ? status
+      : status.status && typeof status.status === "object"
+        ? status.status
+        : status;
 
   return {
     checked: parseBoolean(src.checked),
@@ -45,44 +53,39 @@ function extractStatusState(resp: AgdaResponse): DisplayStateSnapshot {
 export function decodeProcessControlResponses(
   responses: AgdaResponse[],
 ): DecodedProcessControlResponses {
-  const messages: string[] = [];
+  const messages = decodeDisplayInfoEvents(responses)
+    .map((event) => event.text.trim())
+    .filter(Boolean);
   let state: DisplayStateSnapshot = { ...EMPTY_STATE };
 
   for (const resp of responses) {
-    if (resp.kind === "DisplayInfo") {
-      const info = resp.info as Record<string, unknown> | undefined;
-      if (info) {
-        const msg = extractMessage(info).trim();
-        if (msg) messages.push(msg);
-      }
-      continue;
-    }
-
-    if (resp.kind === "RunningInfo") {
-      const msg = ((resp.message as string) ?? "").trim();
+    const running = parseResponseWithSchema(runningInfoResponseSchema, resp);
+    if (running) {
+      const msg = (running.message ?? running.text ?? "").trim();
       if (msg) {
         messages.push(msg);
       }
       continue;
     }
 
-    if (resp.kind === "StderrOutput") {
-      const text = ((resp.text as string) ?? "").trim();
+    const stderr = parseResponseWithSchema(stderrOutputResponseSchema, resp);
+    if (stderr) {
+      const text = stderr.text.trim();
       if (text) messages.push(text);
       continue;
     }
 
-    if (resp.kind === "DoneAborting") {
+    if (parseResponseWithSchema(doneAbortingResponseSchema, resp)) {
       messages.push("Abort completed.");
       continue;
     }
 
-    if (resp.kind === "DoneExiting") {
+    if (parseResponseWithSchema(doneExitingResponseSchema, resp)) {
       messages.push("Exit completed.");
       continue;
     }
 
-    if (resp.kind === "Status") {
+    if (parseResponseWithSchema(statusResponseSchema, resp)) {
       state = extractStatusState(resp);
     }
   }

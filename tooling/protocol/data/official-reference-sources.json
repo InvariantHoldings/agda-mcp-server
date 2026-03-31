@@ -1,0 +1,61 @@
+{
+  "cachePolicy": {
+    "maxDepth": 1,
+    "maxPages": 64,
+    "allowedOrigins": [
+      "https://agda.github.io"
+    ],
+    "includePathPrefixes": [
+      "/agda/Agda-"
+    ],
+    "excludePathPrefixes": [
+      "/agda/src/"
+    ],
+    "includeExtensions": [
+      ".html"
+    ]
+  },
+  "sources": [
+    {
+      "id": "interaction-json",
+      "url": "https://agda.github.io/agda/Agda-Interaction-JSON.html",
+      "slug": "interaction-json",
+      "description": "Official Agda JSON interaction format documentation.",
+      "tags": [
+        "iotcm",
+        "json",
+        "interactive"
+      ]
+    },
+    {
+      "id": "interaction-highlighting-json",
+      "url": "https://agda.github.io/agda/Agda-Interaction-Highlighting-JSON.html",
+      "slug": "interaction-highlighting-json",
+      "description": "Official Agda JSON highlighting protocol documentation.",
+      "tags": [
+        "highlighting",
+        "json"
+      ]
+    },
+    {
+      "id": "main-interaction-json",
+      "url": "https://agda.github.io/agda/Agda-Main.html",
+      "slug": "main-interaction-json",
+      "description": "Official Agda frontend documentation including --interaction-json.",
+      "tags": [
+        "frontend",
+        "interaction-json"
+      ]
+    },
+    {
+      "id": "interaction-library",
+      "url": "https://agda.github.io/agda/Agda-Interaction-Library.html",
+      "slug": "interaction-library",
+      "description": "Official Agda library resolution documentation.",
+      "tags": [
+        "libraries",
+        "project-layout"
+      ]
+    }
+  ]
+}

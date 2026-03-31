@@ -1,0 +1,346 @@
+[
+  {
+    "name": "WithHoles.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "MultipleHoles.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 2,
+    "minHoleCount": 2,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "PatternMatch.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "TrulyUnsolvable.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "HoleLambda.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "HoleQuestionMark.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "HoleRecordField.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "HoleWhereBlock.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "HoleLet.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "WithClauseHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "ImplicitHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "EqualityProofHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "ImportedContextHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "QualifiedImportedHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "CompleteFixture.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "EmptyModule.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "SafeOnly.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "WithWhere.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "Records.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "InstanceArgs.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "NestedModules.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "FixtureSupport.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "ImportedFixture.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "MultiFileImports.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "TransitiveImport.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "SearchAboutTargets.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete",
+    "searchQueries": [
+      {
+        "query": "Nat",
+        "minResults": 2,
+        "expectedNames": ["double", "zero"]
+      },
+      {
+        "query": "Maybe",
+        "minResults": 3,
+        "expectedNames": ["safeHead", "mapMaybe", "mapDoubleMaybe"]
+      },
+      {
+        "query": "map",
+        "minResults": 0,
+        "expectedNames": []
+      }
+    ]
+  },
+  {
+    "name": "SearchAboutNestedModules.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete",
+    "searchQueries": [
+      {
+        "query": "Flag",
+        "minResults": 3,
+        "expectedNames": ["flip", "mapFlagMaybe", "on"]
+      },
+      {
+        "query": "Maybe",
+        "minResults": 3,
+        "expectedNames": ["maybeId", "mapMaybe", "mapFlagMaybe"]
+      }
+    ]
+  },
+  {
+    "name": "InferredMeta.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "ImportedTypeError.agda",
+    "expectedSuccess": false,
+    "expectedClassification": "type-error",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "ExpressionQueries.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "WithAbstract.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "ProofActions.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 4,
+    "minHoleCount": 4,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "SolveActions.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "BackendNoHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "BackendHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  }
+]

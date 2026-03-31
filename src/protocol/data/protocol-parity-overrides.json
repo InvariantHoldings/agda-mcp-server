@@ -1,0 +1,254 @@
+{
+  "Cmd_load": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered through AgdaSession, fixture-matrix integration, and live MCP harness tests.",
+    "issues": [4, 8]
+  },
+  "Cmd_constraints": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered through dedicated MCP end-to-end proof-query tests.",
+    "issues": []
+  },
+  "Cmd_metas": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered through load reconciliation, strict completeness checks, and live MCP harness tests.",
+    "issues": [4, 5]
+  },
+  "Cmd_load_no_metas": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered through strict-load fixture expectations and MCP harness tests.",
+    "issues": [5]
+  },
+  "Cmd_show_module_contents_toplevel": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by navigation fixtures and built-server MCP tests.",
+    "issues": []
+  },
+  "Cmd_search_about_toplevel": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by decoder tests, property tests, Agda-backed search fixtures, and MCP harness tests.",
+    "issues": [7]
+  },
+  "Cmd_solveAll": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated SolveActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_solveOne": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated SolveActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_autoOne": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated SolveActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_autoAll": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated SolveActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_infer_toplevel": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by expression-parity fixtures and built-server MCP infer queries.",
+    "issues": []
+  },
+  "Cmd_compute_toplevel": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by expression-parity fixtures and built-server MCP compute queries.",
+    "issues": []
+  },
+  "Cmd_compile": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by backend-gated live MCP end-to-end tests.",
+    "issues": []
+  },
+  "Cmd_backend_top": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by backend-gated live MCP end-to-end tests.",
+    "issues": []
+  },
+  "Cmd_backend_hole": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by backend-gated live MCP end-to-end tests.",
+    "issues": []
+  },
+  "Cmd_load_highlighting_info": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated live MCP highlighting tests.",
+    "issues": []
+  },
+  "Cmd_tokenHighlighting": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated live MCP highlighting tests.",
+    "issues": []
+  },
+  "Cmd_highlight": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated live MCP highlighting tests.",
+    "issues": []
+  },
+  "ShowImplicitArgs": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated live MCP process-toggle tests.",
+    "issues": []
+  },
+  "ToggleImplicitArgs": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated live MCP process-toggle tests.",
+    "issues": []
+  },
+  "ShowIrrelevantArgs": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated live MCP process-toggle tests.",
+    "issues": []
+  },
+  "ToggleIrrelevantArgs": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated live MCP process-toggle tests.",
+    "issues": []
+  },
+  "Cmd_give": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated ProofActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_refine": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated ProofActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_intro": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated ProofActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_refine_or_intro": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated ProofActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_context": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by expression-parity fixtures and built-server MCP context queries.",
+    "issues": []
+  },
+  "Cmd_helper_function": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by navigation fixtures and built-server MCP tests.",
+    "issues": []
+  },
+  "Cmd_infer": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by expression-parity fixtures and built-server MCP infer queries.",
+    "issues": []
+  },
+  "Cmd_goal_type": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated live MCP goal tests.",
+    "issues": []
+  },
+  "Cmd_elaborate_give": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by navigation fixtures and built-server MCP tests.",
+    "issues": []
+  },
+  "Cmd_goal_type_context": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Exercised through built-server MCP goal inspection tests.",
+    "issues": [8]
+  },
+  "Cmd_goal_type_context_infer": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated ProofActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_goal_type_context_check": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated ProofActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_show_module_contents": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by navigation fixtures and built-server MCP tests.",
+    "issues": []
+  },
+  "Cmd_make_case": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated ProofActions live MCP tests.",
+    "issues": []
+  },
+  "Cmd_compute": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by expression-parity fixtures and built-server MCP compute queries.",
+    "issues": []
+  },
+  "Cmd_why_in_scope": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by navigation fixtures and built-server MCP tests.",
+    "issues": []
+  },
+  "Cmd_why_in_scope_toplevel": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by navigation fixtures and built-server MCP tests.",
+    "issues": []
+  },
+  "Cmd_show_version": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by built-server MCP tests.",
+    "issues": []
+  },
+  "Cmd_abort": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated live MCP process-control tests.",
+    "issues": []
+  },
+  "Cmd_exit": {
+    "parityStatus": "end-to-end",
+    "coverageLevel": "mcp",
+    "notes": "Covered by dedicated live MCP process-control tests.",
+    "issues": []
+  }
+}

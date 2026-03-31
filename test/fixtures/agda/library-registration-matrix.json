@@ -1,0 +1,118 @@
+[
+  {
+    "name": "broken-global-defaults-with-project-library",
+    "projectFiles": [
+      {
+        "path": "project.agda-lib",
+        "contents": "name: project\ninclude: lib\n"
+      },
+      {
+        "path": "lib/Dep.agda",
+        "contents": "module Dep where\n\nopen import Agda.Builtin.Nat\n\nx : Nat\nx = 0\n"
+      },
+      {
+        "path": "lib/Main.agda",
+        "contents": "module Main where\n\nopen import Agda.Builtin.Nat\nopen import Dep\n\nanswer : Nat\nanswer = x\n"
+      }
+    ],
+    "agdaDirFiles": [
+      {
+        "path": "standard-library.agda-lib",
+        "contents": "name: standard-library\ninclude: src\n"
+      },
+      {
+        "path": "libraries",
+        "contents": "standard-library.agda-lib\nmissing.agda-lib\n"
+      },
+      {
+        "path": "defaults",
+        "contents": "standard-library\nmissing\n"
+      }
+    ],
+    "expectedAgdaArgs": ["-l", "project"],
+    "expectedLibraryBasenames": ["standard-library.agda-lib", "project.agda-lib"],
+    "expectedDefaults": ["standard-library"],
+    "integration": {
+      "loadFile": "lib/Main.agda"
+    }
+  },
+  {
+    "name": "relative-library-paths-are-resolved-and-deduped",
+    "projectFiles": [
+      {
+        "path": "project.agda-lib",
+        "contents": "name: project\ninclude: lib\n"
+      },
+      {
+        "path": "lib/Dep.agda",
+        "contents": "module Dep where\n\nopen import Agda.Builtin.Nat\n\nx : Nat\nx = 0\n"
+      },
+      {
+        "path": "lib/Main.agda",
+        "contents": "module Main where\n\nopen import Agda.Builtin.Nat\nopen import Dep\n\nanswer : Nat\nanswer = x\n"
+      }
+    ],
+    "agdaDirFiles": [
+      {
+        "path": "libs/stdlib.agda-lib",
+        "contents": "name: stdlib\ninclude: src\n"
+      },
+      {
+        "path": "libraries",
+        "contents": "libs/stdlib.agda-lib\n./libs/stdlib.agda-lib\nmissing.agda-lib\n"
+      },
+      {
+        "path": "defaults",
+        "contents": "stdlib\nstdlib\nmissing\n"
+      }
+    ],
+    "expectedAgdaArgs": ["-l", "project"],
+    "expectedLibraryBasenames": ["stdlib.agda-lib", "project.agda-lib"],
+    "expectedDefaults": ["stdlib"],
+    "integration": {
+      "loadFile": "lib/Main.agda"
+    }
+  },
+  {
+    "name": "multiple-project-libraries-are-sorted-by-name",
+    "projectFiles": [
+      {
+        "path": "beta.agda-lib",
+        "contents": "name: beta\ninclude: beta\n"
+      },
+      {
+        "path": "alpha.agda-lib",
+        "contents": "name: alpha\ninclude: alpha\n"
+      }
+    ],
+    "agdaDirFiles": [],
+    "expectedAgdaArgs": ["-l", "alpha", "-l", "beta"],
+    "expectedLibraryBasenames": ["alpha.agda-lib", "beta.agda-lib"],
+    "expectedDefaults": []
+  },
+  {
+    "name": "configured-libraries-without-name-are-ignored",
+    "projectFiles": [],
+    "agdaDirFiles": [
+      {
+        "path": "nameless.agda-lib",
+        "contents": "include: src\n"
+      },
+      {
+        "path": "valid.agda-lib",
+        "contents": "name: valid\ninclude: src\n"
+      },
+      {
+        "path": "libraries",
+        "contents": "nameless.agda-lib\nvalid.agda-lib\n"
+      },
+      {
+        "path": "defaults",
+        "contents": "missing\nvalid\n"
+      }
+    ],
+    "expectedAgdaArgs": [],
+    "expectedLibraryBasenames": ["valid.agda-lib"],
+    "expectedDefaults": ["valid"]
+  }
+]

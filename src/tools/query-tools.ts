@@ -5,18 +5,21 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
-import { wrapHandler, wrapGoalHandler } from "./tool-helpers.js";
+import { registerGoalTextTool, registerTextTool } from "./tool-helpers.js";
 
 export function register(
   server: McpServer,
   session: AgdaSession,
   _repoRoot: string,
 ): void {
-  server.tool(
-    "agda_metas",
-    "List all unsolved metavariables (goals) in the currently loaded file.",
-    {},
-    wrapHandler(session, async () => {
+  registerTextTool({
+    server,
+    name: "agda_metas",
+    description: "List all unsolved metavariables (goals) in the currently loaded file.",
+    category: "proof",
+    protocolCommands: ["Cmd_metas"],
+    inputSchema: {},
+    callback: async () => {
       const result = await session.goal.metas();
       let output = `## Unsolved goals (${result.goals.length})\n\n`;
       if (result.text) output += `\`\`\`\n${result.text}\n\`\`\`\n`;
@@ -24,28 +27,34 @@ export function register(
         output += `\nGoal IDs: ${result.goals.map((g) => `?${g.goalId}`).join(", ")}\n`;
       }
       return output;
-    }),
-  );
+    },
+  });
 
-  server.tool(
-    "agda_auto_all",
-    "Attempt to automatically solve all goals using Agda's proof search.",
-    {},
-    wrapHandler(session, async () => {
+  registerTextTool({
+    server,
+    name: "agda_auto_all",
+    description: "Attempt to automatically solve all goals using Agda's proof search.",
+    category: "proof",
+    protocolCommands: ["Cmd_autoAll"],
+    inputSchema: {},
+    callback: async () => {
       const result = await session.query.autoAll();
       let output = `## Auto-solve all goals\n\n`;
       output += result.solution
         ? `**Result:**\n\`\`\`\n${result.solution}\n\`\`\`\n`
         : `No automatic solutions found.\n`;
       return output;
-    }),
-  );
+    },
+  });
 
-  server.tool(
-    "agda_solve_all",
-    "Attempt to solve all goals that have unique solutions.",
-    {},
-    wrapHandler(session, async () => {
+  registerTextTool({
+    server,
+    name: "agda_solve_all",
+    description: "Attempt to solve all goals that have unique solutions.",
+    category: "proof",
+    protocolCommands: ["Cmd_solveAll"],
+    inputSchema: {},
+    callback: async () => {
       const result = await session.query.solveAll();
       let output = `## Solve all\n\n`;
       if (result.solutions.length > 0) {
@@ -54,14 +63,18 @@ export function register(
         output += `No goals with unique solutions found.\n`;
       }
       return output;
-    }),
-  );
+    },
+  });
 
-  server.tool(
-    "agda_solve_one",
-    "Attempt to solve one goal that has a unique solution using Agda's exact Cmd_solveOne command.",
-    { goalId: z.number().describe("The goal ID to solve if it has a unique solution") },
-    wrapGoalHandler(session, async ({ goalId }) => {
+  registerGoalTextTool({
+    server,
+    session,
+    name: "agda_solve_one",
+    description: "Attempt to solve one goal that has a unique solution using Agda's exact Cmd_solveOne command.",
+    category: "proof",
+    protocolCommands: ["Cmd_solveOne"],
+    inputSchema: { goalId: z.number().describe("The goal ID to solve if it has a unique solution") },
+    callback: async ({ goalId }) => {
       const result = await session.query.solveOne(goalId);
       let output = `## Solve one ?${goalId}\n\n`;
       if (result.solutions.length > 0) {
@@ -70,18 +83,21 @@ export function register(
         output += "No unique solution found for that goal.\n";
       }
       return output;
-    }),
-  );
+    },
+  });
 
-  server.tool(
-    "agda_constraints",
-    "Show the current constraint set for the loaded file.",
-    {},
-    wrapHandler(session, async () => {
+  registerTextTool({
+    server,
+    name: "agda_constraints",
+    description: "Show the current constraint set for the loaded file.",
+    category: "proof",
+    protocolCommands: ["Cmd_constraints"],
+    inputSchema: {},
+    callback: async () => {
       const result = await session.query.constraints();
       let output = `## Constraints\n\n`;
       output += result.text ? `\`\`\`\n${result.text}\n\`\`\`\n` : `No constraints.\n`;
       return output;
-    }),
-  );
+    },
+  });
 }
