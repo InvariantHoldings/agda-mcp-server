@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   configuredCommandTimeoutMs,
   configuredIdleCompletionMs,
+  configuredPostStatusIdleCompletionMs,
+  idleCompletionDelay,
   configuredWaitingSentryMs,
   shouldResolveOnIdle,
   summarizeResponseKinds,
@@ -11,7 +13,7 @@ import {
   trailingResponseDelay,
 } from "../../../dist/session/command-completion.js";
 
-test("shouldResolveOnIdle only resolves when responses exist without status", () => {
+test("shouldResolveOnIdle resolves whenever a command has produced responses", () => {
   assert.equal(
     shouldResolveOnIdle({ sawStatusDone: false, responseCount: 0, lastResponseKind: null }),
     false,
@@ -22,7 +24,7 @@ test("shouldResolveOnIdle only resolves when responses exist without status", ()
   );
   assert.equal(
     shouldResolveOnIdle({ sawStatusDone: true, responseCount: 2, lastResponseKind: "Status" }),
-    false,
+    true,
   );
   assert.equal(
     shouldResolveOnIdle({ sawStatusDone: true, responseCount: 3, lastResponseKind: "InteractionPoints" }),
@@ -47,6 +49,39 @@ test("trailingResponseDelay prefers status completion and falls back to response
     trailingResponseDelay({ sawStatusDone: false, responseCount: 0, lastResponseKind: null }),
     0,
   );
+});
+
+test("idleCompletionDelay waits longer after a trailing Status", () => {
+  const previousIdle = process.env.AGDA_MCP_IDLE_COMPLETION_MS;
+  const previousPostStatus = process.env.AGDA_MCP_POST_STATUS_IDLE_MS;
+
+  process.env.AGDA_MCP_IDLE_COMPLETION_MS = "5";
+  process.env.AGDA_MCP_POST_STATUS_IDLE_MS = "50";
+
+  try {
+    assert.equal(configuredIdleCompletionMs(), 5);
+    assert.equal(configuredPostStatusIdleCompletionMs(), 50);
+    assert.equal(
+      idleCompletionDelay({ sawStatusDone: true, responseCount: 1, lastResponseKind: "Status" }),
+      50,
+    );
+    assert.equal(
+      idleCompletionDelay({ sawStatusDone: true, responseCount: 2, lastResponseKind: "DisplayInfo" }),
+      5,
+    );
+  } finally {
+    if (previousIdle === undefined) {
+      delete process.env.AGDA_MCP_IDLE_COMPLETION_MS;
+    } else {
+      process.env.AGDA_MCP_IDLE_COMPLETION_MS = previousIdle;
+    }
+
+    if (previousPostStatus === undefined) {
+      delete process.env.AGDA_MCP_POST_STATUS_IDLE_MS;
+    } else {
+      process.env.AGDA_MCP_POST_STATUS_IDLE_MS = previousPostStatus;
+    }
+  }
 });
 
 test("command completion configuration honors env overrides", () => {

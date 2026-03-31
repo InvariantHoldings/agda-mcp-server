@@ -50,6 +50,58 @@ test("AgdaTransport waits for terminal payloads after Status before resolving", 
   });
 });
 
+test("AgdaTransport resolves after trailing Status when earlier payloads already arrived", async () => {
+  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
+    const transport = new AgdaTransport();
+
+    const proc = {
+      stdin: {
+        write() {
+          setTimeout(() => {
+            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DisplayInfo\",\"info\":{\"kind\":\"CurrentGoal\",\"goal\":\"Nat\"}}\n"));
+          }, 0);
+          setTimeout(() => {
+            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"HighlightingInfo\",\"payload\":[]}\n"));
+          }, 5);
+          setTimeout(() => {
+            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"Status\",\"status\":{\"checked\":false}}\n"));
+          }, 10);
+        },
+      },
+    };
+
+    const responses = await transport.sendCommand(proc, "IOTCM \"x\" NonInteractive Direct (Cmd_load)", 100);
+
+    assert.deepEqual(
+      responses.map((response) => response.kind),
+      ["DisplayInfo", "HighlightingInfo", "Status"],
+    );
+  });
+});
+
+test("AgdaTransport resolves status-only commands without timing out", async () => {
+  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
+    const transport = new AgdaTransport();
+
+    const proc = {
+      stdin: {
+        write() {
+          setTimeout(() => {
+            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"Status\",\"status\":{\"checked\":true}}\n"));
+          }, 0);
+        },
+      },
+    };
+
+    const responses = await transport.sendCommand(proc, "IOTCM \"x\" NonInteractive Direct (ShowImplicitArgs True)", 100);
+
+    assert.deepEqual(
+      responses.map((response) => response.kind),
+      ["Status"],
+    );
+  });
+});
+
 test("AgdaTransport captures prompt notices as stderr output while collecting", async () => {
   await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
     const transport = new AgdaTransport();

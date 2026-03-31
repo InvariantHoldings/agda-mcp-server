@@ -7,8 +7,8 @@ import { logger } from "../agda/logger.js";
 import {
   type CommandCompletionOrigin,
   configuredCommandTimeoutMs,
-  configuredIdleCompletionMs,
   configuredWaitingSentryMs,
+  idleCompletionDelay,
   shouldResolveOnIdle,
   summarizeResponseKinds,
   tailResponsePreview,
@@ -241,6 +241,10 @@ export class AgdaTransport {
         lastResponseKind: this.lastResponseKind,
       });
       this.emitter.emit("done", "idle");
-    }, configuredIdleCompletionMs());
+    }, idleCompletionDelay({
+      sawStatusDone: this.sawStatusDone,
+      responseCount: this.responseQueue.length,
+      lastResponseKind: this.lastResponseKind,
+    }));
   }
 }

@@ -39,8 +39,29 @@ export function configuredIdleCompletionMs(): number {
   return parsePositiveInt(process.env.AGDA_MCP_IDLE_COMPLETION_MS, 250);
 }
 
+export function configuredPostStatusIdleCompletionMs(): number {
+  return parsePositiveInt(process.env.AGDA_MCP_POST_STATUS_IDLE_MS, 50);
+}
+
 export function configuredWaitingSentryMs(): number {
   return parsePositiveInt(process.env.AGDA_MCP_WAITING_SENTRY_MS, 0);
+}
+
+export function idleCompletionDelay(
+  snapshot: CommandCompletionSnapshot,
+): number {
+  if (snapshot.responseCount === 0) {
+    return 0;
+  }
+
+  if (snapshot.sawStatusDone && snapshot.lastResponseKind === "Status") {
+    return Math.max(
+      configuredIdleCompletionMs(),
+      configuredPostStatusIdleCompletionMs(),
+    );
+  }
+
+  return configuredIdleCompletionMs();
 }
 
 export function trailingResponseDelay(
@@ -69,17 +90,7 @@ export function trailingResponseDelay(
 export function shouldResolveOnIdle(
   snapshot: CommandCompletionSnapshot,
 ): boolean {
-  if (snapshot.responseCount === 0) {
-    return false;
-  }
-
-  if (!snapshot.sawStatusDone) {
-    return true;
-  }
-
-  return snapshot.lastResponseKind !== undefined
-    && snapshot.lastResponseKind !== null
-    && TERMINAL_IDLE_RESPONSE_KINDS.has(snapshot.lastResponseKind);
+  return snapshot.responseCount > 0;
 }
 
 export function summarizeResponseKinds(
