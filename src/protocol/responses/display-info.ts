@@ -139,7 +139,7 @@ function decodeStructuredInfoText(info: Record<string, unknown>): string {
 
   const helperFunction = goalHelperFunctionInfoSchema.safeParse(info);
   if (helperFunction.success) {
-    return helperFunction.data.type ?? helperFunction.data.message ?? "";
+    return helperFunction.data.signature ?? helperFunction.data.type ?? helperFunction.data.message ?? "";
   }
 
   const currentGoal = goalCurrentGoalInfoSchema.safeParse(info);

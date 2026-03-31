@@ -259,6 +259,7 @@ export const goalHelperFunctionInfoSchema = z.object({
   kind: z.literal("HelperFunction"),
   message: z.string().optional(),
   type: z.string().optional(),
+  signature: z.string().optional(),
 }).passthrough();
 
 export const goalCurrentGoalInfoSchema = z.object({

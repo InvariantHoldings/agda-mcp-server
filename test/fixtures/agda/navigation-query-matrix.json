@@ -19,7 +19,7 @@
       "whyInScope": [
         {
           "name": "n",
-          "expectedIncludes": ["n", "Nat"]
+          "expectedIncludes": ["n", "variable bound"]
         }
       ],
       "showModule": [
