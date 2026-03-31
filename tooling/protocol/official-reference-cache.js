@@ -56,8 +56,8 @@ export function decodeHtmlEntities(input) {
 
 function stripMarkupToText(html) {
   return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "\n")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, "\n")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script(?:\s[^>]*)?>/gi, "\n")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style(?:\s[^>]*)?>/gi, "\n")
     .replace(/<!--[\s\S]*?-->/g, "\n")
     .replace(/<(br|hr)\b[^>]*\/?>/gi, "\n")
     .replace(/<\/(p|div|section|article|main|nav|aside|header|footer|pre|code|ul|ol|li|table|thead|tbody|tfoot|tr|td|th|h[1-6])>/gi, "\n")

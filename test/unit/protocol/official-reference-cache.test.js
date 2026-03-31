@@ -58,6 +58,16 @@ test("extractOfficialReferenceSummary strips script and style tags even with spa
   assert.doesNotMatch(summary.text, /color: red/);
 });
 
+test("extractOfficialReferenceSummary strips script tags with whitespace and stray tokens before >", () => {
+  const summary = extractOfficialReferenceSummary(
+    "https://agda.github.io/agda/Agda-Main.html",
+    "<html><body><script>window.bad = true;</script\t\n bar><p>Visible text</p></body></html>",
+  );
+
+  assert.match(summary.text, /Visible text/);
+  assert.doesNotMatch(summary.text, /window\.bad/);
+});
+
 test("collectOfficialReferenceLinks keeps official HTML links and drops noise", () => {
   const links = collectOfficialReferenceLinks(
     "https://agda.github.io/agda/Agda-Main.html",
