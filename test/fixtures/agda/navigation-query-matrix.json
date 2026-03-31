@@ -31,7 +31,7 @@
       "elaborate": [
         {
           "expr": "add n m",
-          "expectedIncludes": ["add", "Nat"]
+          "expectedIncludes": ["add n m"]
         }
       ],
       "helperFunction": [
