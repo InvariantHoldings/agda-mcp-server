@@ -273,7 +273,7 @@ it("MCP end-to-end: highlighting and display/process toggles", async () => {
       harness,
       "load highlighting",
       "agda_load_highlighting_info",
-      { file: "Clean.agda" },
+      { file: "CompleteFixture.agda" },
     );
     assert.equal(loadHighlighting.isError, false);
 
@@ -281,7 +281,7 @@ it("MCP end-to-end: highlighting and display/process toggles", async () => {
       harness,
       "token highlighting keep",
       "agda_token_highlighting",
-      { file: "Clean.agda", remove: false },
+      { file: "CompleteFixture.agda", remove: false },
     );
     assert.equal(tokenHighlighting.isError, false);
 
@@ -289,7 +289,7 @@ it("MCP end-to-end: highlighting and display/process toggles", async () => {
       harness,
       "token highlighting remove",
       "agda_token_highlighting",
-      { file: "Clean.agda", remove: true },
+      { file: "CompleteFixture.agda", remove: true },
     );
     assert.equal(removeTokenHighlighting.isError, false);
 

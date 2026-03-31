@@ -126,7 +126,7 @@
     "expectedStrictClassification": "type-error"
   },
   {
-    "name": "Clean.agda",
+    "name": "CompleteFixture.agda",
     "expectedSuccess": true,
     "expectedClassification": "ok-complete",
     "minVisibleGoalCount": 0,

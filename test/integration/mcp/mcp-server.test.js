@@ -288,7 +288,7 @@ it("MCP harness reports strict-load failure for invisible-hole fixtures", async 
 
 it("MCP harness reports complete success for a clean fixture", async () => {
   await withHarness(async (harness) => {
-    const load = await harness.callTool("agda_load", { file: "Clean.agda" });
+    const load = await harness.callTool("agda_load", { file: "CompleteFixture.agda" });
 
     assert.equal(load.isError, false);
     assert.equal(load.structuredContent.classification, "ok-complete");

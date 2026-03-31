@@ -41,8 +41,8 @@ async function loadFixtureNoMetas(name) {
 
 // ── Clean files ──────────────────────────────────────────
 
-it("Clean.agda: success, 0 goals", async () => {
-  const r = await loadFixture("Clean.agda");
+it("CompleteFixture.agda: success, 0 goals", async () => {
+  const r = await loadFixture("CompleteFixture.agda");
   assert.equal(r.success, true);
   assert.equal(r.goals.length, 0);
   assert.equal(r.errors.length, 0);
@@ -286,7 +286,7 @@ it("UniverseCumulativity.agda: loads with --cumulativity", async () => {
 // ── typecheck matches load ───────────────────────────────
 
 it("typeCheckBatch matches agda_load for clean file", async () => {
-  const batch = await typeCheckBatch("Clean.agda", FIXTURES);
+  const batch = await typeCheckBatch("CompleteFixture.agda", FIXTURES);
   assert.equal(batch.success, true);
 });
 
@@ -329,7 +329,7 @@ it("goal.typeContext works for imported-context holes", async () => {
 it("isFileStale returns false right after load", async () => {
   const session = new AgdaSession(FIXTURES);
   try {
-    await session.load("Clean.agda");
+    await session.load("CompleteFixture.agda");
     assert.equal(session.isFileStale(), false);
   } finally {
     session.destroy();

@@ -87,7 +87,7 @@ it("MCP end-to-end: session status and typecheck tools", async () => {
       harness,
       "typecheck clean fixture",
       "agda_typecheck",
-      { file: "Clean.agda" },
+      { file: "CompleteFixture.agda" },
     );
     assert.equal(typecheckClean.isError, false);
     assert.equal(typecheckClean.structuredContent.data.classification, "ok-complete");

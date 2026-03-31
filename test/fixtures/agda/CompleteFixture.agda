@@ -1,4 +1,4 @@
-module Clean where
+module CompleteFixture where
 
 data Nat : Set where
   zero : Nat

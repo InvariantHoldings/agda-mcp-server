@@ -128,7 +128,7 @@ it("reload: clean file has 0 goals", async () => {
   try {
     // Load holes first, then switch to clean
     await session.load("WithHoles.agda");
-    const result = await session.load("Clean.agda");
+    const result = await session.load("CompleteFixture.agda");
     assert.equal(result.success, true);
     assert.equal(result.goals.length, 0);
   } finally {
