@@ -1,13 +1,30 @@
 export interface CommandCompletionSnapshot {
   sawStatusDone: boolean;
   responseCount: number;
+  lastResponseKind?: string | null;
 }
+
+export type CommandCompletionOrigin = "idle" | "signal" | "process-close";
 
 export interface ResponseLike {
   kind: string;
   text?: string;
-  status?: string;
+  status?: unknown;
 }
+
+const TERMINAL_IDLE_RESPONSE_KINDS = new Set([
+  "DisplayInfo",
+  "InteractionPoints",
+  "GiveAction",
+  "MakeCase",
+  "SolveAll",
+  "JumpToError",
+  "CurrentGoal",
+  "CompilationOk",
+  "DoneAborting",
+  "DoneExiting",
+  "StderrOutput",
+]);
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -28,7 +45,16 @@ export function configuredWaitingSentryMs(): number {
 
 export function trailingResponseDelay(
   snapshot: CommandCompletionSnapshot,
+  origin: CommandCompletionOrigin = "signal",
 ): number {
+  if (origin === "idle" || origin === "process-close") {
+    return 0;
+  }
+
+  if (snapshot.sawStatusDone && snapshot.lastResponseKind && TERMINAL_IDLE_RESPONSE_KINDS.has(snapshot.lastResponseKind)) {
+    return 25;
+  }
+
   if (snapshot.sawStatusDone) {
     return 50;
   }
@@ -43,7 +69,17 @@ export function trailingResponseDelay(
 export function shouldResolveOnIdle(
   snapshot: CommandCompletionSnapshot,
 ): boolean {
-  return !snapshot.sawStatusDone && snapshot.responseCount > 0;
+  if (snapshot.responseCount === 0) {
+    return false;
+  }
+
+  if (!snapshot.sawStatusDone) {
+    return true;
+  }
+
+  return snapshot.lastResponseKind !== undefined
+    && snapshot.lastResponseKind !== null
+    && TERMINAL_IDLE_RESPONSE_KINDS.has(snapshot.lastResponseKind);
 }
 
 export function summarizeResponseKinds(
@@ -61,7 +97,17 @@ function previewText(value: unknown, limit = 120): string | undefined {
     return undefined;
   }
 
-  const compact = String(value).replace(/\s+/g, " ").trim();
+  const raw = typeof value === "string"
+    ? value
+    : (() => {
+        try {
+          return JSON.stringify(value);
+        } catch {
+          return String(value);
+        }
+      })();
+
+  const compact = raw.replace(/\s+/g, " ").trim();
   if (compact.length <= limit) {
     return compact;
   }

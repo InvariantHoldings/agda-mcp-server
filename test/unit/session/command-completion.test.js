@@ -13,30 +13,38 @@ import {
 
 test("shouldResolveOnIdle only resolves when responses exist without status", () => {
   assert.equal(
-    shouldResolveOnIdle({ sawStatusDone: false, responseCount: 0 }),
+    shouldResolveOnIdle({ sawStatusDone: false, responseCount: 0, lastResponseKind: null }),
     false,
   );
   assert.equal(
-    shouldResolveOnIdle({ sawStatusDone: false, responseCount: 2 }),
+    shouldResolveOnIdle({ sawStatusDone: false, responseCount: 2, lastResponseKind: "DisplayInfo" }),
     true,
   );
   assert.equal(
-    shouldResolveOnIdle({ sawStatusDone: true, responseCount: 2 }),
+    shouldResolveOnIdle({ sawStatusDone: true, responseCount: 2, lastResponseKind: "Status" }),
     false,
+  );
+  assert.equal(
+    shouldResolveOnIdle({ sawStatusDone: true, responseCount: 3, lastResponseKind: "InteractionPoints" }),
+    true,
   );
 });
 
 test("trailingResponseDelay prefers status completion and falls back to response-aware idle delay", () => {
   assert.equal(
-    trailingResponseDelay({ sawStatusDone: true, responseCount: 3 }),
+    trailingResponseDelay({ sawStatusDone: true, responseCount: 3, lastResponseKind: "InteractionPoints" }),
+    25,
+  );
+  assert.equal(
+    trailingResponseDelay({ sawStatusDone: true, responseCount: 3, lastResponseKind: "Status" }),
     50,
   );
   assert.equal(
-    trailingResponseDelay({ sawStatusDone: false, responseCount: 2 }),
+    trailingResponseDelay({ sawStatusDone: false, responseCount: 2, lastResponseKind: "DisplayInfo" }),
     200,
   );
   assert.equal(
-    trailingResponseDelay({ sawStatusDone: false, responseCount: 0 }),
+    trailingResponseDelay({ sawStatusDone: false, responseCount: 0, lastResponseKind: null }),
     0,
   );
 });
@@ -103,4 +111,16 @@ test("tailResponsePreview returns compact trailing response summaries", () => {
   assert.equal(preview[1].kind, "DisplayInfo");
   assert.match(preview[1].text, /^x+\.\.\.$/);
   assert.equal(preview[1].text.length, 120);
+});
+
+test("tailResponsePreview stringifies structured status payloads", () => {
+  const preview = tailResponsePreview([
+    {
+      kind: "Status",
+      status: { checked: true, showImplicitArguments: false },
+    },
+  ]);
+
+  assert.equal(preview[0].kind, "Status");
+  assert.match(preview[0].status, /"checked":true/);
 });
