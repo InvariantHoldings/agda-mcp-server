@@ -31,6 +31,7 @@ import {
   configuredCommandTimeoutMs,
 } from "../session/command-completion.js";
 import { AgdaTransport } from "../session/agda-transport.js";
+import { extractGoalIdsFromResponses } from "../session/goal-state.js";
 import { createSessionNamespaces } from "../session/session-namespaces.js";
 import {
   createLibraryRegistration,
@@ -186,6 +187,13 @@ export class AgdaSession {
       throw new Error("No file loaded. Call load() first.");
     }
     return this.currentFile;
+  }
+
+  syncGoalIdsFromResponses(responses: AgdaResponse[]): void {
+    const goalIds = extractGoalIdsFromResponses(responses);
+    if (goalIds !== null) {
+      this.goalIds = goalIds;
+    }
   }
 
   private buildIotcm(filePath: string, agdaCmd: string): string {

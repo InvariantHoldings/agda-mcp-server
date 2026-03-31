@@ -16,6 +16,7 @@ export interface AgdaCommandContext {
   sendCommand(cmd: string): Promise<AgdaResponse[]>;
   iotcm(agdaCmd: string): string;
   requireFile(): string;
+  syncGoalIdsFromResponses(responses: AgdaResponse[]): void;
   readonly goalIds: number[];
 }
 

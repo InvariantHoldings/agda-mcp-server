@@ -41,8 +41,12 @@ function decodeGoalConstraint(entry: unknown): DecodedGoalConstraint | null {
     return null;
   }
 
+  const goalId = typeof parsed.data.constraintObj === "number"
+    ? parsed.data.constraintObj
+    : parsed.data.constraintObj.id;
+
   return {
-    goalId: parsed.data.constraintObj,
+    goalId,
     type: parsed.data.type ?? "?",
   };
 }

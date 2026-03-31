@@ -61,3 +61,20 @@ export function modeTopLevelCommand(
 ): string {
   return command(name, mode, ...parts);
 }
+
+export function rewriteTopLevelCommand(
+  name: string,
+  rewrite: CommandAtom,
+  ...parts: CommandAtom[]
+): string {
+  return topLevelCommand(name, rewrite, ...parts);
+}
+
+export function rewriteGoalCommand(
+  name: string,
+  rewrite: CommandAtom,
+  goalId: number,
+  ...parts: CommandAtom[]
+): string {
+  return command(name, rewrite, goalId, "noRange", ...parts);
+}

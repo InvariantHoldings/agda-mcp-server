@@ -45,6 +45,17 @@ test("AgdaSession destroy resets mutable session state", () => {
   assert.deepEqual(session.responseQueue, []);
 });
 
+test("AgdaSession syncGoalIdsFromResponses applies explicit goal-state updates", () => {
+  const session = new AgdaSession(process.cwd());
+
+  session.goalIds = [1, 2, 3];
+  session.syncGoalIdsFromResponses([
+    { kind: "InteractionPoints", interactionPoints: [4, 5] },
+  ]);
+
+  assert.deepEqual(session.getGoalIds(), [4, 5]);
+});
+
 test("AgdaSession forwards legacy backend compatibility methods", async () => {
   const session = new AgdaSession(process.cwd());
   const calls = [];

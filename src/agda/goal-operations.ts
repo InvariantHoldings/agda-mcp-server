@@ -22,7 +22,14 @@ import {
 import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
 import { decodeLoadDisplayResponses } from "../protocol/responses/load-display.js";
 import { decodeGoalExpressionDisplayResponses } from "../protocol/responses/goal-expression-display.js";
-import { goalCommand, modeGoalCommand, quoted } from "../protocol/command-builder.js";
+import {
+  goalCommand,
+  modeGoalCommand,
+  quoted,
+  rewriteTopLevelCommand,
+  rewriteGoalCommand,
+} from "../protocol/command-builder.js";
+import { throwOnFatalProtocolStderr } from "./protocol-errors.js";
 
 /** Get the type and local context for a specific goal. */
 export async function goalTypeContext(
@@ -91,6 +98,7 @@ export async function caseSplit(
   const responses = await ctx.sendCommand(
     ctx.iotcm(goalCommand("Cmd_make_case", goalId, quoted(variable))),
   );
+  throwOnFatalProtocolStderr(responses);
   return { clauses: decodeCaseSplitResponses(responses) };
 }
 
@@ -104,6 +112,8 @@ export async function give(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_give", "WithoutForce", goalId, quoted(expr))),
   );
+  throwOnFatalProtocolStderr(responses);
+  ctx.syncGoalIdsFromResponses(responses);
   return { result: decodeGiveLikeResponse(responses) };
 }
 
@@ -117,6 +127,8 @@ export async function refine(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_refine_or_intro", "True", goalId, quoted(expr))),
   );
+  throwOnFatalProtocolStderr(responses);
+  ctx.syncGoalIdsFromResponses(responses);
   return { result: decodeGiveLikeResponse(responses) };
 }
 
@@ -130,6 +142,8 @@ export async function refineExact(
   const responses = await ctx.sendCommand(
     ctx.iotcm(goalCommand("Cmd_refine", goalId, quoted(expr))),
   );
+  throwOnFatalProtocolStderr(responses);
+  ctx.syncGoalIdsFromResponses(responses);
   return { result: decodeGiveLikeResponse(responses) };
 }
 
@@ -143,6 +157,8 @@ export async function intro(
   const responses = await ctx.sendCommand(
     ctx.iotcm(modeGoalCommand("Cmd_intro", "True", goalId, quoted(expr))),
   );
+  throwOnFatalProtocolStderr(responses);
+  ctx.syncGoalIdsFromResponses(responses);
   return { result: decodeGiveLikeResponse(responses) };
 }
 
@@ -153,8 +169,10 @@ export async function autoOne(
 ): Promise<AutoResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(goalCommand("Cmd_autoOne", goalId, quoted(""))),
+    ctx.iotcm(rewriteGoalCommand("Cmd_autoOne", "Normalised", goalId, quoted(""))),
   );
+  throwOnFatalProtocolStderr(responses);
+  ctx.syncGoalIdsFromResponses(responses);
   return { solution: decodeGiveLikeResponse(responses) };
 }
 
@@ -163,7 +181,10 @@ export async function metas(
   ctx: AgdaCommandContext,
 ): Promise<{ goals: AgdaGoal[]; text: string }> {
   ctx.requireFile();
-  const responses = await ctx.sendCommand(ctx.iotcm("Cmd_metas"));
+  const responses = await ctx.sendCommand(
+    ctx.iotcm(rewriteTopLevelCommand("Cmd_metas", "Normalised")),
+  );
+  throwOnFatalProtocolStderr(responses);
 
   const text = decodeDisplayInfoEvents(responses)
     .map((event) => event.text)
@@ -175,8 +196,11 @@ export async function metas(
     context: [] as string[],
   }));
 
-  // Fall back to cached goalIds if Cmd_metas didn't return structured goals
-  if (goals.length === 0 && ctx.goalIds.length > 0) {
+  const derivedGoalIds = decodeLoadDisplayResponses(responses).visibleGoals.map((goal) => goal.goalId);
+  ctx.syncGoalIdsFromResponses(responses);
+
+  // Fall back only when Cmd_metas produced no goal-state evidence at all.
+  if (goals.length === 0 && derivedGoalIds.length === 0 && ctx.goalIds.length > 0) {
     goals.push(...ctx.goalIds.map((id) => ({ goalId: id, type: "?", context: [] as string[] })));
   }
 

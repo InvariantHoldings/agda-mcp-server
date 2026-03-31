@@ -36,8 +36,15 @@ export const contextEntrySchema = z.object({
   binding: z.string().optional(),
 }).passthrough();
 
+const interactionIdSchema = z.union([
+  z.number(),
+  z.object({
+    id: z.number(),
+  }).passthrough(),
+]);
+
 export const goalConstraintEntrySchema = z.object({
-  constraintObj: z.number().optional(),
+  constraintObj: interactionIdSchema.optional(),
   type: z.string().optional(),
 }).passthrough();
 

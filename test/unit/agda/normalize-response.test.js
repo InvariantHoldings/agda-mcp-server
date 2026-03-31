@@ -105,6 +105,7 @@ test("normalizes GiveAction object giveResult → string", () => {
   const input = { kind: "GiveAction", giveResult: { str: "refl" } };
   const result = normalizeAgdaResponse(input);
   assert.equal(typeof result.giveResult, "string");
+  assert.equal(result.giveResult, "refl");
 });
 
 // ── MakeCase ──────────────────────────────────────────────

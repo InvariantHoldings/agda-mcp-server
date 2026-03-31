@@ -8,6 +8,8 @@ import {
   modeGoalCommand,
   modeTopLevelCommand,
   quoted,
+  rewriteGoalCommand,
+  rewriteTopLevelCommand,
   stringList,
 } from "../../../dist/protocol/command-builder.js";
 
@@ -22,12 +24,20 @@ test("quoted escapes raw newlines and quotes", () => {
 test("goal and mode builders preserve noRange placement", () => {
   assert.equal(goalCommand("Cmd_autoOne", 3, quoted("")), 'Cmd_autoOne 3 noRange ""');
   assert.equal(
+    rewriteGoalCommand("Cmd_autoOne", "Normalised", 3, quoted("")),
+    'Cmd_autoOne Normalised 3 noRange ""',
+  );
+  assert.equal(
     modeGoalCommand("Cmd_infer", "Normalised", 4, quoted("x")),
     'Cmd_infer Normalised 4 noRange "x"',
   );
   assert.equal(
     modeTopLevelCommand("Cmd_infer_toplevel", "Normalised", quoted("x")),
     'Cmd_infer_toplevel Normalised "x"',
+  );
+  assert.equal(
+    rewriteTopLevelCommand("Cmd_metas", "Normalised"),
+    "Cmd_metas Normalised",
   );
 });
 

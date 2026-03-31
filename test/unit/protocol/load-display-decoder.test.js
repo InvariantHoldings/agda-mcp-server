@@ -45,3 +45,22 @@ test("decodeLoadDisplayResponses ignores malformed visible goals", () => {
 
   assert.deepEqual(decoded.visibleGoals, [{ goalId: 7, type: "Nat" }]);
 });
+
+test("decodeLoadDisplayResponses accepts visible goals with object constraint ids", () => {
+  const decoded = decodeLoadDisplayResponses([
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [
+          { constraintObj: { id: 9 }, type: "Nat" },
+        ],
+        invisibleGoals: [],
+        errors: [],
+        warnings: [],
+      },
+    },
+  ]);
+
+  assert.deepEqual(decoded.visibleGoals, [{ goalId: 9, type: "Nat" }]);
+});

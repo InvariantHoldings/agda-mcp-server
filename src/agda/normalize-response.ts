@@ -30,7 +30,9 @@ function toString(val: unknown): string {
   }
   if (val && typeof val === "object") {
     const obj = val as Record<string, unknown>;
+    if (typeof obj.str === "string") return obj.str;
     if (typeof obj.type === "string") return obj.type;
+    if (typeof obj.message === "string") return obj.message;
     return JSON.stringify(val);
   }
   if (val != null) return String(val);
