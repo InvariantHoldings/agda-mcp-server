@@ -78,6 +78,13 @@ RUN_AGDA_INTEGRATION=1 node --test test/integration/agda/agda-fixture-matrix.tes
 RUN_AGDA_INTEGRATION=1 node --test test/integration/mcp/mcp-server.test.js
 ```
 
+Built-server MCP end-to-end gate:
+
+```bash
+RUN_AGDA_INTEGRATION=1 npm run test:e2e
+RUN_AGDA_INTEGRATION=1 RUN_AGDA_BACKEND_INTEGRATION=1 npm run test:e2e
+```
+
 Convenience scripts:
 
 ```bash
@@ -88,6 +95,8 @@ npm run test:integration:mcp
 Notes:
 
 - Integration tests are intentionally gated by `RUN_AGDA_INTEGRATION=1`.
+- `test/fixtures/e2e/mcp-tool-coverage.json` is the SSOT for which built-server
+  MCP scenario covers each exposed core tool.
 - Some live commands can be slow. If a user is available to run them locally,
   prefer giving them the exact command and asking for the log file.
 - New features and bug fixes should start with failing tests.

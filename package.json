@@ -36,6 +36,8 @@
     "test:integration:raw": "node --test test/integration/**/*.test.js",
     "test:integration:fixtures": "node --test test/integration/agda/agda-fixture-matrix.test.js",
     "test:integration:mcp": "node --test test/integration/mcp/mcp-server.test.js",
+    "test:e2e": "npm run build && node --test test/integration/mcp/**/*.test.js",
+    "test:e2e:raw": "node --test test/integration/mcp/**/*.test.js",
     "test:release:bugs": "node --test test/unit/agda/completeness.test.js test/unit/protocol/protocol-parity.test.js test/unit/reporting/release-bug-matrix.test.js test/unit/tools/library-registration-matrix.test.js test/integration/agda/agda-load.test.js test/integration/agda/agda-fixture-matrix.test.js test/integration/agda/agda-search-about.test.js test/integration/agda/agda-library-registration.test.js test/integration/mcp/mcp-server.test.js",
     "test:release:bugs:sentinel": "node scripts/test-with-sentinel.mjs --label release-bugs test/unit/agda/completeness.test.js test/unit/protocol/protocol-parity.test.js test/unit/reporting/release-bug-matrix.test.js test/unit/tools/library-registration-matrix.test.js test/integration/agda/agda-load.test.js test/integration/agda/agda-fixture-matrix.test.js test/integration/agda/agda-search-about.test.js test/integration/agda/agda-library-registration.test.js test/integration/mcp/mcp-server.test.js",
     "verify": "npm test && npm pack --dry-run",
