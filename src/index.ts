@@ -23,16 +23,7 @@ import { AgdaSession } from "./agda-process.js";
 import { PROJECT_ROOT, SERVER_REPO_ROOT, resolveProjectPath } from "./repo-root.js";
 import { getServerVersion } from "./server-version.js";
 
-import { register as registerSession } from "./tools/session.js";
-import { register as registerGoalTools } from "./tools/goal-tools.js";
-import { register as registerExpressionTools } from "./tools/expression-tools.js";
-import { register as registerQueryTools } from "./tools/query-tools.js";
-import { register as registerFileTools } from "./tools/file-tools.js";
-import { register as registerScopeTools } from "./tools/scope-tools.js";
-import { register as registerDisplay } from "./tools/display.js";
-import { register as registerBackend } from "./tools/backend.js";
-import { register as registerAnalysis } from "./tools/analysis-tools.js";
-import { register as registerReporting } from "./tools/reporting-tools.js";
+import { registerCoreTools } from "./tools/register-core-tools.js";
 
 type ExtensionRegister = (
   server: McpServer,
@@ -49,16 +40,7 @@ const server = new McpServer({
 });
 
 // ── Core tools (generic Agda) ──────────────────────────────────────
-registerSession(server, session, PROJECT_ROOT);
-registerGoalTools(server, session, PROJECT_ROOT);
-registerExpressionTools(server, session, PROJECT_ROOT);
-registerQueryTools(server, session, PROJECT_ROOT);
-registerFileTools(server, session, PROJECT_ROOT);
-registerScopeTools(server, session, PROJECT_ROOT);
-registerDisplay(server, session, PROJECT_ROOT);
-registerBackend(server, session, PROJECT_ROOT);
-registerAnalysis(server, session, PROJECT_ROOT);
-registerReporting(server, session, PROJECT_ROOT);
+registerCoreTools(server, session, PROJECT_ROOT);
 
 function resolveExtensionSpecifier(modulePath: string): string {
   if (modulePath.startsWith("file://")) {

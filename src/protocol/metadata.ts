@@ -14,7 +14,6 @@ export type CommandCategory = z.infer<typeof commandCategorySchema>;
 export const commandExposureSchema = z.enum([
   "mcp",
   "internal",
-  "planned",
 ]);
 
 export type CommandExposure = z.infer<typeof commandExposureSchema>;
