@@ -83,7 +83,7 @@ test("MCP harness can call agda_protocol_parity", async () => {
     assert.ok(result.structuredContent.data.entries.some((entry) => entry.agdaCommand === "Cmd_load"));
     const searchAbout = result.structuredContent.data.entries.find((entry) => entry.agdaCommand === "Cmd_search_about_toplevel");
     assert.ok(searchAbout);
-    assert.equal(searchAbout.parityStatus, "verified");
+    assert.equal(searchAbout.parityStatus, "end-to-end");
   });
 });
 

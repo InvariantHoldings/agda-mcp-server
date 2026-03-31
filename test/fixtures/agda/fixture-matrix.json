@@ -306,5 +306,41 @@
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
     "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "ProofActions.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 4,
+    "minHoleCount": 4,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "SolveActions.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "BackendNoHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "BackendHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
   }
 ]

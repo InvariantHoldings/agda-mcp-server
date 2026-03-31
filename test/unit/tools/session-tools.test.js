@@ -69,6 +69,7 @@ test("session and reporting registrations populate manifest entries", () => {
 
     assert.ok(parityEntry);
     assert.equal(parityEntry.category, "reporting");
+    assert.ok(parityEntry.outputFields.includes("endToEndCount"));
     assert.ok(parityEntry.outputFields.includes("knownGapCount"));
 
     assert.ok(bugEntry);

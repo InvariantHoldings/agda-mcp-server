@@ -31,6 +31,7 @@ export const protocolCommandDefinitionSchema = z.object({
 export type ProtocolCommandDefinition = z.infer<typeof protocolCommandDefinitionSchema>;
 
 export const protocolParityStatusSchema = z.enum([
+  "end-to-end",
   "verified",
   "mapped",
   "known-gap",

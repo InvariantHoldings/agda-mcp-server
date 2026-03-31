@@ -25,24 +25,24 @@ test("protocol parity summary counts are internally consistent", () => {
 
   assert.equal(summary.trackedCommandCount, summary.upstreamCommandCount);
   assert.equal(
-    summary.verifiedCount + summary.mappedCount + summary.knownGapCount,
+    summary.endToEndCount + summary.verifiedCount + summary.mappedCount + summary.knownGapCount,
     summary.trackedCommandCount,
   );
 });
 
-test("protocol parity matrix records search_about as verified", () => {
+test("protocol parity matrix records search_about as end-to-end", () => {
   const entries = listProtocolParityMatrix();
   const knownGaps = getKnownProtocolGaps();
   const searchAbout = entries.find((entry) => entry.agdaCommand === "Cmd_search_about_toplevel");
 
   assert.ok(searchAbout);
-  assert.equal(searchAbout.parityStatus, "verified");
+  assert.equal(searchAbout.parityStatus, "end-to-end");
   assert.equal(searchAbout.coverageLevel, "mcp");
   assert.ok(searchAbout.issues.includes(7));
   assert.ok(!knownGaps.some((entry) => entry.agdaCommand === "Cmd_search_about_toplevel"));
 });
 
-test("protocol parity matrix records expression and context commands as verified", () => {
+test("protocol parity matrix records expression and context commands as end-to-end", () => {
   const entries = listProtocolParityMatrix();
 
   for (const agdaCommand of [
@@ -56,6 +56,6 @@ test("protocol parity matrix records expression and context commands as verified
   ]) {
     const entry = entries.find((candidate) => candidate.agdaCommand === agdaCommand);
     assert.ok(entry, `missing parity entry for ${agdaCommand}`);
-    assert.equal(entry.parityStatus, "verified");
+    assert.equal(entry.parityStatus, "end-to-end");
   }
 });

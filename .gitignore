@@ -5,6 +5,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 test/fixtures/agda/_build/
+test/fixtures/agda/MAlonzo/
 
 # Test and coverage output
 coverage/

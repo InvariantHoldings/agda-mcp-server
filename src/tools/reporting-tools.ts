@@ -41,7 +41,7 @@ const protocolParityEntrySchema = z.object({
   exposure: z.string(),
   implemented: z.boolean(),
   mcpTool: z.string().optional(),
-  parityStatus: z.enum(["verified", "mapped", "known-gap"]),
+  parityStatus: z.enum(["end-to-end", "verified", "mapped", "known-gap"]),
   coverageLevel: z.enum(["none", "unit", "integration", "mcp"]),
   notes: z.string().optional(),
   issues: z.array(z.number()),
@@ -53,6 +53,7 @@ const protocolParityDataSchema = z.object({
   verifiedAt: z.string(),
   upstreamCommandCount: z.number(),
   trackedCommandCount: z.number(),
+  endToEndCount: z.number(),
   verifiedCount: z.number(),
   mappedCount: z.number(),
   knownGapCount: z.number(),
@@ -181,6 +182,7 @@ export function register(
       output += `**Upstream source:** ${summary.source}\n`;
       output += `**Verified at:** ${summary.verifiedAt}\n`;
       output += `**Tracked commands:** ${summary.trackedCommandCount}/${summary.upstreamCommandCount}\n`;
+      output += `**End-to-end:** ${summary.endToEndCount}\n`;
       output += `**Verified:** ${summary.verifiedCount}\n`;
       output += `**Mapped:** ${summary.mappedCount}\n`;
       output += `**Known gaps:** ${summary.knownGapCount}\n\n`;

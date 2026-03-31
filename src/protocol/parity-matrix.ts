@@ -83,6 +83,7 @@ export function getProtocolParitySummary() {
     verifiedAt: upstreamParityVerification.verifiedAt,
     upstreamCommandCount: upstreamAgdaCommands.length,
     trackedCommandCount: entries.length,
+    endToEndCount: entries.filter((entry) => entry.parityStatus === "end-to-end").length,
     verifiedCount: entries.filter((entry) => entry.parityStatus === "verified").length,
     mappedCount: entries.filter((entry) => entry.parityStatus === "mapped").length,
     knownGapCount: entries.filter((entry) => entry.parityStatus === "known-gap").length,
