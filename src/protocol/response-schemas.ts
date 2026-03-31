@@ -250,6 +250,7 @@ export const whyInScopeInfoSchema = z.object({
 
 export const versionInfoSchema = z.object({
   kind: z.literal("Version"),
+  version: z.string().optional(),
   message: z.string().optional(),
   text: z.string().optional(),
 }).passthrough();

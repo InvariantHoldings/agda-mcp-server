@@ -134,7 +134,7 @@ function decodeStructuredInfoText(info: Record<string, unknown>): string {
 
   const version = versionInfoSchema.safeParse(info);
   if (version.success) {
-    return version.data.message ?? version.data.text ?? "";
+    return version.data.version ?? version.data.message ?? version.data.text ?? "";
   }
 
   const helperFunction = goalHelperFunctionInfoSchema.safeParse(info);
