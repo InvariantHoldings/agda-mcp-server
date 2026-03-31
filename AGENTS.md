@@ -85,6 +85,16 @@ RUN_AGDA_INTEGRATION=1 npm run test:e2e
 RUN_AGDA_INTEGRATION=1 RUN_AGDA_BACKEND_INTEGRATION=1 npm run test:e2e
 ```
 
+Full release-information run:
+
+```bash
+npm run test:release:full
+```
+
+This enables live Agda and backend coverage, continues after failures, and
+writes both quiet and verbose logs under `test-output/` using the
+`release-full` label by default.
+
 Convenience scripts:
 
 ```bash
