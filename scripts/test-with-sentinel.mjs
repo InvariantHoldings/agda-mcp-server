@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 export function formatSentinelMessage({ label, exitCode }) {
   if (exitCode === 0) {
@@ -6,6 +7,14 @@ export function formatSentinelMessage({ label, exitCode }) {
   }
 
   return `FAILED: ${label} (exit code ${exitCode ?? "unknown"})`;
+}
+
+export function isMainModule(moduleUrl, argvPath) {
+  if (!argvPath) {
+    return false;
+  }
+
+  return moduleUrl === pathToFileURL(argvPath).href;
 }
 
 function parseArgs(argv) {
@@ -53,6 +62,6 @@ async function main() {
   process.exit(exitCode);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   await main();
 }

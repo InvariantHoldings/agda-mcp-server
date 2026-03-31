@@ -19,7 +19,9 @@ test("official reference sources are unique and official", () => {
   assert.ok(policy.includePathPrefixes.includes("/agda/Agda-"));
 
   for (const source of sources) {
-    assert.match(source.url, /^https:\/\/agda\.github\.io\//);
+    const sourceUrl = new URL(source.url);
+    assert.equal(sourceUrl.origin, "https://agda.github.io");
+    assert.ok(policy.includePathPrefixes.some((prefix) => sourceUrl.pathname.startsWith(prefix)));
     assert.ok(source.description.length > 0);
     assert.ok(source.tags.length > 0);
   }

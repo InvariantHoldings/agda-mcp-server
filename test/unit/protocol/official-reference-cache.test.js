@@ -47,6 +47,17 @@ test("extractOfficialReferenceSummary extracts title, headings, and readable tex
   assert.match(summary.text, /Cmd_load & Cmd_metas/);
 });
 
+test("extractOfficialReferenceSummary strips script and style tags even with spaced end tags", () => {
+  const summary = extractOfficialReferenceSummary(
+    "https://agda.github.io/agda/Agda-Main.html",
+    "<html><body><script>window.bad = true;</script ><style>.x { color: red; }</style ><p>Visible text</p></body></html>",
+  );
+
+  assert.match(summary.text, /Visible text/);
+  assert.doesNotMatch(summary.text, /window\.bad/);
+  assert.doesNotMatch(summary.text, /color: red/);
+});
+
 test("collectOfficialReferenceLinks keeps official HTML links and drops noise", () => {
   const links = collectOfficialReferenceLinks(
     "https://agda.github.io/agda/Agda-Main.html",

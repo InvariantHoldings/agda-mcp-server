@@ -20,7 +20,7 @@
     "agda-mcp-server": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && rsync -a --prune-empty-dirs --include '*/' --include '*.json' --exclude '*' src/ dist/",
+    "build": "tsc -p tsconfig.json && node scripts/copy-json-assets.mjs",
     "protocol:refresh:official": "npm run build && node scripts/refresh-official-protocol-references.mjs",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",

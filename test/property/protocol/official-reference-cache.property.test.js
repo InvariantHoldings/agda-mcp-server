@@ -28,7 +28,10 @@ test("official reference helpers are total on arbitrary HTML-ish input", async (
       assert.equal(typeof summary.title, "string");
       assert.ok(Array.isArray(summary.headings));
       for (const link of links) {
-        assert.match(link, /^https:\/\/agda\.github\.io\/agda\/Agda-.*\.html$/);
+        const parsed = new URL(link);
+        assert.equal(parsed.origin, "https://agda.github.io");
+        assert.ok(parsed.pathname.startsWith("/agda/Agda-"));
+        assert.ok(parsed.pathname.endsWith(".html"));
       }
     }),
   );
