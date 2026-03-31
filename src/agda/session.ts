@@ -345,6 +345,30 @@ export class AgdaSession {
     };
   }
 
+  async compile(
+    backendExpr: string,
+    filePath: string,
+    argv: string[] = [],
+  ) {
+    return this.backend.compile(backendExpr, filePath, argv);
+  }
+
+  async backendTop(
+    backendExpr: string,
+    payload: string,
+  ) {
+    return this.backend.top(backendExpr, payload);
+  }
+
+  async backendHole(
+    goalId: number,
+    holeContents: string,
+    backendExpr: string,
+    payload: string,
+  ) {
+    return this.backend.hole(goalId, holeContents, backendExpr, payload);
+  }
+
   /** Send Cmd_abort to the running Agda process. */
   async abort(): Promise<AgdaResponse[]> {
     return this.runIndependentCommand("Cmd_abort", 10_000);

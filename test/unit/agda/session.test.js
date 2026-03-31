@@ -44,3 +44,32 @@ test("AgdaSession destroy resets mutable session state", () => {
   assert.equal(session.buffer, "");
   assert.deepEqual(session.responseQueue, []);
 });
+
+test("AgdaSession forwards legacy backend compatibility methods", async () => {
+  const session = new AgdaSession(process.cwd());
+  const calls = [];
+
+  session.backend = {
+    compile: async (backendExpr, filePath, argv) => {
+      calls.push(["compile", backendExpr, filePath, argv]);
+      return { kind: "compile" };
+    },
+    top: async (backendExpr, payload) => {
+      calls.push(["top", backendExpr, payload]);
+      return { kind: "top" };
+    },
+    hole: async (goalId, holeContents, backendExpr, payload) => {
+      calls.push(["hole", goalId, holeContents, backendExpr, payload]);
+      return { kind: "hole" };
+    },
+  };
+
+  assert.deepEqual(await session.compile("GHC", "/tmp/Test.agda", ["--flag"]), { kind: "compile" });
+  assert.deepEqual(await session.backendTop("GHC", "ping"), { kind: "top" });
+  assert.deepEqual(await session.backendHole(7, "", "GHC", "pong"), { kind: "hole" });
+  assert.deepEqual(calls, [
+    ["compile", "GHC", "/tmp/Test.agda", ["--flag"]],
+    ["top", "GHC", "ping"],
+    ["hole", 7, "", "GHC", "pong"],
+  ]);
+});
