@@ -52,6 +52,14 @@ export function deriveSuggestions(
   context: ContextEntry[],
 ): Suggestion[] {
   const suggestions: Suggestion[] = [];
+  const nameCounts = new Map<string, number>();
+
+  for (const entry of context) {
+    if (!entry.name) {
+      continue;
+    }
+    nameCounts.set(entry.name, (nameCounts.get(entry.name) ?? 0) + 1);
+  }
 
   // If goal type is an equality, suggest refl
   if (goalType.includes("≡")) {
@@ -87,7 +95,7 @@ export function deriveSuggestions(
 
   // Suggest case split on non-implicit variables
   for (const e of context) {
-    if (!e.isImplicit && e.name && e.type) {
+    if (!e.isImplicit && e.name && e.type && (nameCounts.get(e.name) ?? 0) === 1) {
       suggestions.push({
         action: "case_split",
         variable: e.name,

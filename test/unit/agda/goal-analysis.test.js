@@ -76,6 +76,15 @@ test("deriveSuggestions: equality type suggests refl", () => {
   assert.ok(suggestions.some((s) => s.action === "give" && s.expr === "refl"));
 });
 
+test("deriveSuggestions: case_split skips ambiguous duplicate names", () => {
+  const suggestions = deriveSuggestions("Nat", [
+    { name: "x", type: "Nat", isImplicit: false },
+    { name: "x", type: "Set", isImplicit: true },
+  ]);
+
+  assert.ok(!suggestions.some((s) => s.action === "case_split" && s.variable === "x"));
+});
+
 // ── findMatchingTerms ────────────────────────────────────
 
 test("findMatchingTerms: finds exact type matches", () => {
