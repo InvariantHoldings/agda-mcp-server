@@ -8,6 +8,7 @@ import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import type { AgdaSession } from "../agda-process.js";
+import { PathSandboxError } from "../repo-root.js";
 import type { ToolCategory } from "./manifest.js";
 import { registerManifestEntry } from "./manifest.js";
 
@@ -227,6 +228,15 @@ export function validateGoalId(
 function toToolInvocationError(err: unknown): ToolInvocationError {
   if (err instanceof ToolInvocationError) {
     return err;
+  }
+
+  if (err instanceof PathSandboxError) {
+    return new ToolInvocationError({
+      message: err.message,
+      classification: "invalid-path",
+      diagnostics: [errorDiagnostic(err.message, "invalid-path")],
+      data: { path: err.targetPath },
+    });
   }
 
   const message = err instanceof Error ? err.message : String(err);

@@ -12,7 +12,7 @@ import {
   registerGoalTextTool,
   registerTextTool,
 } from "./tool-helpers.js";
-import { resolveFileWithinRoot } from "../repo-root.js";
+import { resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 
 export function register(
   server: McpServer,
@@ -27,12 +27,13 @@ export function register(
     protocolCommands: ["Cmd_load_highlighting_info"],
     inputSchema: { file: z.string().describe("Path to the .agda file (relative to repo root or absolute)") },
     callback: async ({ file }: { file: string }) => {
-      const filePath = resolveFileWithinRoot(repoRoot, file);
-      if (!existsSync(filePath)) {
-        throw missingPathToolError("file", filePath);
+      const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
+      if (!existsSync(requestedFilePath)) {
+        throw missingPathToolError("file", requestedFilePath);
       }
+      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const result = await session.display.loadHighlightingInfo(filePath);
-      return `## Highlighting info loaded\n\nFile: ${relative(repoRoot, filePath)}\n\n${result.output}\n`;
+      return `## Highlighting info loaded\n\nFile: ${relative(repoRoot, requestedFilePath)}\n\n${result.output}\n`;
     },
   });
 
@@ -47,12 +48,13 @@ export function register(
       remove: z.boolean().optional().describe("When true, remove token highlighting for this file"),
     },
     callback: async ({ file, remove }: { file: string; remove?: boolean }) => {
-      const filePath = resolveFileWithinRoot(repoRoot, file);
-      if (!existsSync(filePath)) {
-        throw missingPathToolError("file", filePath);
+      const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
+      if (!existsSync(requestedFilePath)) {
+        throw missingPathToolError("file", requestedFilePath);
       }
+      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const result = await session.display.tokenHighlighting(filePath, Boolean(remove));
-      return `## Token highlighting\n\nFile: ${relative(repoRoot, filePath)}\n\n${result.output}\n`;
+      return `## Token highlighting\n\nFile: ${relative(repoRoot, requestedFilePath)}\n\n${result.output}\n`;
     },
   });
 

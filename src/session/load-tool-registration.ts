@@ -22,7 +22,7 @@ import {
   renderLoadLikeText,
   typecheckDataSchema,
 } from "./tool-presentation.js";
-import { resolveFileWithinRoot } from "../repo-root.js";
+import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 
 function missingFileResult(tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck", filePath: string) {
   return makeToolResult(
@@ -79,6 +79,37 @@ function processErrorResult(
   );
 }
 
+function invalidPathResult(
+  tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck",
+  file: string,
+) {
+  const message = `Invalid file path: ${file}`;
+  return makeToolResult(
+    errorEnvelope({
+      tool,
+      summary: message,
+      classification: "invalid-path",
+      data: {
+        file,
+        success: false,
+        goalIds: [],
+        goalCount: 0,
+        invisibleGoalCount: 0,
+        hasHoles: false,
+        isComplete: false,
+        classification: "invalid-path",
+        errors: [message],
+        warnings: [],
+        ...(tool === "agda_typecheck"
+          ? {}
+          : { reloaded: false, staleBeforeLoad: false }),
+      },
+      diagnostics: [errorDiagnostic(message, "invalid-path")],
+    }),
+    message,
+  );
+}
+
 export function registerSessionLoadTools(
   server: McpServer,
   session: AgdaSession,
@@ -95,22 +126,23 @@ export function registerSessionLoadTools(
     },
     outputDataSchema: loadDataSchema,
     callback: async ({ file }: { file: string }) => {
-      let filePath: string;
+      let requestedFilePath: string;
       try {
-        filePath = resolveFileWithinRoot(repoRoot, file);
+        requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       } catch {
-        return processErrorResult("agda_load", file, `Invalid file path: ${file}`);
+        return invalidPathResult("agda_load", file);
       }
-      if (!existsSync(filePath)) {
-        return missingFileResult("agda_load", filePath);
+      if (!existsSync(requestedFilePath)) {
+        return missingFileResult("agda_load", requestedFilePath);
       }
 
       try {
+        const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
         const previousFile = session.getLoadedFile();
         const isReload = previousFile === filePath;
         const wasStale = isReload && session.isFileStale();
         const result = await session.load(filePath);
-        const relPath = relative(repoRoot, filePath);
+        const relPath = relative(repoRoot, requestedFilePath);
         const diagnostics = [
           ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),
           ...result.warnings.map((message) => warningDiagnostic(message, "agda-warning")),
@@ -176,6 +208,9 @@ export function registerSessionLoadTools(
           renderedText,
         );
       } catch (err) {
+        if (err instanceof PathSandboxError) {
+          return invalidPathResult("agda_load", file);
+        }
         return processErrorResult(
           "agda_load",
           file,
@@ -196,19 +231,20 @@ export function registerSessionLoadTools(
     },
     outputDataSchema: loadDataSchema,
     callback: async ({ file }: { file: string }) => {
-      let filePath: string;
+      let requestedFilePath: string;
       try {
-        filePath = resolveFileWithinRoot(repoRoot, file);
+        requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       } catch {
-        return processErrorResult("agda_load_no_metas", file, `Invalid file path: ${file}`);
+        return invalidPathResult("agda_load_no_metas", file);
       }
-      if (!existsSync(filePath)) {
-        return missingFileResult("agda_load_no_metas", filePath);
+      if (!existsSync(requestedFilePath)) {
+        return missingFileResult("agda_load_no_metas", requestedFilePath);
       }
 
       try {
+        const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
         const result = await session.loadNoMetas(filePath);
-        const relPath = relative(repoRoot, filePath);
+        const relPath = relative(repoRoot, requestedFilePath);
         const text = renderLoadLikeText({
           heading: "Loaded without metas",
           file: relPath,
@@ -250,6 +286,9 @@ export function registerSessionLoadTools(
           text,
         );
       } catch (err) {
+        if (err instanceof PathSandboxError) {
+          return invalidPathResult("agda_load_no_metas", file);
+        }
         return processErrorResult(
           "agda_load_no_metas",
           file,
@@ -270,19 +309,20 @@ export function registerSessionLoadTools(
     },
     outputDataSchema: typecheckDataSchema,
     callback: async ({ file }: { file: string }) => {
-      let filePath: string;
+      let requestedFilePath: string;
       try {
-        filePath = resolveFileWithinRoot(repoRoot, file);
+        requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       } catch {
-        return processErrorResult("agda_typecheck", file, `Invalid file path: ${file}`);
+        return invalidPathResult("agda_typecheck", file);
       }
-      if (!existsSync(filePath)) {
-        return missingFileResult("agda_typecheck", filePath);
+      if (!existsSync(requestedFilePath)) {
+        return missingFileResult("agda_typecheck", requestedFilePath);
       }
 
       try {
+        const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
         const result = await typeCheckBatch(filePath, repoRoot);
-        const relPath = relative(repoRoot, filePath);
+        const relPath = relative(repoRoot, requestedFilePath);
         const text = renderLoadLikeText({
           heading: "Type-check",
           file: relPath,
@@ -321,6 +361,9 @@ export function registerSessionLoadTools(
           text,
         );
       } catch (err) {
+        if (err instanceof PathSandboxError) {
+          return invalidPathResult("agda_typecheck", file);
+        }
         return processErrorResult(
           "agda_typecheck",
           file,

@@ -1,12 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolve, join } from "node:path";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve, join, win32 } from "node:path";
 
 import {
   PROJECT_ROOT_ENV_VAR,
   SERVER_REPO_ROOT,
+  isPathWithinRoot,
   resolveProjectPath,
   resolveProjectRoot,
+  resolveExistingPathWithinRoot,
   resolveFileWithinRoot,
 } from "../../../dist/repo-root.js";
 import { TEST_SERVER_REPO_ROOT } from "../../helpers/repo-root.js";
@@ -87,6 +91,10 @@ test("resolveFileWithinRoot allows an absolute path equal to root", () => {
   assert.equal(resolveFileWithinRoot("/repo", "/repo"), "/repo");
 });
 
+test("resolveFileWithinRoot allows any path when the project root is /", () => {
+  assert.equal(resolveFileWithinRoot("/", "/etc/hosts"), "/etc/hosts");
+});
+
 test("resolveFileWithinRoot allows a path formed with join()", () => {
   assert.equal(
     resolveFileWithinRoot("/repo", join("agda", "Kernel")),
@@ -99,4 +107,43 @@ test("resolveFileWithinRoot rejects a join-constructed path that escapes root", 
     () => resolveFileWithinRoot("/repo", join("agda", "../../etc")),
     /escapes project root/,
   );
+});
+
+test("isPathWithinRoot treats win32 drive-letter casing as equivalent", () => {
+  assert.equal(isPathWithinRoot("c:/repo", "C:/repo/file.agda", win32), true);
+  assert.equal(isPathWithinRoot("c:/repo", "C:/other/file.agda", win32), false);
+});
+
+test("resolveExistingPathWithinRoot rejects symlink escapes outside the project root", (t) => {
+  const sandbox = mkdtempSync(join(tmpdir(), "agda-mcp-path-"));
+  const repoRoot = join(sandbox, "repo");
+  const outsideRoot = join(sandbox, "outside");
+  const outsideFile = join(outsideRoot, "Secret.agda");
+  const symlinkDir = join(repoRoot, "linked");
+
+  mkdirSync(repoRoot);
+  mkdirSync(outsideRoot);
+  writeFileSync(outsideFile, "module Secret where\n");
+
+  try {
+    symlinkSync(outsideRoot, symlinkDir, "dir");
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error) {
+      const code = error.code;
+      if (code === "EPERM" || code === "EACCES") {
+        t.skip(`symlink creation is not permitted on this platform: ${code}`);
+        return;
+      }
+    }
+    throw error;
+  }
+
+  try {
+    assert.throws(
+      () => resolveExistingPathWithinRoot(repoRoot, "linked/Secret.agda"),
+      /resolves outside project root/,
+    );
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
 });

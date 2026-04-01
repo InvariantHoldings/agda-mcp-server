@@ -63,7 +63,10 @@ Key design properties relevant to security:
   stdin/stdout; it does not open any network socket.
 - **Path sandboxing** — all user-supplied file paths are resolved and validated
   to remain within the project root before any filesystem or Agda operation.
-  Paths that escape the root are rejected with an error.
+  For existing files and directories, the server additionally checks the
+  canonical `realpath` target so symlinks inside the root cannot escape the
+  sandbox. Paths that escape the root are rejected with an `invalid-path`
+  error classification.
 - **Subprocess isolation** — the Agda process is spawned via `child_process.spawn`
   with an explicit argument array (never `exec` or `shell: true`), eliminating
   shell-injection risk.
@@ -85,4 +88,3 @@ For local auditing:
 npm audit
 npm audit --audit-level=high   # exits non-zero on high/critical
 ```
-

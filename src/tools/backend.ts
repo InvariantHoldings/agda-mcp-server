@@ -12,7 +12,7 @@ import {
   registerGoalTextTool,
   registerTextTool,
 } from "./tool-helpers.js";
-import { resolveFileWithinRoot } from "../repo-root.js";
+import { resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 
 function backendExpressionHelp(): string {
   return "Backend constructor expression (for example: GHC, GHCNoMain, LaTeX, QuickLaTeX, or OtherBackend \"JS\").";
@@ -35,15 +35,16 @@ export function register(
       args: z.array(z.string()).optional().describe("Optional Agda CLI arguments for the compile command"),
     },
     callback: async ({ backend, file, args }: { backend: string; file: string; args?: string[] }) => {
-      const filePath = resolveFileWithinRoot(repoRoot, file);
-      if (!existsSync(filePath)) {
-        throw missingPathToolError("file", filePath);
+      const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
+      if (!existsSync(requestedFilePath)) {
+        throw missingPathToolError("file", requestedFilePath);
       }
+      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const result = await session.backend.compile(backend, filePath, args);
       return [
         "## Compile", "",
         `Backend: ${backend}`,
-        `File: ${relative(repoRoot, filePath)}`,
+        `File: ${relative(repoRoot, requestedFilePath)}`,
         `Status: ${result.success ? "OK" : "FAILED"}`, "",
         result.output || "(no output)",
       ].join("\n");

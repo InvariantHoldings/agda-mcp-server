@@ -9,7 +9,7 @@ import { resolve, relative, join } from "node:path";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import type { AgdaSession } from "../agda-process.js";
 import { missingPathToolError, ToolInvocationError, registerTextTool } from "./tool-helpers.js";
-import { resolveFileWithinRoot } from "../repo-root.js";
+import { resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 
 export function register(
   server: McpServer,
@@ -23,16 +23,17 @@ export function register(
     category: "navigation",
     inputSchema: { file: z.string().describe("Path to the .agda file") },
     callback: async ({ file }: { file: string }) => {
-      const filePath = resolveFileWithinRoot(repoRoot, file);
-      if (!existsSync(filePath)) {
-        throw missingPathToolError("file", filePath);
+      const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
+      if (!existsSync(requestedFilePath)) {
+        throw missingPathToolError("file", requestedFilePath);
       }
+      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const fileContent = readFileSync(filePath, "utf-8");
       const numbered = fileContent
         .split("\n")
         .map((line, i) => `${String(i + 1).padStart(4)} | ${line}`)
         .join("\n");
-      return `## ${relative(repoRoot, filePath)}\n\n\`\`\`agda\n${numbered}\n\`\`\``;
+      return `## ${relative(repoRoot, requestedFilePath)}\n\n\`\`\`agda\n${numbered}\n\`\`\``;
     },
   });
 
@@ -43,8 +44,8 @@ export function register(
     category: "navigation",
     inputSchema: { tier: z.string().describe("The tier to list, e.g. 'Kernel', 'Foundation', 'MathLib'") },
     callback: async ({ tier }: { tier: string }) => {
-      const tierDir = resolveFileWithinRoot(repoRoot, join("agda", tier));
-      if (!existsSync(tierDir)) {
+      const requestedTierDir = resolveFileWithinRoot(repoRoot, join("agda", tier));
+      if (!existsSync(requestedTierDir)) {
         throw new ToolInvocationError({
           message: `Tier directory not found: agda/${tier}`,
           classification: "not-found",
@@ -64,6 +65,7 @@ export function register(
           text: `Tier directory not found: agda/${tier}\nAvailable: MathLib, Foundation, Kernel, Research, Extensions, TrustedCompute`,
         });
       }
+      const tierDir = resolveExistingPathWithinRoot(repoRoot, requestedTierDir);
       const modules: string[] = [];
       function walk(dir: string): void {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -85,10 +87,11 @@ export function register(
     category: "navigation",
     inputSchema: { file: z.string().describe("Path to the .agda file") },
     callback: async ({ file }: { file: string }) => {
-      const filePath = resolveFileWithinRoot(repoRoot, file);
-      if (!existsSync(filePath)) {
-        throw missingPathToolError("file", filePath);
+      const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
+      if (!existsSync(requestedFilePath)) {
+        throw missingPathToolError("file", requestedFilePath);
       }
+      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const fileContent = readFileSync(filePath, "utf-8");
       const lines = fileContent.split("\n");
       const postulates: string[] = [];
@@ -97,7 +100,7 @@ export function register(
           postulates.push(`Line ${i + 1}: ${lines[i].trim()}`);
         }
       }
-      const relPath = relative(repoRoot, filePath);
+      const relPath = relative(repoRoot, requestedFilePath);
       const isKernel = relPath.startsWith("agda/Kernel/");
       let output = `## Postulate check: ${relPath}\n\n`;
       if (postulates.length === 0) {
@@ -122,12 +125,13 @@ export function register(
       tier: z.string().optional().describe("Optional tier to limit search (Kernel, Foundation, etc.)"),
     },
     callback: async ({ query, tier }: { query: string; tier?: string }) => {
-      const searchRoot = tier
+      const requestedSearchRoot = tier
         ? resolveFileWithinRoot(repoRoot, join("agda", tier))
         : resolveFileWithinRoot(repoRoot, "agda");
-      if (!existsSync(searchRoot)) {
-        throw missingPathToolError("directory", searchRoot);
+      if (!existsSync(requestedSearchRoot)) {
+        throw missingPathToolError("directory", requestedSearchRoot);
       }
+      const searchRoot = resolveExistingPathWithinRoot(repoRoot, requestedSearchRoot);
       const matches: Array<{ file: string; line: number; text: string }> = [];
       function searchDir(dir: string): void {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
