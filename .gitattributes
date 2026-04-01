@@ -1,15 +1,28 @@
+# Normalize line endings
 * text=auto eol=lf
 
-*.sh text eol=lf
-*.ts text eol=lf
-*.js text eol=lf
-*.json text eol=lf
-*.md text eol=lf
-*.yml text eol=lf
-*.yaml text eol=lf
+# Source files
+*.ts        text eol=lf linguist-language=TypeScript
+*.mjs       text eol=lf
+*.js        text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.sh        text eol=lf
+*.agda      text eol=lf
+*.agda-lib  text eol=lf
+*.lagda     text eol=lf
+*.lagda.md  text eol=lf
 
-*.png binary
-*.jpg binary
+# Test and tooling JavaScript is auxiliary to the TypeScript source
+test/**/*.js  linguist-detectable=false
+tooling/**    linguist-detectable=false
+scripts/**    linguist-detectable=false
+
+# Binary files
+*.png  binary
+*.jpg  binary
 *.jpeg binary
-*.gif binary
-*.pdf binary
+*.gif  binary
+*.pdf  binary

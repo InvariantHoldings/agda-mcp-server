@@ -21,6 +21,21 @@ test("parseAgdaLibraryName extracts the declared library name", () => {
   assert.equal(parseAgdaLibraryName(contents), "example-lib");
 });
 
+test("parseAgdaLibraryName strips inline -- comments from the name", () => {
+  const contents = "name: example-lib --this is a comment\ninclude: src\n";
+  assert.equal(parseAgdaLibraryName(contents), "example-lib");
+});
+
+test("parseAgdaLibraryName strips inline -- comments with no preceding space", () => {
+  const contents = "name: my-lib--attached comment\ninclude: src\n";
+  assert.equal(parseAgdaLibraryName(contents), "my-lib");
+});
+
+test("parseAgdaLibraryName returns null when name is only a comment", () => {
+  const contents = "name: --just a comment\ninclude: src\n";
+  assert.equal(parseAgdaLibraryName(contents), null);
+});
+
 for (const scenario of libraryRegistrationMatrix) {
   test(`createLibraryRegistration honors matrix scenario: ${scenario.name}`, () => {
     const materialized = materializeLibraryRegistrationScenario(scenario);
