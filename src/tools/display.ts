@@ -4,7 +4,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { resolve, relative } from "node:path";
+import { relative } from "node:path";
 import { existsSync } from "node:fs";
 import { AgdaSession } from "../agda-process.js";
 import {
@@ -12,6 +12,7 @@ import {
   registerGoalTextTool,
   registerTextTool,
 } from "./tool-helpers.js";
+import { resolveFileWithinRoot } from "../repo-root.js";
 
 export function register(
   server: McpServer,
@@ -26,7 +27,7 @@ export function register(
     protocolCommands: ["Cmd_load_highlighting_info"],
     inputSchema: { file: z.string().describe("Path to the .agda file (relative to repo root or absolute)") },
     callback: async ({ file }: { file: string }) => {
-      const filePath = resolve(repoRoot, file);
+      const filePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(filePath)) {
         throw missingPathToolError("file", filePath);
       }
@@ -46,7 +47,7 @@ export function register(
       remove: z.boolean().optional().describe("When true, remove token highlighting for this file"),
     },
     callback: async ({ file, remove }: { file: string; remove?: boolean }) => {
-      const filePath = resolve(repoRoot, file);
+      const filePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(filePath)) {
         throw missingPathToolError("file", filePath);
       }

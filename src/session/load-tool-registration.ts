@@ -5,7 +5,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { relative } from "node:path";
 
 import { AgdaSession, typeCheckBatch } from "../agda-process.js";
 import {
@@ -22,6 +22,7 @@ import {
   renderLoadLikeText,
   typecheckDataSchema,
 } from "./tool-presentation.js";
+import { resolveFileWithinRoot } from "../repo-root.js";
 
 function missingFileResult(tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck", filePath: string) {
   return makeToolResult(
@@ -94,7 +95,12 @@ export function registerSessionLoadTools(
     },
     outputDataSchema: loadDataSchema,
     callback: async ({ file }: { file: string }) => {
-      const filePath = resolve(repoRoot, file);
+      let filePath: string;
+      try {
+        filePath = resolveFileWithinRoot(repoRoot, file);
+      } catch {
+        return processErrorResult("agda_load", file, `Invalid file path: ${file}`);
+      }
       if (!existsSync(filePath)) {
         return missingFileResult("agda_load", filePath);
       }
@@ -190,7 +196,12 @@ export function registerSessionLoadTools(
     },
     outputDataSchema: loadDataSchema,
     callback: async ({ file }: { file: string }) => {
-      const filePath = resolve(repoRoot, file);
+      let filePath: string;
+      try {
+        filePath = resolveFileWithinRoot(repoRoot, file);
+      } catch {
+        return processErrorResult("agda_load_no_metas", file, `Invalid file path: ${file}`);
+      }
       if (!existsSync(filePath)) {
         return missingFileResult("agda_load_no_metas", filePath);
       }
@@ -259,7 +270,12 @@ export function registerSessionLoadTools(
     },
     outputDataSchema: typecheckDataSchema,
     callback: async ({ file }: { file: string }) => {
-      const filePath = resolve(repoRoot, file);
+      let filePath: string;
+      try {
+        filePath = resolveFileWithinRoot(repoRoot, file);
+      } catch {
+        return processErrorResult("agda_typecheck", file, `Invalid file path: ${file}`);
+      }
       if (!existsSync(filePath)) {
         return missingFileResult("agda_typecheck", filePath);
       }

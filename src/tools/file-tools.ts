@@ -5,10 +5,11 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { resolve, relative } from "node:path";
+import { resolve, relative, join } from "node:path";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import type { AgdaSession } from "../agda-process.js";
 import { missingPathToolError, ToolInvocationError, registerTextTool } from "./tool-helpers.js";
+import { resolveFileWithinRoot } from "../repo-root.js";
 
 export function register(
   server: McpServer,
@@ -22,7 +23,7 @@ export function register(
     category: "navigation",
     inputSchema: { file: z.string().describe("Path to the .agda file") },
     callback: async ({ file }: { file: string }) => {
-      const filePath = resolve(repoRoot, file);
+      const filePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(filePath)) {
         throw missingPathToolError("file", filePath);
       }
@@ -42,7 +43,7 @@ export function register(
     category: "navigation",
     inputSchema: { tier: z.string().describe("The tier to list, e.g. 'Kernel', 'Foundation', 'MathLib'") },
     callback: async ({ tier }: { tier: string }) => {
-      const tierDir = resolve(repoRoot, "agda", tier);
+      const tierDir = resolveFileWithinRoot(repoRoot, join("agda", tier));
       if (!existsSync(tierDir)) {
         throw new ToolInvocationError({
           message: `Tier directory not found: agda/${tier}`,
@@ -84,7 +85,7 @@ export function register(
     category: "navigation",
     inputSchema: { file: z.string().describe("Path to the .agda file") },
     callback: async ({ file }: { file: string }) => {
-      const filePath = resolve(repoRoot, file);
+      const filePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(filePath)) {
         throw missingPathToolError("file", filePath);
       }
@@ -121,7 +122,9 @@ export function register(
       tier: z.string().optional().describe("Optional tier to limit search (Kernel, Foundation, etc.)"),
     },
     callback: async ({ query, tier }: { query: string; tier?: string }) => {
-      const searchRoot = tier ? resolve(repoRoot, "agda", tier) : resolve(repoRoot, "agda");
+      const searchRoot = tier
+        ? resolveFileWithinRoot(repoRoot, join("agda", tier))
+        : resolveFileWithinRoot(repoRoot, "agda");
       if (!existsSync(searchRoot)) {
         throw missingPathToolError("directory", searchRoot);
       }
