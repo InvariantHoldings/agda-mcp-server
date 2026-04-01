@@ -41,3 +41,28 @@ test("agda_compile returns ok=false for a missing file", async () => {
   assert.equal(result.structuredContent.data.text, "");
   assert.match(result.content[0].text, /File not found:/);
 });
+
+test("agda_compile returns invalid-path for sandbox escapes", async () => {
+  clearToolManifest();
+  const server = createCapturingServer();
+  const session = {
+    backend: {
+      compile: async () => {
+        throw new Error("unreachable");
+      },
+    },
+  };
+
+  registerBackendTools(server, session, "/tmp/agda-mcp-server-test-root");
+
+  const result = await server.get("agda_compile").callback({
+    backend: "GHC",
+    file: "../../etc/passwd",
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent.ok, false);
+  assert.equal(result.structuredContent.classification, "invalid-path");
+  assert.equal(result.structuredContent.data.text, "");
+  assert.match(result.content[0].text, /escapes project root|resolves outside project root/);
+});
