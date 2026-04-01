@@ -34,7 +34,7 @@ function parseArgs(argv) {
   }
 
   return {
-    label: label ?? (testArgs.length > 0 ? testArgs.join(" ") : "node --test"),
+    label: label ?? (testArgs.length > 0 ? testArgs.join(" ") : "vitest run"),
     testArgs,
   };
 }
