@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const PROJECT_ROOT_ENV_VAR = "AGDA_MCP_ROOT";
@@ -52,12 +52,11 @@ export function resolveProjectPath(projectRoot: string, targetPath: string): str
 export function isPathWithinRoot(
   rootPath: string,
   targetPath: string,
-  pathApi: RelativePathApi = { relative, isAbsolute },
+  pathApi: RelativePathApi = { relative, isAbsolute, sep },
 ): boolean {
   const relPath = pathApi.relative(rootPath, targetPath);
-  const separators = new Set([pathApi.sep ?? "/", "/", "\\"]);
   const startsWithParentSegment = relPath === ".."
-    || [...separators].some((separator) => relPath.startsWith(`..${separator}`));
+    || relPath.startsWith(`..${pathApi.sep ?? sep}`);
 
   return relPath === "" || (!startsWithParentSegment && !pathApi.isAbsolute(relPath));
 }

@@ -118,6 +118,10 @@ test("isPathWithinRoot allows in-root segments that merely start with two dots",
   assert.equal(isPathWithinRoot("/repo", "/repo/..foo/file.agda"), true);
 });
 
+test("isPathWithinRoot does not treat backslash as a separator under the default POSIX path API", () => {
+  assert.equal(isPathWithinRoot("/repo", "/repo/..\\foo/file.agda"), true);
+});
+
 test("resolveExistingPathWithinRoot rejects symlink escapes outside the project root", (t) => {
   const sandbox = mkdtempSync(join(tmpdir(), "agda-mcp-path-"));
   const repoRoot = join(sandbox, "repo");

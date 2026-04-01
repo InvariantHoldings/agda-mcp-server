@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { PathSandboxError } from "../../../dist/repo-root.js";
 import { registerSessionLoadTools } from "../../../dist/session/load-tool-registration.js";
 import { clearToolManifest } from "../../../dist/tools/manifest.js";
 
@@ -58,5 +59,51 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
         code: "invalid-path",
       },
     ]);
+  });
+}
+
+for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
+  test(`${toolName} rethrows unexpected path resolver failures`, async () => {
+    clearToolManifest();
+    const server = createCapturingServer();
+
+    registerSessionLoadTools(
+      server,
+      createSessionStub(),
+      "/tmp/agda-mcp-server-test-root",
+      {
+        resolveInputFile: () => {
+          throw new Error("unexpected resolver failure");
+        },
+      },
+    );
+
+    await assert.rejects(
+      () => server.get(toolName).callback({ file: "Example.agda" }),
+      /unexpected resolver failure/,
+    );
+  });
+}
+
+for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
+  test(`${toolName} still maps PathSandboxError from the resolver to invalid-path`, async () => {
+    clearToolManifest();
+    const server = createCapturingServer();
+
+    registerSessionLoadTools(
+      server,
+      createSessionStub(),
+      "/tmp/agda-mcp-server-test-root",
+      {
+        resolveInputFile: () => {
+          throw new PathSandboxError("../../etc/passwd", "Path '../../etc/passwd' escapes project root");
+        },
+      },
+    );
+
+    const result = await server.get(toolName).callback({ file: "../../etc/passwd" });
+
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.classification, "invalid-path");
   });
 }

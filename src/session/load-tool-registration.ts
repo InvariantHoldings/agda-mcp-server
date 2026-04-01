@@ -110,11 +110,33 @@ function invalidPathResult(
   );
 }
 
+type PathResolver = (repoRoot: string, file: string) => string;
+
+function resolveRequestedFilePath(
+  repoRoot: string,
+  file: string,
+  resolveInputFile: PathResolver,
+): string {
+  try {
+    return resolveInputFile(repoRoot, file);
+  } catch (err) {
+    if (err instanceof PathSandboxError) {
+      throw err;
+    }
+    throw err;
+  }
+}
+
 export function registerSessionLoadTools(
   server: McpServer,
   session: AgdaSession,
   repoRoot: string,
+  options: {
+    resolveInputFile?: PathResolver;
+  } = {},
 ): void {
+  const resolveInputFile = options.resolveInputFile ?? resolveFileWithinRoot;
+
   registerStructuredTool({
     server,
     name: "agda_load",
@@ -128,8 +150,11 @@ export function registerSessionLoadTools(
     callback: async ({ file }: { file: string }) => {
       let requestedFilePath: string;
       try {
-        requestedFilePath = resolveFileWithinRoot(repoRoot, file);
-      } catch {
+        requestedFilePath = resolveRequestedFilePath(repoRoot, file, resolveInputFile);
+      } catch (err) {
+        if (!(err instanceof PathSandboxError)) {
+          throw err;
+        }
         return invalidPathResult("agda_load", file);
       }
       if (!existsSync(requestedFilePath)) {
@@ -233,8 +258,11 @@ export function registerSessionLoadTools(
     callback: async ({ file }: { file: string }) => {
       let requestedFilePath: string;
       try {
-        requestedFilePath = resolveFileWithinRoot(repoRoot, file);
-      } catch {
+        requestedFilePath = resolveRequestedFilePath(repoRoot, file, resolveInputFile);
+      } catch (err) {
+        if (!(err instanceof PathSandboxError)) {
+          throw err;
+        }
         return invalidPathResult("agda_load_no_metas", file);
       }
       if (!existsSync(requestedFilePath)) {
@@ -311,8 +339,11 @@ export function registerSessionLoadTools(
     callback: async ({ file }: { file: string }) => {
       let requestedFilePath: string;
       try {
-        requestedFilePath = resolveFileWithinRoot(repoRoot, file);
-      } catch {
+        requestedFilePath = resolveRequestedFilePath(repoRoot, file, resolveInputFile);
+      } catch (err) {
+        if (!(err instanceof PathSandboxError)) {
+          throw err;
+        }
         return invalidPathResult("agda_typecheck", file);
       }
       if (!existsSync(requestedFilePath)) {
