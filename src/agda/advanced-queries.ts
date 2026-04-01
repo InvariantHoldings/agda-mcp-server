@@ -38,7 +38,9 @@ export async function constraints(
   ctx: AgdaCommandContext,
 ): Promise<{ text: string }> {
   ctx.requireFile();
-  const responses = await ctx.sendCommand(ctx.iotcm("Cmd_constraints"));
+  const responses = await ctx.sendCommand(
+    ctx.iotcm(rewriteTopLevelCommand("Cmd_constraints", "Normalised")),
+  );
   throwOnFatalProtocolStderr(responses);
   return { text: decodeDisplayTextResponses(responses).text };
 }
