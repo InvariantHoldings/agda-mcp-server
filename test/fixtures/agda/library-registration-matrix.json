@@ -91,6 +91,32 @@
     "expectedDefaults": []
   },
   {
+    "name": "stable-agda-dir-reuses-existing-directory",
+    "projectFiles": [
+      {
+        "path": "project.agda-lib",
+        "contents": "name: project\ninclude: src\n"
+      }
+    ],
+    "agdaDirFiles": [
+      {
+        "path": "standard-library.agda-lib",
+        "contents": "name: standard-library\ninclude: src\n"
+      },
+      {
+        "path": "libraries",
+        "contents": "standard-library.agda-lib\n"
+      },
+      {
+        "path": "defaults",
+        "contents": "standard-library\n"
+      }
+    ],
+    "expectedAgdaArgs": ["-l", "project"],
+    "expectedLibraryBasenames": ["standard-library.agda-lib", "project.agda-lib"],
+    "expectedDefaults": ["standard-library"]
+  },
+  {
     "name": "configured-libraries-without-name-are-ignored",
     "projectFiles": [],
     "agdaDirFiles": [

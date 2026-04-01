@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import {
@@ -73,3 +73,68 @@ for (const scenario of libraryRegistrationMatrix) {
     }
   });
 }
+
+test("stable AGDA_DIR: reuses the directory and cleanup is a no-op", () => {
+  const scenario = libraryRegistrationMatrix.find(
+    (s) => s.name === "stable-agda-dir-reuses-existing-directory",
+  );
+  assert.ok(scenario, "stable-agda-dir scenario must exist in matrix");
+
+  const materialized = materializeLibraryRegistrationScenario(scenario);
+  const previousAgdaDir = process.env.AGDA_DIR;
+
+  try {
+    process.env.AGDA_DIR = materialized.agdaDir;
+
+    const registration = createLibraryRegistration(materialized.repoRoot);
+
+    // The returned agdaDir must be the same directory we set (not a temp dir)
+    assert.equal(registration.agdaDir, materialized.agdaDir);
+
+    // Cleanup must not delete the stable directory
+    registration.cleanup();
+    assert.ok(existsSync(materialized.agdaDir), "stable AGDA_DIR must survive cleanup()");
+    assert.ok(
+      existsSync(join(materialized.agdaDir, "libraries")),
+      "libraries file must survive cleanup()",
+    );
+  } finally {
+    if (previousAgdaDir === undefined) {
+      delete process.env.AGDA_DIR;
+    } else {
+      process.env.AGDA_DIR = previousAgdaDir;
+    }
+    materialized.cleanup();
+  }
+});
+
+test("unset AGDA_DIR: creates a temp dir that cleanup() removes", () => {
+  const scenario = libraryRegistrationMatrix.find(
+    (s) => s.name === "multiple-project-libraries-are-sorted-by-name",
+  );
+  assert.ok(scenario);
+
+  const materialized = materializeLibraryRegistrationScenario(scenario);
+  const previousAgdaDir = process.env.AGDA_DIR;
+
+  try {
+    // Point AGDA_DIR at a non-existent path so the fallback temp-dir path is taken
+    delete process.env.AGDA_DIR;
+
+    const registration = createLibraryRegistration(materialized.repoRoot);
+    const createdDir = registration.agdaDir;
+
+    assert.ok(existsSync(createdDir), "temp dir must exist before cleanup");
+    assert.ok(createdDir !== materialized.agdaDir, "must be a different dir from source");
+
+    registration.cleanup();
+    assert.ok(!existsSync(createdDir), "temp dir must be removed after cleanup()");
+  } finally {
+    if (previousAgdaDir === undefined) {
+      delete process.env.AGDA_DIR;
+    } else {
+      process.env.AGDA_DIR = previousAgdaDir;
+    }
+    materialized.cleanup();
+  }
+});
