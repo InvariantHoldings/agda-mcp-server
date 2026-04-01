@@ -15,11 +15,10 @@ export function getTestLogPaths(env = process.env) {
 
 export function buildTestRunPlan() {
   return [
-    { label: "build", command: "npm", args: ["run", "--silent", "build"] },
-    { label: "examples", command: process.execPath, args: ["--test", "test/examples/**/*.test.js"] },
-    { label: "unit", command: process.execPath, args: ["--test", "test/unit/**/*.test.js"] },
-    { label: "property", command: process.execPath, args: ["--test", "test/property/**/*.test.js"] },
-    { label: "integration", command: process.execPath, args: ["--test", "test/integration/**/*.test.js"] },
+    { label: "examples", command: "npx", args: ["vitest", "run", "test/examples/"] },
+    { label: "unit", command: "npx", args: ["vitest", "run", "test/unit/"] },
+    { label: "property", command: "npx", args: ["vitest", "run", "test/property/"] },
+    { label: "integration", command: "npx", args: ["vitest", "run", "test/integration/"] },
   ];
 }
 
@@ -50,6 +49,8 @@ export function isHighSignalLine(line) {
 
   return (
     trimmed.startsWith("✖") ||
+    trimmed.startsWith("✓") ||
+    trimmed.startsWith("×") ||
     trimmed.startsWith("not ok") ||
     trimmed.startsWith("Warning:") ||
     trimmed.startsWith("WARNING:") ||
@@ -57,6 +58,9 @@ export function isHighSignalLine(line) {
     trimmed.startsWith("FAIL ") ||
     trimmed.startsWith("PASSED:") ||
     trimmed.startsWith("FAILED:") ||
+    trimmed.startsWith("Test Files") ||
+    trimmed.startsWith("Tests ") ||
+    trimmed.startsWith("Duration") ||
     /^ℹ (tests|pass|fail|cancelled|skipped|todo|duration_ms)\b/.test(trimmed) ||
     /\b(warn|warning|error|failed|timed out|timeout)\b/i.test(trimmed)
   );

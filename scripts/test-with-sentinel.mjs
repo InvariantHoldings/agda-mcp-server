@@ -41,7 +41,7 @@ function parseArgs(argv) {
 
 async function main() {
   const { label, testArgs } = parseArgs(process.argv.slice(2));
-  const child = spawn(process.execPath, ["--test", ...testArgs], {
+  const child = spawn("npx", ["vitest", "run", ...testArgs], {
     stdio: "inherit",
     env: process.env,
   });
