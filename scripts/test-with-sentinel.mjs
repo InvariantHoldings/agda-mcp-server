@@ -34,14 +34,14 @@ function parseArgs(argv) {
   }
 
   return {
-    label: label ?? (testArgs.length > 0 ? testArgs.join(" ") : "node --test"),
+    label: label ?? (testArgs.length > 0 ? testArgs.join(" ") : "vitest run"),
     testArgs,
   };
 }
 
 async function main() {
   const { label, testArgs } = parseArgs(process.argv.slice(2));
-  const child = spawn(process.execPath, ["--test", ...testArgs], {
+  const child = spawn("npx", ["vitest", "run", ...testArgs], {
     stdio: "inherit",
     env: process.env,
   });

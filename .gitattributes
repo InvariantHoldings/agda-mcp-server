@@ -15,11 +15,6 @@
 *.lagda     text eol=lf
 *.lagda.md  text eol=lf
 
-# Test and tooling JavaScript is auxiliary to the TypeScript source
-test/**/*.js  linguist-detectable=false
-tooling/**    linguist-detectable=false
-scripts/**    linguist-detectable=false
-
 # Binary files
 *.png  binary
 *.jpg  binary

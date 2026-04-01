@@ -40,20 +40,19 @@ export function register(
   registerTextTool({
     server,
     name: "agda_token_highlighting",
-    description: "Enable or remove token highlighting for a file using Agda's Cmd_tokenHighlighting.",
+    description: "Load token-based highlighting for a file using Agda's Cmd_tokenHighlighting.",
     category: "highlighting",
     protocolCommands: ["Cmd_tokenHighlighting"],
     inputSchema: {
       file: z.string().describe("Path to the .agda file (relative to repo root or absolute)"),
-      remove: z.boolean().optional().describe("When true, remove token highlighting for this file"),
     },
-    callback: async ({ file, remove }: { file: string; remove?: boolean }) => {
+    callback: async ({ file }: { file: string }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(requestedFilePath)) {
         throw missingPathToolError("file", requestedFilePath);
       }
       const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
-      const result = await session.display.tokenHighlighting(filePath, Boolean(remove));
+      const result = await session.display.tokenHighlighting(filePath);
       return `## Token highlighting\n\nFile: ${relative(repoRoot, requestedFilePath)}\n\n${result.output}\n`;
     },
   });

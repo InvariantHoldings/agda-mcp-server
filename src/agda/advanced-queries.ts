@@ -39,7 +39,7 @@ export async function constraints(
 ): Promise<{ text: string }> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(rewriteTopLevelCommand("Cmd_constraints", "Normalised")),
+    ctx.iotcm(topLevelCommand("Cmd_constraints")),
   );
   throwOnFatalProtocolStderr(responses);
   return { text: decodeDisplayTextResponses(responses).text };

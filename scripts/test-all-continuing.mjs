@@ -16,10 +16,10 @@ export function getTestLogPaths(env = process.env) {
 export function buildTestRunPlan() {
   return [
     { label: "build", command: "npm", args: ["run", "--silent", "build"] },
-    { label: "examples", command: process.execPath, args: ["--test", "test/examples/**/*.test.js"] },
-    { label: "unit", command: process.execPath, args: ["--test", "test/unit/**/*.test.js"] },
-    { label: "property", command: process.execPath, args: ["--test", "test/property/**/*.test.js"] },
-    { label: "integration", command: process.execPath, args: ["--test", "test/integration/**/*.test.js"] },
+    { label: "examples", command: "npx", args: ["vitest", "run", "test/examples/"] },
+    { label: "unit", command: "npx", args: ["vitest", "run", "test/unit/"] },
+    { label: "property", command: "npx", args: ["vitest", "run", "test/property/"] },
+    { label: "integration", command: "npx", args: ["vitest", "run", "test/integration/"] },
   ];
 }
 
@@ -49,12 +49,24 @@ export function isHighSignalLine(line) {
   }
 
   return (
+    // vitest output markers
+    trimmed.startsWith("✓") ||
+    trimmed.startsWith("✗") ||
     trimmed.startsWith("✖") ||
+    trimmed.startsWith("×") ||
+    trimmed.startsWith("❯") ||
+    trimmed.startsWith("⎯") ||
+    trimmed.startsWith("Test Files") ||
+    trimmed.startsWith("Tests ") ||
+    trimmed.startsWith("Duration") ||
+    trimmed.startsWith("Start at") ||
+    // vitest file-level pass/fail
+    trimmed.startsWith("FAIL ") ||
+    trimmed.startsWith("PASS ") ||
+    // node:test TAP leftovers (sentinel script)
     trimmed.startsWith("not ok") ||
     trimmed.startsWith("Warning:") ||
     trimmed.startsWith("WARNING:") ||
-    trimmed.startsWith("PASS ") ||
-    trimmed.startsWith("FAIL ") ||
     trimmed.startsWith("PASSED:") ||
     trimmed.startsWith("FAILED:") ||
     /^ℹ (tests|pass|fail|cancelled|skipped|todo|duration_ms)\b/.test(trimmed) ||

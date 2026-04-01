@@ -43,7 +43,7 @@ export function createSessionNamespaces(ctx: AgdaCommandContext) {
     }),
     display: Object.freeze({
       loadHighlightingInfo: (filePath: string) => DisplayOps.loadHighlightingInfo(ctx, filePath),
-      tokenHighlighting: (filePath: string, remove?: boolean) => DisplayOps.tokenHighlighting(ctx, filePath, remove),
+      tokenHighlighting: (filePath: string) => DisplayOps.tokenHighlighting(ctx, filePath),
       highlight: (goalId: number, expr: string) => DisplayOps.highlight(ctx, goalId, expr),
       showImplicitArgs: (show: boolean) => DisplayOps.showImplicitArgs(ctx, show),
       toggleImplicitArgs: () => DisplayOps.toggleImplicitArgs(ctx),

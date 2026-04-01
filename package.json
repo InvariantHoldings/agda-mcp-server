@@ -26,21 +26,21 @@
     "dev": "tsx src/index.ts",
     "mcp:local": "node scripts/mcp-local-client.mjs",
     "pretest": "npm run build",
-    "test": "node --test test/examples/**/*.test.js test/unit/**/*.test.js test/property/**/*.test.js test/integration/**/*.test.js",
+    "test": "vitest run",
     "test:all": "node scripts/test-all-continuing.mjs",
     "test:compiler": "node scripts/test-all-continuing.mjs",
     "test:with-sentinel": "node scripts/test-with-sentinel.mjs",
-    "test:examples": "node --test test/examples/**/*.test.js",
-    "test:property": "node --test test/property/**/*.test.js",
+    "test:examples": "vitest run test/examples/",
+    "test:property": "vitest run test/property/",
     "test:integration": "node scripts/test-all-continuing.mjs",
-    "test:integration:raw": "node --test test/integration/**/*.test.js",
-    "test:integration:fixtures": "node --test test/integration/agda/agda-fixture-matrix.test.js",
-    "test:integration:mcp": "node --test test/integration/mcp/mcp-server.test.js",
-    "test:e2e": "npm run build && node --test test/integration/mcp/**/*.test.js",
-    "test:e2e:raw": "node --test test/integration/mcp/**/*.test.js",
+    "test:integration:raw": "vitest run test/integration/",
+    "test:integration:fixtures": "vitest run test/integration/agda/agda-fixture-matrix.test.ts",
+    "test:integration:mcp": "vitest run test/integration/mcp/mcp-server.test.ts",
+    "test:e2e": "npm run build && vitest run test/integration/mcp/",
+    "test:e2e:raw": "vitest run test/integration/mcp/",
     "test:release:full": "node scripts/test-release-full.mjs",
-    "test:release:bugs": "node --test test/unit/agda/completeness.test.js test/unit/protocol/protocol-parity.test.js test/unit/reporting/release-bug-matrix.test.js test/unit/tools/library-registration-matrix.test.js test/integration/agda/agda-load.test.js test/integration/agda/agda-fixture-matrix.test.js test/integration/agda/agda-search-about.test.js test/integration/agda/agda-library-registration.test.js test/integration/mcp/mcp-server.test.js",
-    "test:release:bugs:sentinel": "node scripts/test-with-sentinel.mjs --label release-bugs test/unit/agda/completeness.test.js test/unit/protocol/protocol-parity.test.js test/unit/reporting/release-bug-matrix.test.js test/unit/tools/library-registration-matrix.test.js test/integration/agda/agda-load.test.js test/integration/agda/agda-fixture-matrix.test.js test/integration/agda/agda-search-about.test.js test/integration/agda/agda-library-registration.test.js test/integration/mcp/mcp-server.test.js",
+    "test:release:bugs": "vitest run test/unit/agda/completeness.test.ts test/unit/protocol/protocol-parity.test.ts test/unit/reporting/release-bug-matrix.test.ts test/unit/tools/library-registration-matrix.test.ts test/integration/agda/agda-load.test.ts test/integration/agda/agda-fixture-matrix.test.ts test/integration/agda/agda-search-about.test.ts test/integration/agda/agda-library-registration.test.ts test/integration/mcp/mcp-server.test.ts",
+    "test:release:bugs:sentinel": "node scripts/test-with-sentinel.mjs --label release-bugs test/unit/agda/completeness.test.ts test/unit/protocol/protocol-parity.test.ts test/unit/reporting/release-bug-matrix.test.ts test/unit/tools/library-registration-matrix.test.ts test/integration/agda/agda-load.test.ts test/integration/agda/agda-fixture-matrix.test.ts test/integration/agda/agda-search-about.test.ts test/integration/agda/agda-library-registration.test.ts test/integration/mcp/mcp-server.test.ts",
     "verify": "npm test && npm pack --dry-run",
     "prepublishOnly": "npm run verify"
   },
@@ -69,10 +69,11 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@fast-check/vitest": "^0.3.0",
     "@types/node": "^24.5.2",
-    "fast-check": "^3.23.2",
     "tsx": "^4.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.2"
   },
   "engines": {
     "node": ">=24"

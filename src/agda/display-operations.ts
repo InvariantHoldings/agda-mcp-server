@@ -62,12 +62,14 @@ export async function loadHighlightingInfo(
 export async function tokenHighlighting(
   ctx: AgdaCommandContext,
   filePath: string,
-  remove = false,
 ): Promise<DisplayControlResult> {
+  // Always use "Keep" — "Remove" tells Agda to delete the file at the given
+  // path after reading it, which is meant for temporary highlighting dumps,
+  // not source files.
   return runControl(
     ctx,
-    command("Cmd_tokenHighlighting", quoted(filePath), remove ? "Remove" : "Keep"),
-    `${remove ? "Removed" : "Kept"} token highlighting for ${filePath}.`,
+    command("Cmd_tokenHighlighting", quoted(filePath), "Keep"),
+    `Token highlighting loaded for ${filePath}.`,
   );
 }
 
