@@ -25,6 +25,7 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "mcp:local": "node scripts/mcp-local-client.mjs",
+    "pretest": "npm run build",
     "test": "vitest run",
     "test:all": "node scripts/test-all-continuing.mjs",
     "test:compiler": "node scripts/test-all-continuing.mjs",
