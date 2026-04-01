@@ -14,10 +14,10 @@ test("decodeDisplayTextResponses is total and always returns string fields", () 
           message: fc.option(fc.string(), { nil: undefined }),
           contents: fc.option(fc.string(), { nil: undefined }),
           text: fc.option(fc.string(), { nil: undefined }),
-        }, { withDeletedKeys: true }),
+        }, { requiredKeys: [] }),
         fc.constant(undefined),
       ),
-    }, { withDeletedKeys: true })),
+    }, { requiredKeys: [] })),
     (responses) => {
       const decoded = decodeDisplayTextResponses(responses);
       expect(typeof decoded.text).toBe("string");

@@ -10,7 +10,7 @@ import {
 test("decodeInteractionPointIds is total and returns unique numbers", async () => {
   await fc.assert(
     fc.property(
-      fc.array(fc.record({ kind: fc.string() }, { withDeletedKeys: true })),
+      fc.array(fc.record({ kind: fc.string() }, { requiredKeys: [] })),
       (responses) => {
         const decoded = decodeInteractionPointIds(responses);
         expect(Array.isArray(decoded)).toBeTruthy();
@@ -24,7 +24,7 @@ test("decodeInteractionPointIds is total and returns unique numbers", async () =
 test("decodeStderrOutputs is total and returns strings", async () => {
   await fc.assert(
     fc.property(
-      fc.array(fc.record({ kind: fc.string() }, { withDeletedKeys: true })),
+      fc.array(fc.record({ kind: fc.string() }, { requiredKeys: [] })),
       (responses) => {
         const decoded = decodeStderrOutputs(responses);
         expect(Array.isArray(decoded)).toBeTruthy();

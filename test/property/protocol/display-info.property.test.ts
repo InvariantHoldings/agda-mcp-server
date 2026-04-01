@@ -7,7 +7,7 @@ import { decodeDisplayInfoEvents } from "../../../src/protocol/responses/display
 test("decodeDisplayInfoEvents is total and only emits string text/kind pairs", async () => {
   await fc.assert(
     fc.property(
-      fc.array(fc.record({ kind: fc.string() }, { withDeletedKeys: true })),
+      fc.array(fc.record({ kind: fc.string() }, { requiredKeys: [] })),
       (responses) => {
         const decoded = decodeDisplayInfoEvents(responses);
         expect(Array.isArray(decoded)).toBeTruthy();

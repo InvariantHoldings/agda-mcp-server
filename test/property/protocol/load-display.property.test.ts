@@ -7,7 +7,7 @@ import { decodeLoadDisplayResponses } from "../../../src/protocol/responses/load
 test("decodeLoadDisplayResponses is total and returns structured arrays", async () => {
   await fc.assert(
     fc.property(
-      fc.array(fc.record({ kind: fc.string() }, { withDeletedKeys: true })),
+      fc.array(fc.record({ kind: fc.string() }, { requiredKeys: [] })),
       (responses) => {
         const decoded = decodeLoadDisplayResponses(responses);
         expect(typeof decoded.text).toBe("string");
