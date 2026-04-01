@@ -17,11 +17,24 @@ test("parseAgdaLibraryName is total and only returns string or null", async () =
 test("parseAgdaLibraryName returns the first declared name after comments and blanks", async () => {
   await fc.assert(
     fc.asyncProperty(
-      fc.stringMatching(/[A-Za-z][A-Za-z0-9-]*/u),
+      fc.stringMatching(/^[A-Za-z][A-Za-z0-9]*(-[A-Za-z0-9]+)*$/u),
       fc.array(fc.constantFrom("-- comment", "", "   ")),
       async (name, prefixLines) => {
         const contents = [...prefixLines, `name: ${name}`, "include: src"].join("\n");
-        assert.equal(parseAgdaLibraryName(contents), name.trim());
+        assert.equal(parseAgdaLibraryName(contents), name);
+      },
+    ),
+  );
+});
+
+test("parseAgdaLibraryName strips inline -- comments and returns the trimmed identifier", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.stringMatching(/^[A-Za-z][A-Za-z0-9]*(-[A-Za-z0-9]+)*$/u),
+      fc.string(),
+      async (name, commentSuffix) => {
+        const contents = `name: ${name} --${commentSuffix}\ninclude: src\n`;
+        assert.equal(parseAgdaLibraryName(contents), name);
       },
     ),
   );

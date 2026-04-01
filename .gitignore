@@ -10,14 +10,20 @@ test/fixtures/agda/MAlonzo/
 # Test and coverage output
 coverage/
 .nyc_output/
+test-output/
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 *.log
-test-output/
+
+# Runtime and temp
+tmp/
+temp/
+*.tgz
 
 # Environment and local config
 .env
@@ -30,3 +36,6 @@ test-output/
 Thumbs.db
 .vscode/
 .idea/
+*.sw[op]
+*~
+.eslintcache

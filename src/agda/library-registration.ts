@@ -48,7 +48,8 @@ export function parseAgdaLibraryName(contents: string): string | null {
 
     const match = /^name\s*:\s*(.+)$/u.exec(line);
     if (match) {
-      return match[1].trim() || null;
+      const name = match[1].replace(/\s*--.*$/u, "").trim();
+      return name || null;
     }
   }
 
