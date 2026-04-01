@@ -10,7 +10,9 @@ const e2eCoverageEntrySchema = z.object({
   requiresBackend: z.boolean().optional(),
 });
 
-export const mcpToolCoverageMatrix = loadValidatedJsonData(
+export type E2eCoverageEntry = z.infer<typeof e2eCoverageEntrySchema>;
+
+export const mcpToolCoverageMatrix: E2eCoverageEntry[] = loadValidatedJsonData(
   import.meta.dirname,
   "./mcp-tool-coverage.json",
   z.array(e2eCoverageEntrySchema),

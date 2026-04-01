@@ -2,6 +2,7 @@ import { test, expect } from "vitest";
 
 import { fc } from "@fast-check/vitest";
 
+import type { AgdaResponse } from "../../../src/agda/types.js";
 import {
   decodeInteractionPointIds,
   decodeStderrOutputs,
@@ -12,7 +13,7 @@ test("decodeInteractionPointIds is total and returns unique numbers", async () =
     fc.property(
       fc.array(fc.record({ kind: fc.string() }, { requiredKeys: [] })),
       (responses) => {
-        const decoded = decodeInteractionPointIds(responses);
+        const decoded = decodeInteractionPointIds(responses as AgdaResponse[]);
         expect(Array.isArray(decoded)).toBeTruthy();
         expect(decoded.every((value) => typeof value === "number")).toBeTruthy();
         expect(decoded.length).toBe(new Set(decoded).size);
@@ -26,7 +27,7 @@ test("decodeStderrOutputs is total and returns strings", async () => {
     fc.property(
       fc.array(fc.record({ kind: fc.string() }, { requiredKeys: [] })),
       (responses) => {
-        const decoded = decodeStderrOutputs(responses);
+        const decoded = decodeStderrOutputs(responses as AgdaResponse[]);
         expect(Array.isArray(decoded)).toBeTruthy();
         expect(decoded.every((value) => typeof value === "string")).toBeTruthy();
       },

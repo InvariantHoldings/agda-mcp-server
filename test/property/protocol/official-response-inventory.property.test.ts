@@ -5,6 +5,7 @@ import {
   listOfficialDisplayInfoKinds,
   listOfficialGoalDisplayInfoKinds,
   listOfficialResponseKinds,
+  // @ts-expect-error tooling module lacks types
 } from "../../../tooling/protocol/official-response-inventory.js";
 
 test("official response inventory families are unique", async () => {

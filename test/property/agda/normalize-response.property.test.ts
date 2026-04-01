@@ -136,7 +136,7 @@ test("InteractionPoints.interactionPoints is always number[] after normalization
       (points) => {
         const resp = normalizeAgdaResponse({ kind: "InteractionPoints", interactionPoints: points });
         expect(Array.isArray(resp.interactionPoints)).toBeTruthy();
-        for (const pt of resp.interactionPoints) {
+        for (const pt of resp.interactionPoints as unknown[]) {
           expect(typeof pt).toBe("number");
         }
       },
@@ -164,7 +164,7 @@ test("AllGoalsWarnings fields are always arrays after normalization", async () =
           warnings: warn,
         },
       });
-      const info = resp.info;
+      const info = resp.info as Record<string, unknown>;
       expect(Array.isArray(info.visibleGoals)).toBeTruthy();
       expect(Array.isArray(info.invisibleGoals)).toBeTruthy();
       expect(Array.isArray(info.errors)).toBeTruthy();
@@ -194,7 +194,7 @@ test("MakeCase.clauses is always string[] after normalization", async () => {
     fc.property(fc.array(clauseArb), (clauses) => {
       const resp = normalizeAgdaResponse({ kind: "MakeCase", clauses });
       expect(Array.isArray(resp.clauses)).toBeTruthy();
-      for (const c of resp.clauses) {
+      for (const c of resp.clauses as unknown[]) {
         expect(typeof c).toBe("string");
       }
     }),
@@ -219,7 +219,7 @@ test("SolveAll.solutions are always object form after normalization", async () =
   await fc.assert(
     fc.property(fc.array(solArb), (solutions) => {
       const resp = normalizeAgdaResponse({ kind: "SolveAll", solutions });
-      for (const sol of resp.solutions) {
+      for (const sol of resp.solutions as unknown[]) {
         expect(!Array.isArray(sol)).toBeTruthy();
         expect(typeof sol === "object" && sol !== null).toBeTruthy();
       }

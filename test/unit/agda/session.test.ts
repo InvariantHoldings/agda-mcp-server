@@ -57,18 +57,18 @@ test("AgdaSession syncGoalIdsFromResponses applies explicit goal-state updates",
 
 test("AgdaSession forwards legacy backend compatibility methods", async () => {
   const session = new AgdaSession(process.cwd());
-  const calls = [];
+  const calls: unknown[][] = [];
 
-  session.backend = {
-    compile: async (backendExpr, filePath, argv) => {
+  (session as any).backend = {
+    compile: async (backendExpr: string, filePath: string, argv: string[]) => {
       calls.push(["compile", backendExpr, filePath, argv]);
       return { kind: "compile" };
     },
-    top: async (backendExpr, payload) => {
+    top: async (backendExpr: string, payload: string) => {
       calls.push(["top", backendExpr, payload]);
       return { kind: "top" };
     },
-    hole: async (goalId, holeContents, backendExpr, payload) => {
+    hole: async (goalId: number, holeContents: string, backendExpr: string, payload: string) => {
       calls.push(["hole", goalId, holeContents, backendExpr, payload]);
       return { kind: "hole" };
     },

@@ -2,6 +2,7 @@ import { test, expect } from "vitest";
 
 import { fc } from "@fast-check/vitest";
 
+import type { AgdaResponse } from "../../../src/agda/types.js";
 import { decodeLoadDisplayResponses } from "../../../src/protocol/responses/load-display.js";
 
 test("decodeLoadDisplayResponses is total and returns structured arrays", async () => {
@@ -9,7 +10,7 @@ test("decodeLoadDisplayResponses is total and returns structured arrays", async 
     fc.property(
       fc.array(fc.record({ kind: fc.string() }, { requiredKeys: [] })),
       (responses) => {
-        const decoded = decodeLoadDisplayResponses(responses);
+        const decoded = decodeLoadDisplayResponses(responses as AgdaResponse[]);
         expect(typeof decoded.text).toBe("string");
         expect(Array.isArray(decoded.visibleGoals)).toBeTruthy();
         expect(Array.isArray(decoded.warnings)).toBeTruthy();

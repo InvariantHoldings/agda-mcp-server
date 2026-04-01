@@ -1,8 +1,9 @@
 import { test, expect } from "vitest";
+import type { ChildProcess } from "node:child_process";
 
 import { AgdaTransport } from "../../../src/session/agda-transport.js";
 
-function withEnv(name, value, fn) {
+function withEnv(name: string, value: string, fn: () => Promise<void>) {
   const previous = process.env[name];
   process.env[name] = value;
 
@@ -39,7 +40,7 @@ test("AgdaTransport waits for terminal payloads after Status before resolving", 
       },
     };
 
-    const responses = await transport.sendCommand(proc, "IOTCM \"x\" NonInteractive Direct (Cmd_load)", 100);
+    const responses = await transport.sendCommand(proc as unknown as ChildProcess, "IOTCM \"x\" NonInteractive Direct (Cmd_load)", 100);
 
     expect(wrote).toBe(true);
     expect(
@@ -68,7 +69,7 @@ test("AgdaTransport resolves after trailing Status when earlier payloads already
       },
     };
 
-    const responses = await transport.sendCommand(proc, "IOTCM \"x\" NonInteractive Direct (Cmd_load)", 100);
+    const responses = await transport.sendCommand(proc as unknown as ChildProcess, "IOTCM \"x\" NonInteractive Direct (Cmd_load)", 100);
 
     expect(
       responses.map((response) => response.kind),
@@ -90,7 +91,7 @@ test("AgdaTransport resolves status-only commands without timing out", async () 
       },
     };
 
-    const responses = await transport.sendCommand(proc, "IOTCM \"x\" NonInteractive Direct (ShowImplicitArgs True)", 100);
+    const responses = await transport.sendCommand(proc as unknown as ChildProcess, "IOTCM \"x\" NonInteractive Direct (ShowImplicitArgs True)", 100);
 
     expect(
       responses.map((response) => response.kind),
@@ -115,7 +116,7 @@ test("AgdaTransport captures prompt notices as stderr output while collecting", 
       },
     };
 
-    const responses = await transport.sendCommand(proc, "IOTCM \"x\" NonInteractive Direct (Cmd_goal_type)", 100);
+    const responses = await transport.sendCommand(proc as unknown as ChildProcess, "IOTCM \"x\" NonInteractive Direct (Cmd_goal_type)", 100);
 
     expect(
       responses.map((response) => response.kind),

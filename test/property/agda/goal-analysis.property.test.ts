@@ -90,7 +90,7 @@ test("deriveSuggestions: case_split only for non-implicit variables", async () =
       const splits = suggestions.filter((s) => s.action === "case_split");
       const implicitNames = new Set(context.filter((e) => e.isImplicit).map((e) => e.name));
       for (const s of splits) {
-        expect(!implicitNames.has(s.variable)).toBeTruthy();
+        expect(!implicitNames.has(s.variable as string)).toBeTruthy();
       }
     }),
   );

@@ -1,5 +1,6 @@
 import { test, expect } from "vitest";
 
+// @ts-expect-error script module lacks types
 import { formatSentinelMessage, isMainModule } from "../../../scripts/test-with-sentinel.mjs";
 
 test("formatSentinelMessage emits PASSED for zero exit code", () => {

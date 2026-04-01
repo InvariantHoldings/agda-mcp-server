@@ -11,7 +11,9 @@ const releaseBugEntrySchema = z.object({
   liveSuites: z.array(z.string().min(1)).min(1),
 });
 
-export const releaseBugMatrix = loadValidatedJsonData(
+export type ReleaseBugEntry = z.infer<typeof releaseBugEntrySchema>;
+
+export const releaseBugMatrix: ReleaseBugEntry[] = loadValidatedJsonData(
   import.meta.dirname,
   "./release-bug-matrix.json",
   z.array(releaseBugEntrySchema),

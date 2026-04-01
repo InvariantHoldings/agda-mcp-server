@@ -32,7 +32,9 @@ const expressionScenarioSchema = z.object({
   goal: goalExpectationSchema.optional(),
 });
 
-export const expressionQueryMatrix = loadValidatedJsonData(
+export type ExpressionScenario = z.infer<typeof expressionScenarioSchema>;
+
+export const expressionQueryMatrix: ExpressionScenario[] = loadValidatedJsonData(
   import.meta.dirname,
   "./expression-query-matrix.json",
   z.array(expressionScenarioSchema),

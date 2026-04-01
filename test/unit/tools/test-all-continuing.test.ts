@@ -5,11 +5,12 @@ import {
   formatRunSummary,
   getTestLogPaths,
   isHighSignalLine,
+  // @ts-expect-error script module lacks types
 } from "../../../scripts/test-all-continuing.mjs";
 
 test("buildTestRunPlan covers build and all test groups", () => {
   expect(
-    buildTestRunPlan().map((step) => step.label),
+    buildTestRunPlan().map((step: any) => step.label),
   ).toEqual(["build", "examples", "unit", "property", "integration"]);
 });
 

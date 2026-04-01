@@ -1,4 +1,6 @@
 import { test, expect } from "vitest";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { AgdaSession } from "../../../src/agda-process.js";
 
 import {
   ToolInvocationError,
@@ -9,10 +11,10 @@ import {
 import { clearToolManifest } from "../../../src/tools/manifest.js";
 
 function createCapturingServer() {
-  let registered = null;
+  let registered: { name: string; spec: unknown; callback: (args: any) => any } | null = null;
 
   return {
-    registerTool(name, spec, callback) {
+    registerTool(name: string, spec: unknown, callback: (args: any) => any) {
       registered = { name, spec, callback };
     },
     getRegistered() {
@@ -26,7 +28,7 @@ test("registerTextTool returns a structured error envelope when the callback thr
   const server = createCapturingServer();
 
   registerTextTool({
-    server,
+    server: server as unknown as McpServer,
     name: "agda_test_text_failure",
     description: "test",
     category: "navigation",
@@ -36,7 +38,7 @@ test("registerTextTool returns a structured error envelope when the callback thr
     },
   });
 
-  const result = await server.getRegistered().callback({});
+  const result = await server.getRegistered()!.callback({});
 
   expect(result.isError).toBe(true);
   expect(result.structuredContent.ok).toBe(false);
@@ -61,8 +63,8 @@ test("registerGoalTextTool returns a structured error envelope with goal context
   };
 
   registerGoalTextTool({
-    server,
-    session,
+    server: server as unknown as McpServer,
+    session: session as unknown as AgdaSession,
     name: "agda_test_goal_failure",
     description: "test",
     category: "proof",
@@ -75,7 +77,7 @@ test("registerGoalTextTool returns a structured error envelope with goal context
     },
   });
 
-  const result = await server.getRegistered().callback({ goalId: 7 });
+  const result = await server.getRegistered()!.callback({ goalId: 7 });
 
   expect(result.isError).toBe(true);
   expect(result.structuredContent.ok).toBe(false);
@@ -100,8 +102,8 @@ test("registerGoalTextTool invalid goal responses include text for the default s
   };
 
   registerGoalTextTool({
-    server,
-    session,
+    server: server as unknown as McpServer,
+    session: session as unknown as AgdaSession,
     name: "agda_test_goal_invalid",
     description: "test",
     category: "proof",
@@ -109,7 +111,7 @@ test("registerGoalTextTool invalid goal responses include text for the default s
     callback: async () => "unreachable",
   });
 
-  const result = await server.getRegistered().callback({ goalId: 4 });
+  const result = await server.getRegistered()!.callback({ goalId: 4 });
 
   expect(result.isError).toBe(true);
   expect(result.structuredContent.ok).toBe(false);

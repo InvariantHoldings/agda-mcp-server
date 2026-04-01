@@ -1,17 +1,18 @@
 import { test, expect } from "vitest";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { PathSandboxError } from "../../../src/repo-root.js";
 import { registerSessionLoadTools } from "../../../src/session/load-tool-registration.js";
 import { clearToolManifest } from "../../../src/tools/manifest.js";
 
 function createCapturingServer() {
-  const registrations = new Map();
+  const registrations = new Map<string, { name: string; spec: unknown; callback: (args: any) => any }>();
 
   return {
-    registerTool(name, spec, callback) {
+    registerTool(name: string, spec: unknown, callback: (args: any) => any) {
       registrations.set(name, { name, spec, callback });
     },
-    get(name) {
+    get(name: string) {
       return registrations.get(name);
     },
   };
@@ -42,9 +43,9 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
     clearToolManifest();
     const server = createCapturingServer();
 
-    registerSessionLoadTools(server, createSessionStub(), "/tmp/agda-mcp-server-test-root");
+    registerSessionLoadTools(server as unknown as McpServer, createSessionStub() as any, "/tmp/agda-mcp-server-test-root");
 
-    const result = await server.get(toolName).callback({ file: "../../etc/passwd" });
+    const result = await server.get(toolName)!.callback({ file: "../../etc/passwd" });
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent.ok).toBe(false);
@@ -67,8 +68,8 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
     const server = createCapturingServer();
 
     registerSessionLoadTools(
-      server,
-      createSessionStub(),
+      server as unknown as McpServer,
+      createSessionStub() as any,
       "/tmp/agda-mcp-server-test-root",
       {
         resolveInputFile: () => {
@@ -78,7 +79,7 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
     );
 
     await expect(
-      () => server.get(toolName).callback({ file: "Example.agda" }),
+      () => server.get(toolName)!.callback({ file: "Example.agda" }),
     ).rejects.toThrow(/unexpected resolver failure/);
   });
 }
@@ -89,8 +90,8 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
     const server = createCapturingServer();
 
     registerSessionLoadTools(
-      server,
-      createSessionStub(),
+      server as unknown as McpServer,
+      createSessionStub() as any,
       "/tmp/agda-mcp-server-test-root",
       {
         resolveInputFile: () => {
@@ -99,7 +100,7 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
       },
     );
 
-    const result = await server.get(toolName).callback({ file: "../../etc/passwd" });
+    const result = await server.get(toolName)!.callback({ file: "../../etc/passwd" });
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent.classification).toBe("invalid-path");

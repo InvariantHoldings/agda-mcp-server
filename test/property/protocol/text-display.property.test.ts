@@ -2,6 +2,7 @@ import { test, expect } from "vitest";
 
 import { fc } from "@fast-check/vitest";
 
+import type { AgdaResponse } from "../../../src/agda/types.js";
 import { decodeDisplayTextResponses } from "../../../src/protocol/responses/text-display.js";
 
 test("decodeDisplayTextResponses is total and always returns string fields", () => {
@@ -19,7 +20,7 @@ test("decodeDisplayTextResponses is total and always returns string fields", () 
       ),
     }, { requiredKeys: [] })),
     (responses) => {
-      const decoded = decodeDisplayTextResponses(responses);
+      const decoded = decodeDisplayTextResponses(responses as AgdaResponse[]);
       expect(typeof decoded.text).toBe("string");
       expect(Array.isArray(decoded.messages)).toBeTruthy();
       expect(decoded.messages.every((message) => typeof message === "string")).toBeTruthy();

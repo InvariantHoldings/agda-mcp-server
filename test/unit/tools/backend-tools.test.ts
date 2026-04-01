@@ -1,16 +1,17 @@
 import { test, expect } from "vitest";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { register as registerBackendTools } from "../../../src/tools/backend.js";
 import { clearToolManifest } from "../../../src/tools/manifest.js";
 
 function createCapturingServer() {
-  const registrations = new Map();
+  const registrations = new Map<string, { name: string; spec: unknown; callback: (args: any) => any }>();
 
   return {
-    registerTool(name, spec, callback) {
+    registerTool(name: string, spec: unknown, callback: (args: any) => any) {
       registrations.set(name, { name, spec, callback });
     },
-    get(name) {
+    get(name: string) {
       return registrations.get(name);
     },
   };
@@ -27,9 +28,9 @@ test("agda_compile returns ok=false for a missing file", async () => {
     },
   };
 
-  registerBackendTools(server, session, "/tmp/agda-mcp-server-test-root");
+  registerBackendTools(server as unknown as McpServer, session as any, "/tmp/agda-mcp-server-test-root");
 
-  const result = await server.get("agda_compile").callback({
+  const result = await server.get("agda_compile")!.callback({
     backend: "GHC",
     file: "Missing.agda",
   });
@@ -52,9 +53,9 @@ test("agda_compile returns invalid-path for sandbox escapes", async () => {
     },
   };
 
-  registerBackendTools(server, session, "/tmp/agda-mcp-server-test-root");
+  registerBackendTools(server as unknown as McpServer, session as any, "/tmp/agda-mcp-server-test-root");
 
-  const result = await server.get("agda_compile").callback({
+  const result = await server.get("agda_compile")!.callback({
     backend: "GHC",
     file: "../../etc/passwd",
   });

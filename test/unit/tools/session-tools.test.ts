@@ -57,22 +57,22 @@ test("session and reporting registrations populate manifest entries", () => {
     const bugEntry = getToolManifestEntry("agda_bug_report_bundle");
 
     expect(loadEntry).toBeTruthy();
-    expect(loadEntry.protocolCommands).toEqual(["Cmd_load", "Cmd_metas"]);
-    expect(loadEntry.outputFields.includes("classification")).toBeTruthy();
+    expect(loadEntry!.protocolCommands).toEqual(["Cmd_load", "Cmd_metas"]);
+    expect(loadEntry!.outputFields.includes("classification")).toBeTruthy();
 
     expect(statusEntry).toBeTruthy();
-    expect(statusEntry.category).toBe("session");
+    expect(statusEntry!.category).toBe("session");
 
     expect(catalogEntry).toBeTruthy();
-    expect(catalogEntry.category).toBe("reporting");
+    expect(catalogEntry!.category).toBe("reporting");
 
     expect(parityEntry).toBeTruthy();
-    expect(parityEntry.category).toBe("reporting");
-    expect(parityEntry.outputFields.includes("endToEndCount")).toBeTruthy();
-    expect(parityEntry.outputFields.includes("knownGapCount")).toBeTruthy();
+    expect(parityEntry!.category).toBe("reporting");
+    expect(parityEntry!.outputFields.includes("endToEndCount")).toBeTruthy();
+    expect(parityEntry!.outputFields.includes("knownGapCount")).toBeTruthy();
 
     expect(bugEntry).toBeTruthy();
-    expect(bugEntry.outputFields.includes("bugFingerprint")).toBeTruthy();
+    expect(bugEntry!.outputFields.includes("bugFingerprint")).toBeTruthy();
   } finally {
     session.destroy();
     clearToolManifest();

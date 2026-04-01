@@ -1,25 +1,27 @@
 import { test, expect } from "vitest";
+import type { TestContext } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { register as registerFileTools } from "../../../src/tools/file-tools.js";
 import { clearToolManifest } from "../../../src/tools/manifest.js";
 
 function createCapturingServer() {
-  const registrations = new Map();
+  const registrations = new Map<string, { name: string; spec: unknown; callback: (args: any) => any }>();
 
   return {
-    registerTool(name, spec, callback) {
+    registerTool(name: string, spec: unknown, callback: (args: any) => any) {
       registrations.set(name, { name, spec, callback });
     },
-    get(name) {
+    get(name: string) {
       return registrations.get(name);
     },
   };
 }
 
-function ensureRepoSymlink(ctx) {
+function ensureRepoSymlink(ctx: TestContext) {
   const sandbox = mkdtempSync(join(tmpdir(), "agda-mcp-file-tools-"));
   const realRepoRoot = join(sandbox, "real-repo");
   const linkedRepoRoot = join(sandbox, "repo-link");
@@ -64,9 +66,9 @@ test("agda_list_modules keeps display paths stable when repoRoot is a symlink", 
 
   try {
     const server = createCapturingServer();
-    registerFileTools(server, {}, fixture.linkedRepoRoot);
+    registerFileTools(server as unknown as McpServer, {} as any, fixture.linkedRepoRoot);
 
-    const result = await server.get("agda_list_modules").callback({ tier: "Kernel" });
+    const result = await server.get("agda_list_modules")!.callback({ tier: "Kernel" });
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toMatch(/agda\/Kernel\/Example\.agda/);
@@ -86,9 +88,9 @@ test("agda_search_definitions skips symlinked files that resolve outside the pro
 
   try {
     const server = createCapturingServer();
-    registerFileTools(server, {}, fixture.linkedRepoRoot);
+    registerFileTools(server as unknown as McpServer, {} as any, fixture.linkedRepoRoot);
 
-    const safeResult = await server.get("agda_search_definitions").callback({
+    const safeResult = await server.get("agda_search_definitions")!.callback({
       query: "foo",
       tier: "Kernel",
     });
@@ -96,7 +98,7 @@ test("agda_search_definitions skips symlinked files that resolve outside the pro
     expect(safeResult.content[0].text).toMatch(/agda\/Kernel\/Example\.agda:2/);
     expect(safeResult.content[0].text.includes("../")).toBe(false);
 
-    const escapedResult = await server.get("agda_search_definitions").callback({
+    const escapedResult = await server.get("agda_search_definitions")!.callback({
       query: "outsideOnly",
       tier: "Kernel",
     });

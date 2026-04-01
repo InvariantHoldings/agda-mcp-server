@@ -31,7 +31,9 @@ const navigationScenarioSchema = z.object({
   }).optional(),
 });
 
-export const navigationQueryMatrix = loadValidatedJsonData(
+export type NavigationScenario = z.infer<typeof navigationScenarioSchema>;
+
+export const navigationQueryMatrix: NavigationScenario[] = loadValidatedJsonData(
   import.meta.dirname,
   "./navigation-query-matrix.json",
   z.array(navigationScenarioSchema),

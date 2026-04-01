@@ -108,7 +108,7 @@ it("reload: same file produces no solved/created diff", async () => {
     const prevIds = first.goals.map((g) => g.goalId);
 
     // Reload same file (no changes)
-    const second = await session.load(session.getLoadedFile());
+    const second = await session.load(session.getLoadedFile()!);
     const newIds = second.goals.map((g) => g.goalId);
 
     const solved = prevIds.filter((id) => !newIds.includes(id));

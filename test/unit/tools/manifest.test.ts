@@ -28,9 +28,9 @@ test("registerManifestEntry captures input and output field names", () => {
 
   const entry = getToolManifestEntry("demo_tool");
   expect(entry).toBeTruthy();
-  expect(entry.inputFields).toEqual(["file", "goalId"]);
-  expect(entry.outputFields).toEqual(["summary", "goalCount"]);
-  expect(entry.protocolCommands).toEqual(["Cmd_demo"]);
+  expect(entry!.inputFields).toEqual(["file", "goalId"]);
+  expect(entry!.outputFields).toEqual(["summary", "goalCount"]);
+  expect(entry!.protocolCommands).toEqual(["Cmd_demo"]);
 });
 
 test("clearToolManifest removes previous entries", () => {

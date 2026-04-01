@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 
+// @ts-expect-error tooling module lacks types
 import { loadValidatedJsonData } from "../../../tooling/protocol/json-data.js";
 
 test("loadValidatedJsonData resolves module URLs with encoded filesystem paths", () => {

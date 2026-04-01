@@ -27,14 +27,14 @@ for (const scenario of libraryRegistrationMatrix.filter((entry) => entry.integra
 
       const session = new AgdaSession(materialized.repoRoot);
       try {
-        const load = await session.load(scenario.integration.loadFile);
+        const load = await session.load(scenario.integration!.loadFile);
         expect(load.success).toBe(true);
         expect(load.errors).toEqual([]);
       } finally {
         session.destroy();
       }
 
-      const batch = await typeCheckBatch(scenario.integration.loadFile, materialized.repoRoot);
+      const batch = await typeCheckBatch(scenario.integration!.loadFile, materialized.repoRoot);
       expect(batch.success).toBe(true);
       expect(batch.errors).toEqual([]);
     } finally {

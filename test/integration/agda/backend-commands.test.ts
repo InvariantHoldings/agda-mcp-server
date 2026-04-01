@@ -15,14 +15,9 @@ function hasAgdaBinary() {
   return result.status === 0;
 }
 
-test(
-  "backend commands run against a live Agda session",
-  {
-    skip: canRun
-      ? false
-      : "Set RUN_AGDA_BACKEND_INTEGRATION=1 and ensure agda is in PATH to run backend integration tests.",
-  },
-  async () => {
+const it = canRun ? test : test.skip;
+
+it("backend commands run against a live Agda session", async () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-backend-it-"));
     const noHolePath = join(repoRoot, "BackendNoHole.agda");
     const holePath = join(repoRoot, "BackendHole.agda");
@@ -77,5 +72,4 @@ test(
       session.destroy();
       rmSync(repoRoot, { recursive: true, force: true });
     }
-  },
-);
+  });

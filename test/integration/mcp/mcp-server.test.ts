@@ -149,7 +149,7 @@ it("MCP harness can call navigation and query tools on navigation fixtures", asy
       harness,
       "top-level why_in_scope",
       "agda_why_in_scope",
-      { name: scenario.topLevel.whyInScope[0].name },
+      { name: scenario.topLevel!.whyInScope![0].name },
     );
     expect(topLevelWhy.isError).toBe(false);
     expect(topLevelWhy.structuredContent.data.explanation.includes("flip")).toBeTruthy();
@@ -158,7 +158,7 @@ it("MCP harness can call navigation and query tools on navigation fixtures", asy
       harness,
       "top-level show_module",
       "agda_show_module",
-      { moduleName: scenario.topLevel.showModule[0].moduleName },
+      { moduleName: scenario.topLevel!.showModule![0].moduleName },
     );
     expect(topLevelModule.isError).toBe(false);
     expect(topLevelModule.structuredContent.data.contents.includes("flip")).toBeTruthy();
@@ -169,7 +169,7 @@ it("MCP harness can call navigation and query tools on navigation fixtures", asy
       harness,
       "goal why_in_scope",
       "agda_why_in_scope",
-      { goalId, name: scenario.goal.whyInScope[0].name },
+      { goalId, name: scenario.goal!.whyInScope![0].name },
     );
     expect(goalWhy.isError).toBe(false);
     expect(goalWhy.structuredContent.data.explanation.includes("n")).toBeTruthy();
@@ -178,7 +178,7 @@ it("MCP harness can call navigation and query tools on navigation fixtures", asy
       harness,
       "goal show_module",
       "agda_show_module",
-      { goalId, moduleName: scenario.goal.showModule[0].moduleName },
+      { goalId, moduleName: scenario.goal!.showModule![0].moduleName },
     );
     expect(goalModule.isError).toBe(false);
     expect(goalModule.structuredContent.data.contents.includes("Flag")).toBeTruthy();
@@ -187,7 +187,7 @@ it("MCP harness can call navigation and query tools on navigation fixtures", asy
       harness,
       "goal elaborate",
       "agda_elaborate",
-      { goalId, expr: scenario.goal.elaborate[0].expr },
+      { goalId, expr: scenario.goal!.elaborate![0].expr },
     );
     expect(elaborate.isError).toBe(false);
     expect(elaborate.content[0].text.includes("add")).toBeTruthy();
@@ -196,7 +196,7 @@ it("MCP harness can call navigation and query tools on navigation fixtures", asy
       harness,
       "goal helper_function",
       "agda_helper_function",
-      { goalId, expr: scenario.goal.helperFunction[0].expr },
+      { goalId, expr: scenario.goal!.helperFunction![0].expr },
     );
     expect(helper.isError).toBe(false);
     expect(helper.content[0].text.includes("Nat")).toBeTruthy();

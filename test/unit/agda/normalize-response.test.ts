@@ -33,7 +33,7 @@ test("normalizes AllGoalsWarnings string fields → single-element arrays", () =
     },
   };
   const result = normalizeAgdaResponse(input);
-  const info = result.info;
+  const info = result.info as any;
   expect(info.visibleGoals).toEqual(["?0 : Nat"]);
   expect(info.invisibleGoals).toEqual(["hidden"]);
   expect(info.errors).toEqual(["some error"]);
@@ -54,8 +54,8 @@ test("normalizes AllGoalsWarnings arrays pass through", () => {
     },
   };
   const result = normalizeAgdaResponse(input);
-  expect(result.info.visibleGoals).toEqual(goals);
-  expect(result.info.errors).toEqual(errs);
+  expect((result.info as any).visibleGoals).toEqual(goals);
+  expect((result.info as any).errors).toEqual(errs);
 });
 
 test("normalizes AllGoalsWarnings empty string → empty array", () => {
@@ -70,8 +70,8 @@ test("normalizes AllGoalsWarnings empty string → empty array", () => {
     },
   };
   const result = normalizeAgdaResponse(input);
-  expect(result.info.visibleGoals).toEqual([]);
-  expect(result.info.errors).toEqual([]);
+  expect((result.info as any).visibleGoals).toEqual([]);
+  expect((result.info as any).errors).toEqual([]);
 });
 
 // ── DisplayInfo Error ─────────────────────────────────────
@@ -82,7 +82,7 @@ test("normalizes DisplayInfo Error message stays string", () => {
     info: { kind: "Error", message: "type mismatch" },
   };
   const result = normalizeAgdaResponse(input);
-  expect(result.info.message).toBe("type mismatch");
+  expect((result.info as any).message).toBe("type mismatch");
 });
 
 // ── GiveAction ────────────────────────────────────────────
@@ -97,7 +97,7 @@ test("normalizes GiveAction array giveResult → joined string", () => {
   const input = { kind: "GiveAction", giveResult: ["refl", "sym"] };
   const result = normalizeAgdaResponse(input);
   expect(typeof result.giveResult).toBe("string");
-  expect(result.giveResult.includes("refl")).toBeTruthy();
+  expect((result.giveResult as string).includes("refl")).toBeTruthy();
 });
 
 test("normalizes GiveAction object giveResult → string", () => {
@@ -136,7 +136,7 @@ test("normalizes RunningInfo array message → string", () => {
   const input = { kind: "RunningInfo", message: ["Checking", "Module"] };
   const result = normalizeAgdaResponse(input);
   expect(typeof result.message).toBe("string");
-  expect(result.message.includes("Checking")).toBeTruthy();
+  expect((result.message as string).includes("Checking")).toBeTruthy();
 });
 
 // ── StderrOutput ──────────────────────────────────────────

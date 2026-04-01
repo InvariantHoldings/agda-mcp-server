@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+// @ts-expect-error script module lacks types
 import { copyJsonAssets } from "../../../scripts/copy-json-assets.mjs";
 
 test("copyJsonAssets copies nested json files and ignores non-json files", () => {

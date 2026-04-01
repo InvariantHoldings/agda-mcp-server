@@ -18,7 +18,9 @@ const fixtureSchema = z.object({
   searchQueries: z.array(searchQuerySchema).optional(),
 });
 
-export const fixtureMatrix = loadValidatedJsonData(
+export type Fixture = z.infer<typeof fixtureSchema>;
+
+export const fixtureMatrix: Fixture[] = loadValidatedJsonData(
   import.meta.dirname,
   "./fixture-matrix.json",
   z.array(fixtureSchema),

@@ -2,6 +2,8 @@ import { test, expect } from "vitest";
 
 import { fc } from "@fast-check/vitest";
 
+import type { ChildProcess } from "node:child_process";
+
 import { AgdaSession } from "../../../src/agda-process.js";
 
 // ── Bug 3: Property — concurrent commands are always serialized ─────
@@ -24,7 +26,7 @@ test("concurrent sendCommand calls never overlap regardless of count (Bug 3)", a
           return [{ kind: "Status" }];
         };
 
-        session.ensureProcess = () => ({ exitCode: null });
+        session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
 
         const promises = Array.from({ length: concurrency }, (_, i) =>
           session.sendCommand(`IOTCM cmd${i}`),
@@ -56,7 +58,7 @@ test("command queue preserves FIFO order under concurrent dispatch (Bug 3)", asy
           return [{ kind: "Status" }];
         };
 
-        session.ensureProcess = () => ({ exitCode: null });
+        session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
 
         const commands = Array.from({ length: concurrency }, (_, i) => `IOTCM cmd${i}`);
         await Promise.all(commands.map((cmd) => session.sendCommand(cmd)));

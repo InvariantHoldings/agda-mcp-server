@@ -6,6 +6,7 @@ import {
   extractOfficialReferenceSummary,
   pageIdFromUrl,
   prettifyOfficialHtml,
+  // @ts-expect-error tooling module lacks types
 } from "../../../tooling/protocol/official-reference-cache.js";
 
 const policy = {

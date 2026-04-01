@@ -34,9 +34,9 @@ test("protocol parity matrix records search_about as end-to-end", () => {
   const searchAbout = entries.find((entry) => entry.agdaCommand === "Cmd_search_about_toplevel");
 
   expect(searchAbout).toBeTruthy();
-  expect(searchAbout.parityStatus).toBe("end-to-end");
-  expect(searchAbout.coverageLevel).toBe("mcp");
-  expect(searchAbout.issues.includes(7)).toBeTruthy();
+  expect(searchAbout!.parityStatus).toBe("end-to-end");
+  expect(searchAbout!.coverageLevel).toBe("mcp");
+  expect(searchAbout!.issues.includes(7)).toBeTruthy();
   expect(!knownGaps.some((entry) => entry.agdaCommand === "Cmd_search_about_toplevel")).toBeTruthy();
 });
 
@@ -54,6 +54,6 @@ test("protocol parity matrix records expression and context commands as end-to-e
   ]) {
     const entry = entries.find((candidate) => candidate.agdaCommand === agdaCommand);
     expect(entry, `missing parity entry for ${agdaCommand}`).toBeTruthy();
-    expect(entry.parityStatus).toBe("end-to-end");
+    expect(entry!.parityStatus).toBe("end-to-end");
   }
 });

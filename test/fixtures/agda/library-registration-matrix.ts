@@ -21,7 +21,9 @@ const libraryRegistrationScenarioSchema = z.object({
   integration: integrationSpecSchema.optional(),
 });
 
-export const libraryRegistrationMatrix = loadValidatedJsonData(
+export type LibraryRegistrationScenario = z.infer<typeof libraryRegistrationScenarioSchema>;
+
+export const libraryRegistrationMatrix: LibraryRegistrationScenario[] = loadValidatedJsonData(
   import.meta.dirname,
   "./library-registration-matrix.json",
   z.array(libraryRegistrationScenarioSchema),

@@ -1,8 +1,9 @@
 import { test, expect } from "vitest";
+import type { ChildProcess } from "node:child_process";
 
 import { AgdaSession } from "../../../src/agda-process.js";
 
-function withEnv(name, value, fn) {
+function withEnv(name: string, value: string, fn: () => Promise<void>) {
   const previous = process.env[name];
   process.env[name] = value;
 
@@ -24,7 +25,7 @@ test("AgdaSession serializes concurrent sendCommand calls (Bug 3)", async () => 
     const session = new AgdaSession(process.cwd());
 
     // Track the order commands arrive at the transport
-    const commandOrder = [];
+    const commandOrder: Array<{ idx: number; event: string; command: string }> = [];
     let commandIndex = 0;
 
     session["transport"].sendCommand = async function (_proc, command, _timeoutMs) {
@@ -36,7 +37,7 @@ test("AgdaSession serializes concurrent sendCommand calls (Bug 3)", async () => 
       return [{ kind: "Status" }];
     };
 
-    session.ensureProcess = () => ({ exitCode: null });
+    session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
 
     try {
       // Fire 3 concurrent commands
@@ -84,7 +85,7 @@ test("AgdaSession command queue does not block after a rejected command (Bug 3)"
     return [{ kind: "Status" }];
   };
 
-  session.ensureProcess = () => ({ exitCode: null });
+  session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
 
   // First command fails
   await expect(
@@ -112,7 +113,7 @@ test("AgdaSession destroy resets the command queue", async () => {
     return [{ kind: "Status" }];
   };
 
-  session.ensureProcess = () => ({ exitCode: null });
+  session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
 
   // Enqueue a permanently blocked command; do not await it
   void session.sendCommand("IOTCM block");

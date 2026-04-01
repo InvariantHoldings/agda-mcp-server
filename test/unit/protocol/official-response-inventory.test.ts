@@ -4,6 +4,7 @@ import {
   listOfficialDisplayInfoKinds,
   listOfficialGoalDisplayInfoKinds,
   listOfficialResponseKinds,
+  // @ts-expect-error tooling module lacks types
 } from "../../../tooling/protocol/official-response-inventory.js";
 import {
   allGoalsWarningsInfoSchema,
@@ -133,7 +134,7 @@ const goalDisplaySchemas = {
 test("every official response kind has a parsing schema contract", () => {
   for (const kind of listOfficialResponseKinds()) {
     expect(kind in responseSchemas, `missing response schema for ${kind}`).toBeTruthy();
-    const parsed = parseResponseWithSchema(responseSchemas[kind], responseSamples[kind]);
+    const parsed = parseResponseWithSchema((responseSchemas as any)[kind], (responseSamples as any)[kind]);
     expect(parsed, `response schema did not parse representative ${kind}`).toBeTruthy();
   }
 });
@@ -141,7 +142,7 @@ test("every official response kind has a parsing schema contract", () => {
 test("every official DisplayInfo kind has a parsing schema contract", () => {
   for (const kind of listOfficialDisplayInfoKinds()) {
     expect(kind in displaySchemas, `missing display schema for ${kind}`).toBeTruthy();
-    const parsed = parseResponseWithSchema(displaySchemas[kind], displaySamples[kind]);
+    const parsed = parseResponseWithSchema((displaySchemas as any)[kind], (displaySamples as any)[kind]);
     expect(parsed, `display schema did not parse representative ${kind}`).toBeTruthy();
   }
 });
@@ -149,7 +150,7 @@ test("every official DisplayInfo kind has a parsing schema contract", () => {
 test("every official GoalDisplayInfo kind has a parsing schema contract", () => {
   for (const kind of listOfficialGoalDisplayInfoKinds()) {
     expect(kind in goalDisplaySchemas, `missing goal display schema for ${kind}`).toBeTruthy();
-    const parsed = parseResponseWithSchema(goalDisplaySchemas[kind], goalDisplaySamples[kind]);
+    const parsed = parseResponseWithSchema((goalDisplaySchemas as any)[kind], (goalDisplaySamples as any)[kind]);
     expect(parsed, `goal display schema did not parse representative ${kind}`).toBeTruthy();
   }
 });

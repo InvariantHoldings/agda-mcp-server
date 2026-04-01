@@ -6,7 +6,7 @@ import {
   createLibraryRegistration,
   parseAgdaLibraryName,
 } from "../../../src/agda/library-registration.js";
-import { libraryRegistrationMatrix } from "../../fixtures/agda/library-registration-matrix.js";
+import { libraryRegistrationMatrix, type LibraryRegistrationScenario } from "../../fixtures/agda/library-registration-matrix.js";
 import { materializeLibraryRegistrationScenario } from "../../helpers/library-registration-fixture.js";
 
 test("parseAgdaLibraryName extracts the declared library name", () => {
@@ -79,7 +79,7 @@ test("stable AGDA_DIR: reuses the directory and cleanup is a no-op", () => {
   );
   expect(scenario).toBeTruthy();
 
-  const materialized = materializeLibraryRegistrationScenario(scenario);
+  const materialized = materializeLibraryRegistrationScenario(scenario!);
   const previousAgdaDir = process.env.AGDA_DIR;
 
   try {
@@ -112,7 +112,7 @@ test("unset AGDA_DIR: creates a temp dir that cleanup() removes", () => {
   );
   expect(scenario).toBeTruthy();
 
-  const materialized = materializeLibraryRegistrationScenario(scenario);
+  const materialized = materializeLibraryRegistrationScenario(scenario!);
   const previousAgdaDir = process.env.AGDA_DIR;
 
   try {
