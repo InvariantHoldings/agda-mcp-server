@@ -7,6 +7,7 @@ export const PROJECT_ROOT_ENV_VAR = "AGDA_MCP_ROOT";
 type RelativePathApi = {
   relative(from: string, to: string): string;
   isAbsolute(path: string): boolean;
+  sep?: string;
 };
 
 function nativeRealpath(path: string): string {
@@ -54,7 +55,11 @@ export function isPathWithinRoot(
   pathApi: RelativePathApi = { relative, isAbsolute },
 ): boolean {
   const relPath = pathApi.relative(rootPath, targetPath);
-  return relPath === "" || (!relPath.startsWith("..") && !pathApi.isAbsolute(relPath));
+  const separators = new Set([pathApi.sep ?? "/", "/", "\\"]);
+  const startsWithParentSegment = relPath === ".."
+    || [...separators].some((separator) => relPath.startsWith(`..${separator}`));
+
+  return relPath === "" || (!startsWithParentSegment && !pathApi.isAbsolute(relPath));
 }
 
 /**

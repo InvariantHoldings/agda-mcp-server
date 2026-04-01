@@ -114,6 +114,10 @@ test("isPathWithinRoot treats win32 drive-letter casing as equivalent", () => {
   assert.equal(isPathWithinRoot("c:/repo", "C:/other/file.agda", win32), false);
 });
 
+test("isPathWithinRoot allows in-root segments that merely start with two dots", () => {
+  assert.equal(isPathWithinRoot("/repo", "/repo/..foo/file.agda"), true);
+});
+
 test("resolveExistingPathWithinRoot rejects symlink escapes outside the project root", (t) => {
   const sandbox = mkdtempSync(join(tmpdir(), "agda-mcp-path-"));
   const repoRoot = join(sandbox, "repo");

@@ -8,8 +8,24 @@ import { z } from "zod";
 import { resolve, relative, join } from "node:path";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import type { AgdaSession } from "../agda-process.js";
+import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import { missingPathToolError, ToolInvocationError, registerTextTool } from "./tool-helpers.js";
-import { resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
+
+function relativeToRequestedRoot(repoRoot: string, requestedRoot: string, relativePath = ""): string {
+  const requestedBase = relative(repoRoot, requestedRoot);
+  return relativePath ? join(requestedBase, relativePath) : requestedBase;
+}
+
+function resolveExistingChildWithinRoot(repoRoot: string, path: string): string | null {
+  try {
+    return resolveExistingPathWithinRoot(repoRoot, path);
+  } catch (error) {
+    if (error instanceof PathSandboxError) {
+      return null;
+    }
+    throw error;
+  }
+}
 
 export function register(
   server: McpServer,
@@ -67,14 +83,24 @@ export function register(
       }
       const tierDir = resolveExistingPathWithinRoot(repoRoot, requestedTierDir);
       const modules: string[] = [];
-      function walk(dir: string): void {
+      function walk(dir: string, requestedDir: string, displayPrefix: string): void {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
-          if (entry.isDirectory()) walk(resolve(dir, entry.name));
-          else if (entry.name.endsWith(".agda"))
-            modules.push(relative(repoRoot, resolve(dir, entry.name)));
+          const nextRequestedPath = resolve(requestedDir, entry.name);
+          const nextDisplayPath = join(displayPrefix, entry.name);
+          if (entry.isDirectory()) walk(resolve(dir, entry.name), nextRequestedPath, nextDisplayPath);
+          else if (entry.name.endsWith(".agda")) {
+            const canonicalPath = resolveExistingChildWithinRoot(repoRoot, nextRequestedPath);
+            if (canonicalPath) {
+              modules.push(nextDisplayPath);
+            }
+          }
         }
       }
-      walk(tierDir);
+      walk(
+        tierDir,
+        requestedTierDir,
+        relativeToRequestedRoot(repoRoot, requestedTierDir),
+      );
       modules.sort();
       return `## agda/${tier} (${modules.length} modules)\n\n${modules.map((m) => `- ${m}`).join("\n")}`;
     },
@@ -133,21 +159,32 @@ export function register(
       }
       const searchRoot = resolveExistingPathWithinRoot(repoRoot, requestedSearchRoot);
       const matches: Array<{ file: string; line: number; text: string }> = [];
-      function searchDir(dir: string): void {
+      function searchDir(dir: string, requestedDir: string, displayPrefix: string): void {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
-          if (entry.isDirectory()) searchDir(resolve(dir, entry.name));
+          const nextRequestedPath = resolve(requestedDir, entry.name);
+          const nextDisplayPath = join(displayPrefix, entry.name);
+          if (entry.isDirectory()) {
+            searchDir(resolve(dir, entry.name), nextRequestedPath, nextDisplayPath);
+          }
           else if (entry.name.endsWith(".agda")) {
-            const fp = resolve(dir, entry.name);
-            const lines = readFileSync(fp, "utf-8").split("\n");
+            const filePath = resolveExistingChildWithinRoot(repoRoot, nextRequestedPath);
+            if (!filePath) {
+              continue;
+            }
+            const lines = readFileSync(filePath, "utf-8").split("\n");
             for (let i = 0; i < lines.length; i++) {
               if (lines[i].includes(query)) {
-                matches.push({ file: relative(repoRoot, fp), line: i + 1, text: lines[i].trim() });
+                matches.push({ file: nextDisplayPath, line: i + 1, text: lines[i].trim() });
               }
             }
           }
         }
       }
-      searchDir(searchRoot);
+      searchDir(
+        searchRoot,
+        requestedSearchRoot,
+        relativeToRequestedRoot(repoRoot, requestedSearchRoot),
+      );
       if (matches.length === 0) return `No matches for "${query}" in ${tier ?? "agda/"}`;
       const capped = matches.slice(0, 50);
       let output = `## Search: "${query}" (${matches.length} matches${matches.length > 50 ? ", showing first 50" : ""})\n\n`;
