@@ -14,7 +14,7 @@ test("official reference sources are unique and official", () => {
   expect(new Set(sources.map((source) => source.slug)).size).toBe(sources.length);
   expect(policy.maxDepth >= 1).toBeTruthy();
   expect(policy.maxPages >= sources.length).toBeTruthy();
-  expect(policy.allowedOrigins.includes("https://agda.github.io")).toBeTruthy();
+  expect(policy.allowedOrigins).toContain("https://agda.github.io");
   expect(policy.includePathPrefixes.includes("/agda/Agda-")).toBeTruthy();
 
   for (const source of sources) {
