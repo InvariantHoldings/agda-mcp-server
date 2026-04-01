@@ -85,6 +85,7 @@ export class AgdaSession {
   private lastLoadedMtime: number | null = null;
   private libraryRegistration: LibraryRegistration | null = null;
   private readonly transport = new AgdaTransport();
+  private commandQueue: Promise<unknown> = Promise.resolve();
   readonly goal;
   readonly expr;
   readonly query;
@@ -163,13 +164,22 @@ export class AgdaSession {
   /**
    * Send an IOTCM command and collect responses until completion.
    * Returns all JSON responses received during this command.
+   *
+   * Commands are serialized via a promise queue so that concurrent MCP
+   * tool calls never interleave on the single-process Agda stdin/stdout.
    */
   sendCommand(
     command: string,
     timeoutMs = configuredCommandTimeoutMs(),
   ): Promise<AgdaResponse[]> {
     const proc = this.ensureProcess();
-    return this.transport.sendCommand(proc, command, timeoutMs);
+    const task = this.commandQueue.then(() =>
+      this.transport.sendCommand(proc, command, timeoutMs),
+    );
+    // Chain onto the queue — swallow rejections so a failed command
+    // doesn't block subsequent commands from executing.
+    this.commandQueue = task.then(() => {}, () => {});
+    return task;
   }
 
   /**
@@ -422,6 +432,7 @@ export class AgdaSession {
     this.goalIds = [];
     this.lastLoadedMtime = null;
     this.transport.destroy();
+    this.commandQueue = Promise.resolve();
     this.exiting = false;
   }
 
