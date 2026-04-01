@@ -15,6 +15,7 @@ export function getTestLogPaths(env = process.env) {
 
 export function buildTestRunPlan() {
   return [
+    { label: "build", command: "npm", args: ["run", "--silent", "build"] },
     { label: "examples", command: "npx", args: ["vitest", "run", "test/examples/"] },
     { label: "unit", command: "npx", args: ["vitest", "run", "test/unit/"] },
     { label: "property", command: "npx", args: ["vitest", "run", "test/property/"] },
@@ -48,19 +49,26 @@ export function isHighSignalLine(line) {
   }
 
   return (
-    trimmed.startsWith("✖") ||
+    // vitest output markers
     trimmed.startsWith("✓") ||
+    trimmed.startsWith("✗") ||
+    trimmed.startsWith("✖") ||
     trimmed.startsWith("×") ||
-    trimmed.startsWith("not ok") ||
-    trimmed.startsWith("Warning:") ||
-    trimmed.startsWith("WARNING:") ||
-    trimmed.startsWith("PASS ") ||
-    trimmed.startsWith("FAIL ") ||
-    trimmed.startsWith("PASSED:") ||
-    trimmed.startsWith("FAILED:") ||
+    trimmed.startsWith("❯") ||
+    trimmed.startsWith("⎯") ||
     trimmed.startsWith("Test Files") ||
     trimmed.startsWith("Tests ") ||
     trimmed.startsWith("Duration") ||
+    trimmed.startsWith("Start at") ||
+    // vitest file-level pass/fail
+    trimmed.startsWith("FAIL ") ||
+    trimmed.startsWith("PASS ") ||
+    // node:test TAP leftovers (sentinel script)
+    trimmed.startsWith("not ok") ||
+    trimmed.startsWith("Warning:") ||
+    trimmed.startsWith("WARNING:") ||
+    trimmed.startsWith("PASSED:") ||
+    trimmed.startsWith("FAILED:") ||
     /^ℹ (tests|pass|fail|cancelled|skipped|todo|duration_ms)\b/.test(trimmed) ||
     /\b(warn|warning|error|failed|timed out|timeout)\b/i.test(trimmed)
   );
