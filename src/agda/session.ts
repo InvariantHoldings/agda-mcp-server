@@ -172,10 +172,10 @@ export class AgdaSession {
     command: string,
     timeoutMs = configuredCommandTimeoutMs(),
   ): Promise<AgdaResponse[]> {
-    const proc = this.ensureProcess();
-    const task = this.commandQueue.then(() =>
-      this.transport.sendCommand(proc, command, timeoutMs),
-    );
+    const task = this.commandQueue.then(() => {
+      const proc = this.ensureProcess();
+      return this.transport.sendCommand(proc, command, timeoutMs);
+    });
     // Chain onto the queue — swallow rejections so a failed command
     // doesn't block subsequent commands from executing.
     this.commandQueue = task.then(() => {}, () => {});

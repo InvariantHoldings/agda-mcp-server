@@ -12,6 +12,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -174,7 +175,9 @@ export function createLibraryRegistration(repoRoot: string): LibraryRegistration
   // starts, avoiding the race where a temp dir is overwritten by a
   // wrapper script.
   const explicitAgdaDir = process.env.AGDA_DIR;
-  const useStableDir = explicitAgdaDir !== undefined && existsSync(explicitAgdaDir);
+  const useStableDir = explicitAgdaDir !== undefined
+    && existsSync(explicitAgdaDir)
+    && statSync(explicitAgdaDir).isDirectory();
 
   const agdaDir = useStableDir
     ? explicitAgdaDir

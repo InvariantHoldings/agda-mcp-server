@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { AgdaSession } from "../../../dist/agda-process.js";
-import { AgdaTransport } from "../../../dist/session/agda-transport.js";
 
 function withEnv(name, value, fn) {
   const previous = process.env[name];
@@ -29,9 +28,7 @@ test("AgdaSession serializes concurrent sendCommand calls (Bug 3)", async () => 
     const commandOrder = [];
     let commandIndex = 0;
 
-    // Replace the transport's sendCommand to track call ordering
-    const originalSend = session["transport"].sendCommand.bind(session["transport"]);
-    session["transport"].sendCommand = async function (proc, command, timeoutMs) {
+    session["transport"].sendCommand = async function (_proc, command, _timeoutMs) {
       const idx = commandIndex++;
       commandOrder.push({ idx, event: "start", command: command.slice(0, 40) });
       // Simulate Agda taking time to process
@@ -40,37 +37,38 @@ test("AgdaSession serializes concurrent sendCommand calls (Bug 3)", async () => 
       return [{ kind: "Status" }];
     };
 
-    // Mock ensureProcess to return a fake proc
     session.ensureProcess = () => ({ exitCode: null });
 
-    // Fire 3 concurrent commands
-    const results = await Promise.all([
-      session.sendCommand("IOTCM cmd1"),
-      session.sendCommand("IOTCM cmd2"),
-      session.sendCommand("IOTCM cmd3"),
-    ]);
+    try {
+      // Fire 3 concurrent commands
+      const results = await Promise.all([
+        session.sendCommand("IOTCM cmd1"),
+        session.sendCommand("IOTCM cmd2"),
+        session.sendCommand("IOTCM cmd3"),
+      ]);
 
-    // All three should succeed
-    assert.equal(results.length, 3);
-    for (const r of results) {
-      assert.deepEqual(r, [{ kind: "Status" }]);
+      // All three should succeed
+      assert.equal(results.length, 3);
+      for (const r of results) {
+        assert.deepEqual(r, [{ kind: "Status" }]);
+      }
+
+      // Commands must be serialized: each "start" must come after previous "end"
+      assert.equal(commandOrder.length, 6);
+      for (let i = 0; i < commandOrder.length; i += 2) {
+        assert.equal(commandOrder[i].event, "start");
+        assert.equal(commandOrder[i + 1].event, "end");
+        assert.equal(commandOrder[i].idx, commandOrder[i + 1].idx);
+      }
+
+      // Verify strict serialization order: start0, end0, start1, end1, start2, end2
+      assert.deepEqual(
+        commandOrder.map((e) => e.event),
+        ["start", "end", "start", "end", "start", "end"],
+      );
+    } finally {
+      session.destroy();
     }
-
-    // Commands must be serialized: each "start" must come after previous "end"
-    assert.equal(commandOrder.length, 6);
-    for (let i = 0; i < commandOrder.length; i += 2) {
-      assert.equal(commandOrder[i].event, "start");
-      assert.equal(commandOrder[i + 1].event, "end");
-      assert.equal(commandOrder[i].idx, commandOrder[i + 1].idx);
-    }
-
-    // Verify strict serialization order: start0, end0, start1, end1, start2, end2
-    assert.deepEqual(
-      commandOrder.map((e) => e.event),
-      ["start", "end", "start", "end", "start", "end"],
-    );
-
-    session.destroy();
   });
 });
 
@@ -102,13 +100,31 @@ test("AgdaSession command queue does not block after a rejected command (Bug 3)"
   session.destroy();
 });
 
-test("AgdaSession destroy resets the command queue", () => {
+test("AgdaSession destroy resets the command queue", async () => {
   const session = new AgdaSession(process.cwd());
 
-  // Access internal state to verify reset
+  let callCount = 0;
+  session["transport"].sendCommand = async function (_proc, command, _timeoutMs) {
+    if (command.includes("block")) {
+      // Simulate a command that never resolves — would block the queue
+      return new Promise(() => {});
+    }
+    callCount++;
+    return [{ kind: "Status" }];
+  };
+
+  session.ensureProcess = () => ({ exitCode: null });
+
+  // Enqueue a permanently blocked command; do not await it
+  void session.sendCommand("IOTCM block");
+
+  // destroy() should reset the internal command queue
   session.destroy();
 
-  // After destroy, the queue should be a resolved promise
-  // (we verify by checking that a new command can be queued without deadlock)
-  assert.ok(true, "destroy completed without error");
+  // After destroy, a new command should execute without being blocked
+  const result = await session.sendCommand("IOTCM after-destroy");
+  assert.deepEqual(result, [{ kind: "Status" }]);
+  assert.equal(callCount, 1);
+
+  session.destroy();
 });

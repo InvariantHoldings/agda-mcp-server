@@ -118,7 +118,7 @@ test("unset AGDA_DIR: creates a temp dir that cleanup() removes", () => {
   const previousAgdaDir = process.env.AGDA_DIR;
 
   try {
-    // Point AGDA_DIR at a non-existent path so the fallback temp-dir path is taken
+    // Unset AGDA_DIR so the fallback temp-dir path is taken
     delete process.env.AGDA_DIR;
 
     const registration = createLibraryRegistration(materialized.repoRoot);
