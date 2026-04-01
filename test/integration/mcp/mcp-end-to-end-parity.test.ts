@@ -278,19 +278,11 @@ it("MCP end-to-end: highlighting and display/process toggles", async () => {
 
     const tokenHighlighting = await callToolStep(
       harness,
-      "token highlighting keep",
+      "token highlighting",
       "agda_token_highlighting",
-      { file: "CompleteFixture.agda", remove: false },
+      { file: "CompleteFixture.agda" },
     );
     expect(tokenHighlighting.isError).toBe(false);
-
-    const removeTokenHighlighting = await callToolStep(
-      harness,
-      "token highlighting remove",
-      "agda_token_highlighting",
-      { file: "CompleteFixture.agda", remove: true },
-    );
-    expect(removeTokenHighlighting.isError).toBe(false);
 
     const highlight = await callToolStep(
       harness,
