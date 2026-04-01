@@ -8,6 +8,25 @@ import {
 } from "../response-schemas.js";
 import { decodeDisplayInfoEvents } from "./display-info.js";
 
+/**
+ * Render a GiveResult value as human-readable text.
+ *
+ * Agda 2.9.0 serializes GiveResult as `{"paren":true}` or `{"paren":false}`.
+ * After wire normalization this arrives as the string `'{"paren":false}'`.
+ * We detect this pattern and return a meaningful message instead of raw JSON.
+ */
+function renderGiveResult(val: string): string {
+  try {
+    const parsed = JSON.parse(val);
+    if (parsed && typeof parsed === "object" && "paren" in parsed) {
+      return "Term accepted";
+    }
+  } catch {
+    // Not JSON — use as-is
+  }
+  return val;
+}
+
 export function decodeGiveLikeResponse(responses: AgdaResponse[]): string {
   let result = "";
   const displayMessages = decodeDisplayInfoEvents(responses)
@@ -18,7 +37,7 @@ export function decodeGiveLikeResponse(responses: AgdaResponse[]): string {
     const give = parseResponseWithSchema(giveActionResponseSchema, resp);
     if (give) {
       const val = give.giveResult ?? give.result ?? "";
-      if (val) result = val;
+      if (val) result = renderGiveResult(val);
       continue;
     }
 

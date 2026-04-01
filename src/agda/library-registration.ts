@@ -12,6 +12,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -168,7 +169,20 @@ export function createLibraryRegistration(repoRoot: string): LibraryRegistration
   const knownLibraryNames = new Set(libraries.map((library) => library.name));
   const defaults = buildDefaults(sourceAgdaDir, knownLibraryNames);
 
-  const agdaDir = mkdtempSync(join(tmpdir(), "agda-mcp-libs-"));
+  // When AGDA_DIR is explicitly set and the directory exists, reuse it
+  // directly as the output dir. This lets a downstream launcher
+  // pre-populate the dir with libraries/defaults before the MCP server
+  // starts, avoiding the race where a temp dir is overwritten by a
+  // wrapper script.
+  const explicitAgdaDir = process.env.AGDA_DIR;
+  const useStableDir = explicitAgdaDir !== undefined
+    && existsSync(explicitAgdaDir)
+    && statSync(explicitAgdaDir).isDirectory();
+
+  const agdaDir = useStableDir
+    ? explicitAgdaDir
+    : mkdtempSync(join(tmpdir(), "agda-mcp-libs-"));
+
   writeConfigFile(join(agdaDir, "libraries"), libraries.map((library) => library.filePath));
   writeConfigFile(join(agdaDir, "defaults"), defaults);
 
@@ -176,7 +190,9 @@ export function createLibraryRegistration(repoRoot: string): LibraryRegistration
     agdaArgs: projectLibraries.flatMap((library) => ["-l", library.name]),
     agdaDir,
     cleanup() {
-      rmSync(agdaDir, { recursive: true, force: true });
+      if (!useStableDir) {
+        rmSync(agdaDir, { recursive: true, force: true });
+      }
     },
   };
 }
