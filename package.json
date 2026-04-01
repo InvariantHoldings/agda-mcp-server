@@ -47,11 +47,11 @@
   "packageManager": "npm@11.11.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LionOfJewdah/agda-mcp-server.git"
+    "url": "git+https://github.com/InvariantHoldings/agda-mcp-server.git"
   },
-  "homepage": "https://github.com/LionOfJewdah/agda-mcp-server#readme",
+  "homepage": "https://github.com/InvariantHoldings/agda-mcp-server#readme",
   "bugs": {
-    "url": "https://github.com/LionOfJewdah/agda-mcp-server/issues"
+    "url": "https://github.com/InvariantHoldings/agda-mcp-server/issues"
   },
   "keywords": [
     "agda",
