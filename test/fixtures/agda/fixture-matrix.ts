@@ -16,6 +16,7 @@ const fixtureSchema = z.object({
   expectedStrictSuccess: z.boolean(),
   expectedStrictClassification: z.string().min(1),
   searchQueries: z.array(searchQuerySchema).optional(),
+  minAgdaVersion: z.string().optional(),
 });
 
 export type Fixture = z.infer<typeof fixtureSchema>;

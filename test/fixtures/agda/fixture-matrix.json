@@ -350,7 +350,8 @@
     "minVisibleGoalCount": 1,
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
-    "expectedStrictClassification": "type-error"
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.5.1"
   },
   {
     "name": "LiterateTexExplicit.lagda.tex",
@@ -359,7 +360,8 @@
     "minVisibleGoalCount": 1,
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
-    "expectedStrictClassification": "type-error"
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.5.3"
   },
   {
     "name": "LiterateMarkdown.lagda.md",
@@ -368,7 +370,8 @@
     "minVisibleGoalCount": 1,
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
-    "expectedStrictClassification": "type-error"
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.5.3"
   },
   {
     "name": "LiterateRst.lagda.rst",
@@ -377,7 +380,8 @@
     "minVisibleGoalCount": 1,
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
-    "expectedStrictClassification": "type-error"
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.5.3"
   },
   {
     "name": "LiterateOrg.lagda.org",
@@ -386,7 +390,8 @@
     "minVisibleGoalCount": 1,
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
-    "expectedStrictClassification": "type-error"
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.6.1"
   },
   {
     "name": "LiterateTree.lagda.tree",
@@ -395,7 +400,8 @@
     "minVisibleGoalCount": 1,
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
-    "expectedStrictClassification": "type-error"
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.7.0"
   },
   {
     "name": "LiterateTypst.lagda.typ",
@@ -404,6 +410,7 @@
     "minVisibleGoalCount": 1,
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
-    "expectedStrictClassification": "type-error"
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.7.0"
   }
 ]
