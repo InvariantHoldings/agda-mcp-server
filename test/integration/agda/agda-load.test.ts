@@ -1,23 +1,27 @@
 import { test, expect } from "vitest";
 import { resolve } from "node:path";
-import { execSync } from "node:child_process";
 
 import { AgdaSession, typeCheckBatch } from "../../../src/agda-process.js";
+import {
+  detectAgdaVersion,
+  parseAgdaVersion,
+  versionAtLeast,
+} from "../../helpers/agda-version.js";
 
 const FIXTURES = resolve(import.meta.dirname, "../../fixtures/agda");
 
-// Check if Agda is available
-let agdaAvailable = false;
-try {
-  execSync("agda --version", { stdio: "pipe" });
-  agdaAvailable = true;
-} catch {
-  // Agda not in PATH
-}
+const agdaVersion = detectAgdaVersion();
+const agdaAvailable = agdaVersion !== undefined;
 
 const it = agdaAvailable && process.env.RUN_AGDA_INTEGRATION === "1"
   ? test
   : test.skip;
+
+/** Skip test if installed Agda is older than the given version. */
+function itSince(minVersion: string) {
+  if (!agdaVersion) return test.skip;
+  return versionAtLeast(agdaVersion, parseAgdaVersion(minVersion)) ? it : test.skip;
+}
 
 // Helper: load a fixture and return result
 async function loadFixture(name: string) {
@@ -187,12 +191,12 @@ it("WithRewrite.agda: loads with --rewriting", async () => {
   expect(r.success).toBe(true);
 });
 
-it("Cubical.agda: loads with --cubical", async () => {
+itSince("2.6.0")("Cubical.agda: loads with --cubical", async () => {
   const r = await loadFixture("Cubical.agda");
   expect(r.success).toBe(true);
 });
 
-it("SizedTypes.agda: loads with --sized-types", async () => {
+itSince("2.2.0")("SizedTypes.agda: loads with --sized-types", async () => {
   const r = await loadFixture("SizedTypes.agda");
   expect(r.success).toBe(true);
 });
@@ -271,11 +275,9 @@ it("UniverseError.agda: Set : Set universe error detected", async () => {
   ).toBeTruthy();
 });
 
-it("UniverseCumulativity.agda: loads with --cumulativity", async () => {
+itSince("2.6.0")("UniverseCumulativity.agda: loads with --cumulativity", async () => {
   const r = await loadFixture("UniverseCumulativity.agda");
-  // --cumulativity may not be supported in all Agda versions
-  // If it loads, great; if it fails with "unknown flag", that's OK too
-  expect(typeof r.success).toBe("boolean");
+  expect(r.success).toBe(true);
 });
 
 // ── typecheck matches load ───────────────────────────────
