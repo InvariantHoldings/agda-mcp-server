@@ -31,7 +31,7 @@ export function register(
     protocolCommands: ["Cmd_compile"],
     inputSchema: {
       backend: z.string().describe(backendExpressionHelp()),
-      file: z.string().describe("Path to the .agda file to compile (relative to repo root or absolute)"),
+      file: z.string().describe("Path to an Agda source file (.agda or literate .lagda*) to compile — relative to repo root or absolute"),
       args: z.array(z.string()).optional().describe("Optional Agda CLI arguments for the compile command"),
     },
     callback: async ({ backend, file, args }: { backend: string; file: string; args?: string[] }) => {

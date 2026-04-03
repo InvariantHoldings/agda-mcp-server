@@ -45,6 +45,7 @@ import type {
 import { parseLoadResponses } from "./parse-load-responses.js";
 import { logger } from "./logger.js";
 import { command, quoted } from "../protocol/command-builder.js";
+import { type AgdaVersion, parseAgdaVersion } from "./agda-version.js";
 
 // ── Binary discovery ──────────────────────────────────────────────────
 
@@ -82,6 +83,8 @@ export class AgdaSession {
   currentFile: string | null = null;
   goalIds: number[] = [];
   exiting = false;
+  private detectedVersion: AgdaVersion | null = null;
+  private versionDetected = false;
   private lastLoadedMtime: number | null = null;
   private libraryRegistration: LibraryRegistration | null = null;
   private readonly transport = new AgdaTransport();
@@ -151,7 +154,43 @@ export class AgdaSession {
       this.transport.handleProcessError(err);
     });
 
+    // Kick off version detection asynchronously on first process start.
+    // We don't await here — the version becomes available before any
+    // real command completes because it goes through the same command queue.
+    if (!this.versionDetected) {
+      this.versionDetected = true;
+      this.detectVersion();
+    }
+
     return this.proc;
+  }
+
+  /**
+   * Detect the running Agda version via Cmd_show_version.
+   * Called once on first process start. Failures are non-fatal.
+   */
+  private detectVersion(): void {
+    const cmd = `IOTCM "" NonInteractive Direct (Cmd_show_version)`;
+    this.sendCommand(cmd, 15_000).then((responses) => {
+      for (const resp of responses) {
+        const info = (resp as any).info;
+        const raw: string | undefined =
+          info?.version ?? info?.message ?? info?.text;
+        if (raw) {
+          try {
+            this.detectedVersion = parseAgdaVersion(raw);
+            logger.trace("detected Agda version", {
+              version: this.detectedVersion,
+            });
+          } catch {
+            // Could not parse — leave as null
+          }
+          return;
+        }
+      }
+    }).catch(() => {
+      // Version detection is best-effort
+    });
   }
 
   private getLibraryRegistration(): LibraryRegistration {
@@ -400,6 +439,15 @@ export class AgdaSession {
 
   // ── Accessors ─────────────────────────────────────────────────────
 
+  /**
+   * Get the detected Agda version, or null if not yet detected.
+   * Available after the first command completes (version detection
+   * runs automatically on process start).
+   */
+  getAgdaVersion(): AgdaVersion | null {
+    return this.detectedVersion;
+  }
+
   /** Get current goal IDs. */
   getGoalIds(): number[] {
     return [...this.goalIds];
@@ -431,6 +479,8 @@ export class AgdaSession {
     this.currentFile = null;
     this.goalIds = [];
     this.lastLoadedMtime = null;
+    this.detectedVersion = null;
+    this.versionDetected = false;
     this.transport.destroy();
     this.commandQueue = Promise.resolve();
     this.exiting = false;
