@@ -144,7 +144,7 @@ export function registerSessionLoadTools(
     category: "session",
     protocolCommands: ["Cmd_load", "Cmd_metas"],
     inputSchema: {
-      file: z.string().describe("Path to the .agda file (relative to repo root or absolute)"),
+      file: z.string().describe("Path to an Agda source file (.agda or literate .lagda*) — relative to repo root or absolute"),
     },
     outputDataSchema: loadDataSchema,
     callback: async ({ file }: { file: string }) => {
@@ -252,7 +252,7 @@ export function registerSessionLoadTools(
     category: "session",
     protocolCommands: ["Cmd_load_no_metas"],
     inputSchema: {
-      file: z.string().describe("Path to the .agda file (relative to repo root or absolute)"),
+      file: z.string().describe("Path to an Agda source file (.agda or literate .lagda*) — relative to repo root or absolute"),
     },
     outputDataSchema: loadDataSchema,
     callback: async ({ file }: { file: string }) => {
@@ -333,7 +333,7 @@ export function registerSessionLoadTools(
     category: "session",
     protocolCommands: ["Cmd_load", "Cmd_metas"],
     inputSchema: {
-      file: z.string().describe("Path to the .agda file"),
+      file: z.string().describe("Path to an Agda source file (.agda or literate .lagda*) — relative to repo root or absolute"),
     },
     outputDataSchema: typecheckDataSchema,
     callback: async ({ file }: { file: string }) => {
