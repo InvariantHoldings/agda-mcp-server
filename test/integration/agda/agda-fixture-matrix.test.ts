@@ -1,20 +1,19 @@
 import { test, expect } from "vitest";
 import { resolve } from "node:path";
-import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
 import { AgdaSession, typeCheckBatch } from "../../../src/agda-process.js";
 import { fixtureMatrix } from "../../fixtures/agda/fixture-matrix.js";
+import {
+  detectAgdaVersion,
+  parseAgdaVersion,
+  versionAtLeast,
+} from "../../helpers/agda-version.js";
 
 const FIXTURES = resolve(import.meta.dirname, "../../fixtures/agda");
 
-let agdaAvailable = false;
-try {
-  execSync("agda --version", { stdio: "pipe" });
-  agdaAvailable = true;
-} catch {
-  // Agda not in PATH
-}
+const agdaVersion = detectAgdaVersion();
+const agdaAvailable = agdaVersion !== undefined;
 
 const it = agdaAvailable && process.env.RUN_AGDA_INTEGRATION === "1"
   ? test
@@ -82,7 +81,18 @@ test("fixture matrix entries reference existing files", () => {
 const phases = selectedPhases();
 
 for (const fixture of selectedFixtures()) {
-  it(`${fixture.name}: load and batch typecheck match matrix expectations`, async (ctx) => {
+  const fixtureRequiresVersion = fixture.minAgdaVersion
+    ? parseAgdaVersion(fixture.minAgdaVersion)
+    : undefined;
+
+  const skipForVersion =
+    fixtureRequiresVersion &&
+    agdaVersion &&
+    !versionAtLeast(agdaVersion, fixtureRequiresVersion);
+
+  const runFixture = skipForVersion ? test.skip : it;
+
+  runFixture(`${fixture.name}: load and batch typecheck match matrix expectations`, async (ctx) => {
     await withSession(async (session) => {
       const load = phases.has("load")
         ? await timedStep(ctx, "load", () => session.load(fixture.name))

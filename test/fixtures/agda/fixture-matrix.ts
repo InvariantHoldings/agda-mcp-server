@@ -16,6 +16,10 @@ const fixtureSchema = z.object({
   expectedStrictSuccess: z.boolean(),
   expectedStrictClassification: z.string().min(1),
   searchQueries: z.array(searchQuerySchema).optional(),
+  minAgdaVersion: z.string().regex(
+    /^\d+(\.\d+)*(-[A-Za-z0-9.]+)?$/,
+    "minAgdaVersion must be a dotted numeric version, e.g. '2.7.0' or '2.9.0-rc1'",
+  ).optional(),
 });
 
 export type Fixture = z.infer<typeof fixtureSchema>;

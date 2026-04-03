@@ -1,0 +1,23 @@
+\documentclass{article}
+
+\begin{document}
+
+A simple literate Agda module using the explicit \texttt{.lagda.tex} format.
+
+\begin{code}
+module LiterateTexExplicit where
+
+data Nat : Set where
+  zero : Nat
+  suc  : Nat → Nat
+
+add : Nat → Nat → Nat
+add zero    m = m
+add (suc n) m = suc (add n m)
+
+-- Unsolved hole
+test : Nat
+test = {!!}
+\end{code}
+
+\end{document}

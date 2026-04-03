@@ -342,5 +342,75 @@
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
     "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "LiterateLatex.lagda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.5.1"
+  },
+  {
+    "name": "LiterateTexExplicit.lagda.tex",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.5.3"
+  },
+  {
+    "name": "LiterateMarkdown.lagda.md",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.5.3"
+  },
+  {
+    "name": "LiterateRst.lagda.rst",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.5.3"
+  },
+  {
+    "name": "LiterateOrg.lagda.org",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.6.1"
+  },
+  {
+    "name": "LiterateTree.lagda.tree",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.7.0"
+  },
+  {
+    "name": "LiterateTypst.lagda.typ",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.7.0"
   }
 ]
