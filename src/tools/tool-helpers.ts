@@ -384,18 +384,18 @@ export function registerStructuredTool(args: {
   // Wrap the callback to automatically measure wall-clock time.
   // If the callback already sets elapsedMs on the envelope, that value
   // is preserved. Otherwise elapsedMs is filled in automatically.
-  const timedCallback = async (cbArgs: any) => {
+  const timedCallback = async (toolArgs: any) => {
     const startMs = performance.now();
-    const result = await args.callback(cbArgs);
+    const result = await args.callback(toolArgs);
     const elapsed = Math.round(performance.now() - startMs);
     if (
       result &&
       typeof result === "object" &&
       "structuredContent" in result
     ) {
-      const sc = (result as any).structuredContent;
-      if (sc && typeof sc === "object" && sc.elapsedMs === undefined) {
-        sc.elapsedMs = elapsed;
+      const structuredContent = (result as any).structuredContent;
+      if (structuredContent && typeof structuredContent === "object" && structuredContent.elapsedMs === undefined) {
+        structuredContent.elapsedMs = elapsed;
       }
     }
     return result;
