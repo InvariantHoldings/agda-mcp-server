@@ -157,20 +157,8 @@ export function registerSessionLoadTools(
     outputDataSchema: loadDataSchema,
     callback: async ({ file, profileOptions }: { file: string; profileOptions?: string[] }) => {
       const startMs = performance.now();
-      let requestedFilePath: string;
-      try {
-        requestedFilePath = resolveRequestedFilePath(repoRoot, file, resolveInputFile);
-      } catch (err) {
-        if (!(err instanceof PathSandboxError)) {
-          throw err;
-        }
-        return invalidPathResult("agda_load", file);
-      }
-      if (!existsSync(requestedFilePath)) {
-        return missingFileResult("agda_load", requestedFilePath);
-      }
 
-      // Validate profile options early for clear error reporting
+      // Validate profile options first — client-side input validation should fail fast
       if (profileOptions && profileOptions.length > 0) {
         const validation = validateProfileOptions(profileOptions);
         if (!validation.valid) {
@@ -199,6 +187,19 @@ export function registerSessionLoadTools(
             }),
           );
         }
+      }
+
+      let requestedFilePath: string;
+      try {
+        requestedFilePath = resolveRequestedFilePath(repoRoot, file, resolveInputFile);
+      } catch (err) {
+        if (!(err instanceof PathSandboxError)) {
+          throw err;
+        }
+        return invalidPathResult("agda_load", file);
+      }
+      if (!existsSync(requestedFilePath)) {
+        return missingFileResult("agda_load", requestedFilePath);
       }
 
       try {
@@ -393,20 +394,8 @@ export function registerSessionLoadTools(
     outputDataSchema: typecheckDataSchema,
     callback: async ({ file, profileOptions }: { file: string; profileOptions?: string[] }) => {
       const startMs = performance.now();
-      let requestedFilePath: string;
-      try {
-        requestedFilePath = resolveRequestedFilePath(repoRoot, file, resolveInputFile);
-      } catch (err) {
-        if (!(err instanceof PathSandboxError)) {
-          throw err;
-        }
-        return invalidPathResult("agda_typecheck", file);
-      }
-      if (!existsSync(requestedFilePath)) {
-        return missingFileResult("agda_typecheck", requestedFilePath);
-      }
 
-      // Validate profile options early for clear error reporting
+      // Validate profile options first — client-side input validation should fail fast
       if (profileOptions && profileOptions.length > 0) {
         const validation = validateProfileOptions(profileOptions);
         if (!validation.valid) {
@@ -433,6 +422,19 @@ export function registerSessionLoadTools(
             }),
           );
         }
+      }
+
+      let requestedFilePath: string;
+      try {
+        requestedFilePath = resolveRequestedFilePath(repoRoot, file, resolveInputFile);
+      } catch (err) {
+        if (!(err instanceof PathSandboxError)) {
+          throw err;
+        }
+        return invalidPathResult("agda_typecheck", file);
+      }
+      if (!existsSync(requestedFilePath)) {
+        return missingFileResult("agda_typecheck", requestedFilePath);
       }
 
       try {

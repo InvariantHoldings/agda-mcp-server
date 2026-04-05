@@ -6,6 +6,7 @@ import {
   goalCommand,
   modeGoalCommand,
   modeTopLevelCommand,
+  profileOptionsList,
   quoted,
   rewriteGoalCommand,
   rewriteTopLevelCommand,
@@ -42,4 +43,31 @@ test("stringList and boolLiteral render stable protocol atoms", () => {
   expect(boolLiteral(true)).toBe("True");
   expect(boolLiteral(false)).toBe("False");
   expect(command("Cmd_show_version")).toBe("Cmd_show_version");
+});
+
+test("profileOptionsList renders empty list for no profile args", () => {
+  expect(profileOptionsList([])).toBe("[]");
+});
+
+test("profileOptionsList renders single profile arg", () => {
+  expect(profileOptionsList(["--profile=modules"])).toBe('["--profile=modules"]');
+});
+
+test("profileOptionsList renders multiple profile args", () => {
+  expect(profileOptionsList(["--profile=modules", "--profile=sharing"])).toBe(
+    '["--profile=modules", "--profile=sharing"]',
+  );
+});
+
+test("Cmd_load with profile options produces correct IOTCM payload", () => {
+  const opts = profileOptionsList(["--profile=internal", "--profile=metas"]);
+  const cmd = command("Cmd_load", quoted("/path/to/file.agda"), opts);
+  expect(cmd).toBe(
+    'Cmd_load "/path/to/file.agda" ["--profile=internal", "--profile=metas"]',
+  );
+});
+
+test("Cmd_load without profile options uses empty list", () => {
+  const cmd = command("Cmd_load", quoted("/path/to/file.agda"), "[]");
+  expect(cmd).toBe('Cmd_load "/path/to/file.agda" []');
 });
