@@ -48,7 +48,6 @@ import { command, quoted, stringList } from "../protocol/command-builder.js";
 import {
   validateProfileOptions,
   toProfileArgs,
-  type ProfileOption,
 } from "../protocol/profile-options.js";
 
 // ── Binary discovery ──────────────────────────────────────────────────

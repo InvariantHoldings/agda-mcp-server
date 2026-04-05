@@ -162,10 +162,10 @@ test("agda_typecheck rejects invalid profile options with classification invalid
   expect(result.structuredContent.classification).toBe("invalid-profile-options");
 });
 
-// ── Timing: elapsedMs is always present ──────────────────────────────
+// ── Schema: error paths include profiling: null ─────────────────────
 
 for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
-  test(`${toolName} includes profiling and elapsedMs in data for missing file`, async () => {
+  test(`${toolName} includes profiling: null in data for missing file`, async () => {
     clearToolManifest();
     const server = createCapturingServer();
 
@@ -181,8 +181,6 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent.data.profiling).toBeNull();
-    expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
-    expect(result.structuredContent.data.elapsedMs).toBeGreaterThanOrEqual(0);
   });
 }
 
@@ -217,8 +215,9 @@ test("agda_load includes profiling data in output when session returns profiling
     expect(result.structuredContent.data.profiling).toBe(
       "Total: 1.23s (type-checking) / 0.45s (scope checking)",
     );
-    expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
-    expect(result.structuredContent.data.elapsedMs).toBeGreaterThanOrEqual(0);
+    // elapsedMs is on the envelope, not in data
+    expect(typeof result.structuredContent.elapsedMs).toBe("number");
+    expect(result.structuredContent.elapsedMs).toBeGreaterThanOrEqual(0);
   } finally {
     try { unlinkSync(testFile); } catch { /* cleanup: file may not exist if test failed before creation */ }
   }
@@ -249,8 +248,9 @@ test("agda_load_no_metas includes profiling and elapsedMs in output", async () =
     });
 
     expect(result.structuredContent.data.profiling).toBe("Module timing: 0.5s");
-    expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
-    expect(result.structuredContent.data.elapsedMs).toBeGreaterThanOrEqual(0);
+    // elapsedMs is on the envelope, not in data
+    expect(typeof result.structuredContent.elapsedMs).toBe("number");
+    expect(result.structuredContent.elapsedMs).toBeGreaterThanOrEqual(0);
   } finally {
     try { unlinkSync(testFile); } catch { /* cleanup: file may not exist if test failed before creation */ }
   }
@@ -285,7 +285,8 @@ test("agda_load accepts valid profile options without error", async () => {
 
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent.data.profiling).toBeNull();
-    expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
+    // elapsedMs is on the envelope, not in data
+    expect(typeof result.structuredContent.elapsedMs).toBe("number");
   } finally {
     try { unlinkSync(testFile); } catch { /* cleanup: file may not exist if test failed before creation */ }
   }
@@ -319,15 +320,16 @@ test("agda_load works without profileOptions parameter", async () => {
 
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent.data.profiling).toBeNull();
-    expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
+    // elapsedMs is on the envelope, not in data
+    expect(typeof result.structuredContent.elapsedMs).toBe("number");
   } finally {
     try { unlinkSync(testFile); } catch { /* cleanup: file may not exist if test failed before creation */ }
   }
 });
 
-// ── elapsedMs in invalid-profile-options response ────────────────────
+// ── elapsedMs for invalid-profile-options is on envelope ─────────────
 
-test("agda_load invalid profile options response includes elapsedMs", async () => {
+test("agda_load invalid profile options response has no elapsedMs in data (it is on the envelope)", async () => {
   clearToolManifest();
   const server = createCapturingServer();
 
@@ -342,6 +344,6 @@ test("agda_load invalid profile options response includes elapsedMs", async () =
     profileOptions: ["bogus"],
   });
 
-  expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
-  expect(result.structuredContent.data.elapsedMs).toBeGreaterThanOrEqual(0);
+  // elapsedMs should not be in data — it's on the envelope
+  expect(result.structuredContent.data.elapsedMs).toBeUndefined();
 });

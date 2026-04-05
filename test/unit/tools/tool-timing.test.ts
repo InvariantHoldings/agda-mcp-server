@@ -70,7 +70,7 @@ test("makeToolResult has no elapsedMs when envelope does not have it", () => {
   expect(result.structuredContent.elapsedMs).toBeUndefined();
 });
 
-// ── errorEnvelope does not have elapsedMs (errors don't get timing) ──
+// ── errorEnvelope itself does not set elapsedMs ──────────────────────
 
 test("errorEnvelope does not include elapsedMs", () => {
   const envelope = errorEnvelope({

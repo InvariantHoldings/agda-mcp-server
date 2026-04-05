@@ -269,7 +269,8 @@ function makeTextToolErrorResult(
 /**
  * Wrap a session tool handler with staleness warning and error handling.
  * The handler returns a complete structured envelope.
- * Automatically measures wall-clock time and sets elapsedMs on the envelope.
+ * Automatically measures wall-clock time and sets elapsedMs on the envelope
+ * if the handler did not already set it.
  */
 export function wrapStructuredHandler<T extends Record<string, unknown>>(
   tool: string,
@@ -280,7 +281,9 @@ export function wrapStructuredHandler<T extends Record<string, unknown>>(
     const startMs = performance.now();
     try {
       const result = await handler();
-      result.envelope.elapsedMs = Math.round(performance.now() - startMs);
+      if (result.envelope.elapsedMs === undefined) {
+        result.envelope.elapsedMs = Math.round(performance.now() - startMs);
+      }
       return makeToolResult(result.envelope, result.text);
     } catch (err) {
       return makeTextToolErrorResult(tool, err, {});
@@ -315,7 +318,8 @@ export function wrapHandler(
 /**
  * Wrap a goal-based tool handler with validation, staleness warning,
  * and error handling. The handler returns a complete structured envelope.
- * Automatically measures wall-clock time and sets elapsedMs on the envelope.
+ * Automatically measures wall-clock time and sets elapsedMs on the envelope
+ * if the handler did not already set it.
  */
 export function wrapStructuredGoalHandler<A extends Record<string, unknown>, T extends Record<string, unknown>>(
   tool: string,
@@ -328,7 +332,7 @@ export function wrapStructuredGoalHandler<A extends Record<string, unknown>, T e
     if (invalid) return invalid;
     try {
       const result = await handler(args);
-      result.envelope.elapsedMs = Math.round(performance.now() - startMs);
+      result.envelope.elapsedMs ??= Math.round(performance.now() - startMs);
       return makeToolResult(result.envelope, result.text);
     } catch (err) {
       return makeTextToolErrorResult(tool, err, { text: "", goalId: args.goalId });

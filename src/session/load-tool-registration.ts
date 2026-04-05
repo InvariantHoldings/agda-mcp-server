@@ -31,7 +31,6 @@ import {
 function missingFileResult(
   tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck",
   filePath: string,
-  elapsedMs: number,
 ) {
   return makeToolResult(
     errorEnvelope({
@@ -50,7 +49,6 @@ function missingFileResult(
         errors: [`File not found: ${filePath}`],
         warnings: [],
         profiling: null,
-        elapsedMs,
         ...(tool === "agda_typecheck"
           ? {}
           : { reloaded: false, staleBeforeLoad: false }),
@@ -63,7 +61,6 @@ function processErrorResult(
   tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck",
   file: string,
   message: string,
-  elapsedMs: number,
 ) {
   return makeToolResult(
     errorEnvelope({
@@ -82,7 +79,6 @@ function processErrorResult(
         errors: [message],
         warnings: [],
         profiling: null,
-        elapsedMs,
         ...(tool === "agda_typecheck"
           ? {}
           : { reloaded: false, staleBeforeLoad: false }),
@@ -95,7 +91,6 @@ function processErrorResult(
 function invalidPathResult(
   tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck",
   file: string,
-  elapsedMs: number,
 ) {
   const message = `Invalid file path: ${file}`;
   return makeToolResult(
@@ -115,7 +110,6 @@ function invalidPathResult(
         errors: [message],
         warnings: [],
         profiling: null,
-        elapsedMs,
         ...(tool === "agda_typecheck"
           ? {}
           : { reloaded: false, staleBeforeLoad: false }),
@@ -193,7 +187,6 @@ export function registerSessionLoadTools(
                 reloaded: false,
                 staleBeforeLoad: false,
                 profiling: null,
-                elapsedMs: Math.round(performance.now() - startMs),
               },
               diagnostics: validation.errors.map((msg) => errorDiagnostic(msg, "invalid-profile-option")),
             }),
@@ -208,10 +201,10 @@ export function registerSessionLoadTools(
         if (!(err instanceof PathSandboxError)) {
           throw err;
         }
-        return invalidPathResult("agda_load", file, Math.round(performance.now() - startMs));
+        return invalidPathResult("agda_load", file);
       }
       if (!existsSync(requestedFilePath)) {
-        return missingFileResult("agda_load", requestedFilePath, Math.round(performance.now() - startMs));
+        return missingFileResult("agda_load", requestedFilePath);
       }
 
       try {
@@ -282,23 +275,22 @@ export function registerSessionLoadTools(
               reloaded: isReload,
               staleBeforeLoad: wasStale,
               profiling: result.profiling,
-              elapsedMs,
             },
             diagnostics,
             stale: session.isFileStale() || undefined,
             provenance: { file: filePath, protocolCommands: ["Cmd_load", "Cmd_metas"] },
+            elapsedMs,
           }),
           renderedText,
         );
       } catch (err) {
         if (err instanceof PathSandboxError) {
-          return invalidPathResult("agda_load", file, Math.round(performance.now() - startMs));
+          return invalidPathResult("agda_load", file);
         }
         return processErrorResult(
           "agda_load",
           file,
           `Agda load failed: ${err instanceof Error ? err.message : String(err)}`,
-          Math.round(performance.now() - startMs),
         );
       }
     },
@@ -323,10 +315,10 @@ export function registerSessionLoadTools(
         if (!(err instanceof PathSandboxError)) {
           throw err;
         }
-        return invalidPathResult("agda_load_no_metas", file, Math.round(performance.now() - startMs));
+        return invalidPathResult("agda_load_no_metas", file);
       }
       if (!existsSync(requestedFilePath)) {
-        return missingFileResult("agda_load_no_metas", requestedFilePath, Math.round(performance.now() - startMs));
+        return missingFileResult("agda_load_no_metas", requestedFilePath);
       }
 
       try {
@@ -367,7 +359,6 @@ export function registerSessionLoadTools(
               reloaded: false,
               staleBeforeLoad: false,
               profiling: result.profiling,
-              elapsedMs,
             },
             diagnostics: [
               ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),
@@ -375,18 +366,18 @@ export function registerSessionLoadTools(
             ],
             stale: session.isFileStale() || undefined,
             provenance: { file: filePath, protocolCommands: ["Cmd_load_no_metas"] },
+            elapsedMs,
           }),
           text,
         );
       } catch (err) {
         if (err instanceof PathSandboxError) {
-          return invalidPathResult("agda_load_no_metas", file, Math.round(performance.now() - startMs));
+          return invalidPathResult("agda_load_no_metas", file);
         }
         return processErrorResult(
           "agda_load_no_metas",
           file,
           `Agda strict load failed: ${err instanceof Error ? err.message : String(err)}`,
-          Math.round(performance.now() - startMs),
         );
       }
     },
@@ -430,7 +421,6 @@ export function registerSessionLoadTools(
                 errors: validation.errors,
                 warnings: [],
                 profiling: null,
-                elapsedMs: Math.round(performance.now() - startMs),
               },
               diagnostics: validation.errors.map((msg) => errorDiagnostic(msg, "invalid-profile-option")),
             }),
@@ -445,10 +435,10 @@ export function registerSessionLoadTools(
         if (!(err instanceof PathSandboxError)) {
           throw err;
         }
-        return invalidPathResult("agda_typecheck", file, Math.round(performance.now() - startMs));
+        return invalidPathResult("agda_typecheck", file);
       }
       if (!existsSync(requestedFilePath)) {
-        return missingFileResult("agda_typecheck", requestedFilePath, Math.round(performance.now() - startMs));
+        return missingFileResult("agda_typecheck", requestedFilePath);
       }
 
       try {
@@ -487,25 +477,24 @@ export function registerSessionLoadTools(
               errors: result.errors,
               warnings: result.warnings,
               profiling: result.profiling,
-              elapsedMs,
             },
             diagnostics: [
               ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),
               ...result.warnings.map((message) => warningDiagnostic(message, "agda-warning")),
             ],
             provenance: { file: filePath, protocolCommands: ["Cmd_load", "Cmd_metas"] },
+            elapsedMs,
           }),
           text,
         );
       } catch (err) {
         if (err instanceof PathSandboxError) {
-          return invalidPathResult("agda_typecheck", file, Math.round(performance.now() - startMs));
+          return invalidPathResult("agda_typecheck", file);
         }
         return processErrorResult(
           "agda_typecheck",
           file,
           `Agda invocation failed: ${err instanceof Error ? err.message : String(err)}`,
-          Math.round(performance.now() - startMs),
         );
       }
     },

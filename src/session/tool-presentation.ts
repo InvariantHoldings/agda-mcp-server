@@ -20,7 +20,6 @@ export const loadDataSchema = z.object({
   reloaded: z.boolean(),
   staleBeforeLoad: z.boolean(),
   profiling: z.string().nullable().describe("Profiling output from Agda when --profile options are active"),
-  elapsedMs: z.number().describe("Wall-clock time for the operation in milliseconds"),
 });
 
 export const sessionStatusDataSchema = z.object({
@@ -57,7 +56,6 @@ export const typecheckDataSchema = z.object({
   errors: z.array(z.string()),
   warnings: z.array(z.string()),
   profiling: z.string().nullable().describe("Profiling output from Agda when --profile options are active"),
-  elapsedMs: z.number().describe("Wall-clock time for the operation in milliseconds"),
 });
 
 export function renderDiagnosticsSection(title: string, items: string[]): string {
