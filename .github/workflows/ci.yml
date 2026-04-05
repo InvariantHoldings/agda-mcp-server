@@ -30,6 +30,8 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     needs: verify
+    permissions:
+      contents: read
 
     steps:
       - name: Check out repository
