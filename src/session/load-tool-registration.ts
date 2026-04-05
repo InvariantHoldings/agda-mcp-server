@@ -23,6 +23,10 @@ import {
   typecheckDataSchema,
 } from "./tool-presentation.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
+import {
+  VALID_PROFILE_OPTION_STRINGS,
+  validateProfileOptions,
+} from "../protocol/profile-options.js";
 
 function missingFileResult(tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck", filePath: string) {
   return makeToolResult(
@@ -145,9 +149,14 @@ export function registerSessionLoadTools(
     protocolCommands: ["Cmd_load", "Cmd_metas"],
     inputSchema: {
       file: z.string().describe("Path to the .agda file (relative to repo root or absolute)"),
+      profileOptions: z.array(z.string()).optional().describe(
+        `Agda profiling options. Valid values: ${VALID_PROFILE_OPTION_STRINGS.join(", ")}. ` +
+        "Note: internal, modules, and definitions are mutually exclusive.",
+      ),
     },
     outputDataSchema: loadDataSchema,
-    callback: async ({ file }: { file: string }) => {
+    callback: async ({ file, profileOptions }: { file: string; profileOptions?: string[] }) => {
+      const startMs = performance.now();
       let requestedFilePath: string;
       try {
         requestedFilePath = resolveRequestedFilePath(repoRoot, file, resolveInputFile);
@@ -161,12 +170,44 @@ export function registerSessionLoadTools(
         return missingFileResult("agda_load", requestedFilePath);
       }
 
+      // Validate profile options early for clear error reporting
+      if (profileOptions && profileOptions.length > 0) {
+        const validation = validateProfileOptions(profileOptions);
+        if (!validation.valid) {
+          return makeToolResult(
+            errorEnvelope({
+              tool: "agda_load",
+              summary: `Invalid profile options: ${validation.errors.join("; ")}`,
+              classification: "invalid-profile-options",
+              data: {
+                file,
+                success: false,
+                goalIds: [],
+                goalCount: 0,
+                invisibleGoalCount: 0,
+                hasHoles: false,
+                isComplete: false,
+                classification: "invalid-profile-options",
+                errors: validation.errors,
+                warnings: [],
+                reloaded: false,
+                staleBeforeLoad: false,
+                profiling: null,
+                elapsedMs: Math.round(performance.now() - startMs),
+              },
+              diagnostics: validation.errors.map((msg) => errorDiagnostic(msg, "invalid-profile-option")),
+            }),
+          );
+        }
+      }
+
       try {
         const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
         const previousFile = session.getLoadedFile();
         const isReload = previousFile === filePath;
         const wasStale = isReload && session.isFileStale();
-        const result = await session.load(filePath);
+        const result = await session.load(filePath, { profileOptions });
+        const elapsedMs = Math.round(performance.now() - startMs);
         const relPath = relative(repoRoot, requestedFilePath);
         const diagnostics = [
           ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),
@@ -201,6 +242,8 @@ export function registerSessionLoadTools(
           reloaded: isReload,
           staleBeforeLoad: wasStale,
           extraLead: textLead,
+          profiling: result.profiling,
+          elapsedMs,
         });
 
         const renderedText = result.allGoalsText
@@ -225,6 +268,8 @@ export function registerSessionLoadTools(
               warnings: result.warnings,
               reloaded: isReload,
               staleBeforeLoad: wasStale,
+              profiling: result.profiling,
+              elapsedMs,
             },
             diagnostics,
             stale: session.isFileStale() || undefined,
@@ -248,7 +293,7 @@ export function registerSessionLoadTools(
   registerStructuredTool({
     server,
     name: "agda_load_no_metas",
-    description: "Load and type-check an Agda file, failing if unsolved metavariables remain after loading.",
+    description: "Load and type-check an Agda file, failing if unsolved metavariables remain after loading. Note: Cmd_load_no_metas does not accept command-line options, so Agda profiling options cannot be passed directly. Use agda_load with profileOptions for profiled type-checking.",
     category: "session",
     protocolCommands: ["Cmd_load_no_metas"],
     inputSchema: {
@@ -256,6 +301,7 @@ export function registerSessionLoadTools(
     },
     outputDataSchema: loadDataSchema,
     callback: async ({ file }: { file: string }) => {
+      const startMs = performance.now();
       let requestedFilePath: string;
       try {
         requestedFilePath = resolveRequestedFilePath(repoRoot, file, resolveInputFile);
@@ -272,6 +318,7 @@ export function registerSessionLoadTools(
       try {
         const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
         const result = await session.loadNoMetas(filePath);
+        const elapsedMs = Math.round(performance.now() - startMs);
         const relPath = relative(repoRoot, requestedFilePath);
         const text = renderLoadLikeText({
           heading: "Loaded without metas",
@@ -283,6 +330,8 @@ export function registerSessionLoadTools(
           invisibleGoalCount: result.invisibleGoalCount,
           errors: result.errors,
           warnings: result.warnings,
+          profiling: result.profiling,
+          elapsedMs,
         });
 
         return makeToolResult(
@@ -303,6 +352,8 @@ export function registerSessionLoadTools(
               warnings: result.warnings,
               reloaded: false,
               staleBeforeLoad: false,
+              profiling: result.profiling,
+              elapsedMs,
             },
             diagnostics: [
               ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),
@@ -334,9 +385,14 @@ export function registerSessionLoadTools(
     protocolCommands: ["Cmd_load", "Cmd_metas"],
     inputSchema: {
       file: z.string().describe("Path to the .agda file"),
+      profileOptions: z.array(z.string()).optional().describe(
+        `Agda profiling options. Valid values: ${VALID_PROFILE_OPTION_STRINGS.join(", ")}. ` +
+        "Note: internal, modules, and definitions are mutually exclusive.",
+      ),
     },
     outputDataSchema: typecheckDataSchema,
-    callback: async ({ file }: { file: string }) => {
+    callback: async ({ file, profileOptions }: { file: string; profileOptions?: string[] }) => {
+      const startMs = performance.now();
       let requestedFilePath: string;
       try {
         requestedFilePath = resolveRequestedFilePath(repoRoot, file, resolveInputFile);
@@ -350,9 +406,39 @@ export function registerSessionLoadTools(
         return missingFileResult("agda_typecheck", requestedFilePath);
       }
 
+      // Validate profile options early for clear error reporting
+      if (profileOptions && profileOptions.length > 0) {
+        const validation = validateProfileOptions(profileOptions);
+        if (!validation.valid) {
+          return makeToolResult(
+            errorEnvelope({
+              tool: "agda_typecheck",
+              summary: `Invalid profile options: ${validation.errors.join("; ")}`,
+              classification: "invalid-profile-options",
+              data: {
+                file,
+                success: false,
+                goalIds: [],
+                goalCount: 0,
+                invisibleGoalCount: 0,
+                hasHoles: false,
+                isComplete: false,
+                classification: "invalid-profile-options",
+                errors: validation.errors,
+                warnings: [],
+                profiling: null,
+                elapsedMs: Math.round(performance.now() - startMs),
+              },
+              diagnostics: validation.errors.map((msg) => errorDiagnostic(msg, "invalid-profile-option")),
+            }),
+          );
+        }
+      }
+
       try {
         const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
-        const result = await typeCheckBatch(filePath, repoRoot);
+        const result = await typeCheckBatch(filePath, repoRoot, { profileOptions });
+        const elapsedMs = Math.round(performance.now() - startMs);
         const relPath = relative(repoRoot, requestedFilePath);
         const text = renderLoadLikeText({
           heading: "Type-check",
@@ -364,6 +450,8 @@ export function registerSessionLoadTools(
           invisibleGoalCount: result.invisibleGoalCount,
           errors: result.errors,
           warnings: result.warnings,
+          profiling: result.profiling,
+          elapsedMs,
         });
 
         return makeToolResult(
@@ -382,6 +470,8 @@ export function registerSessionLoadTools(
               classification: result.classification,
               errors: result.errors,
               warnings: result.warnings,
+              profiling: result.profiling,
+              elapsedMs,
             },
             diagnostics: [
               ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),

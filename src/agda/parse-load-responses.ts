@@ -9,6 +9,8 @@ import { classifyCompleteness } from "./completeness.js";
 import {
   displayInfoResponseSchema,
   parseResponseWithSchema,
+  timeInfoSchema,
+  runningInfoResponseSchema,
 } from "../protocol/response-schemas.js";
 import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
 import { decodeLoadDisplayResponses } from "../protocol/responses/load-display.js";
@@ -108,6 +110,8 @@ export function parseLoadResponses(
     invisibleGoalCount,
   });
 
+  const profiling = extractProfilingOutput(responses);
+
   return {
     success,
     errors,
@@ -120,5 +124,49 @@ export function parseLoadResponses(
     hasHoles: completeness.hasHoles,
     isComplete: completeness.isComplete,
     classification: completeness.classification,
+    profiling,
   };
+}
+
+/**
+ * Extract profiling output from Agda responses.
+ *
+ * When `--profile=` options are active, Agda emits profiling data via:
+ * - DisplayInfo with info.kind === "Time" (timing/profiling summary)
+ * - RunningInfo messages (incremental profiling output)
+ *
+ * Returns the combined profiling text, or null if no profiling data
+ * was found in the responses.
+ */
+export function extractProfilingOutput(
+  responses: AgdaResponse[],
+): string | null {
+  const parts: string[] = [];
+
+  for (const resp of responses) {
+    if (resp.kind === "DisplayInfo") {
+      const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
+      if (!display) continue;
+      const info = display.info;
+
+      if (info.kind === "Time") {
+        const time = timeInfoSchema.safeParse(info);
+        if (time.success) {
+          const text = time.data.message
+            ?? (time.data.cpuTime != null ? String(time.data.cpuTime) : "");
+          if (text) parts.push(text);
+        }
+      }
+    }
+
+    if (resp.kind === "RunningInfo") {
+      const running = parseResponseWithSchema(runningInfoResponseSchema, resp);
+      if (running) {
+        const text = running.message ?? running.text ?? "";
+        if (text) parts.push(text);
+      }
+    }
+  }
+
+  return parts.length > 0 ? parts.join("\n") : null;
 }

@@ -13,14 +13,20 @@ import { AgdaSession } from "./session.js";
  * Spawns `agda --interaction-json`, sends Cmd_load, collects the
  * normalized response, and tears down. Uses identical parsing to
  * agda_load — no separate error format, no hardcoded flags.
+ *
+ * @param filePath       Path to the Agda file to type-check.
+ * @param repoRoot       Repository root for path resolution.
+ * @param options        Optional settings for the type-check.
+ * @param options.profileOptions  Agda profile options (e.g. ["modules"]).
  */
 export async function typeCheckBatch(
   filePath: string,
   repoRoot: string,
+  options?: { profileOptions?: string[] },
 ): Promise<TypeCheckResult> {
   const session = new AgdaSession(repoRoot);
   try {
-    const result = await session.load(filePath);
+    const result = await session.load(filePath, options);
     return {
       success: result.success,
       errors: result.errors,
@@ -31,6 +37,7 @@ export async function typeCheckBatch(
       hasHoles: result.hasHoles,
       isComplete: result.isComplete,
       classification: result.classification,
+      profiling: result.profiling,
     };
   } finally {
     session.destroy();

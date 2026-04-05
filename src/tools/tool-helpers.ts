@@ -27,6 +27,8 @@ export interface ToolEnvelope<T extends Record<string, unknown>> {
   diagnostics: ToolDiagnostic[];
   stale?: boolean;
   provenance?: Record<string, unknown>;
+  /** Wall-clock time for the tool invocation in milliseconds. */
+  elapsedMs?: number;
 }
 
 export class ToolInvocationError<T extends Record<string, unknown> = Record<string, unknown>> extends Error {
@@ -71,6 +73,7 @@ const envelopeBaseSchema = z.object({
   diagnostics: z.array(diagnosticSchema),
   stale: z.boolean().optional(),
   provenance: z.record(z.string(), z.unknown()).optional(),
+  elapsedMs: z.number().optional(),
 });
 
 export function toolEnvelopeSchema(
@@ -112,6 +115,7 @@ export function okEnvelope<T extends Record<string, unknown>>(args: {
   diagnostics?: ToolDiagnostic[];
   stale?: boolean;
   provenance?: Record<string, unknown>;
+  elapsedMs?: number;
 }): ToolEnvelope<T> {
   return {
     tool: args.tool,
@@ -122,6 +126,7 @@ export function okEnvelope<T extends Record<string, unknown>>(args: {
     diagnostics: args.diagnostics ?? [],
     stale: args.stale,
     provenance: args.provenance,
+    elapsedMs: args.elapsedMs,
   };
 }
 
@@ -264,6 +269,7 @@ function makeTextToolErrorResult(
 /**
  * Wrap a session tool handler with staleness warning and error handling.
  * The handler returns a complete structured envelope.
+ * Automatically measures wall-clock time and sets elapsedMs on the envelope.
  */
 export function wrapStructuredHandler<T extends Record<string, unknown>>(
   tool: string,
@@ -271,8 +277,10 @@ export function wrapStructuredHandler<T extends Record<string, unknown>>(
   handler: () => Promise<{ envelope: ToolEnvelope<T>; text?: string }>,
 ): () => Promise<ToolResult<Record<string, unknown>>> {
   return async () => {
+    const startMs = performance.now();
     try {
       const result = await handler();
+      result.envelope.elapsedMs = Math.round(performance.now() - startMs);
       return makeToolResult(result.envelope, result.text);
     } catch (err) {
       return makeTextToolErrorResult(tool, err, {});
@@ -307,6 +315,7 @@ export function wrapHandler(
 /**
  * Wrap a goal-based tool handler with validation, staleness warning,
  * and error handling. The handler returns a complete structured envelope.
+ * Automatically measures wall-clock time and sets elapsedMs on the envelope.
  */
 export function wrapStructuredGoalHandler<A extends Record<string, unknown>, T extends Record<string, unknown>>(
   tool: string,
@@ -314,10 +323,12 @@ export function wrapStructuredGoalHandler<A extends Record<string, unknown>, T e
   handler: (args: A & { goalId: number }) => Promise<{ envelope: ToolEnvelope<T>; text?: string }>,
 ): (args: A & { goalId: number }) => Promise<ToolResult<Record<string, unknown>>> {
   return async (args) => {
+    const startMs = performance.now();
     const invalid = validateGoalId(session, args.goalId, tool);
     if (invalid) return invalid;
     try {
       const result = await handler(args);
+      result.envelope.elapsedMs = Math.round(performance.now() - startMs);
       return makeToolResult(result.envelope, result.text);
     } catch (err) {
       return makeTextToolErrorResult(tool, err, { text: "", goalId: args.goalId });
@@ -406,6 +417,7 @@ export function registerTextTool(args: {
     annotations: args.annotations,
     outputDataSchema,
     callback: async (cbArgs: any) => {
+      const startMs = performance.now();
       try {
         const textValue = await args.callback(cbArgs);
         return makeToolResult(
@@ -413,6 +425,7 @@ export function registerTextTool(args: {
             tool: args.name,
             summary: textValue,
             data: { text: textValue },
+            elapsedMs: Math.round(performance.now() - startMs),
           }),
           textValue,
         );
@@ -449,6 +462,7 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
     annotations: args.annotations,
     outputDataSchema,
     callback: async (cbArgs: A & { goalId: number }) => {
+      const startMs = performance.now();
       const invalid = validateGoalId(args.session, cbArgs.goalId, args.name);
       if (invalid) {
         return invalid;
@@ -464,6 +478,7 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
             summary: body,
             data: { text: body, goalId: cbArgs.goalId },
             stale: args.session.isFileStale() || undefined,
+            elapsedMs: Math.round(performance.now() - startMs),
           }),
           textValue,
         );
