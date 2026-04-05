@@ -288,8 +288,17 @@ export class AgdaSession {
       const validation = validateProfileOptions(options.profileOptions);
       if (!validation.valid) {
         return {
-          ...AgdaSession.NOT_FOUND_RESULT,
+          success: false,
           errors: validation.errors,
+          warnings: [],
+          goals: [],
+          allGoalsText: "",
+          invisibleGoalCount: 0,
+          goalCount: 0,
+          hasHoles: false,
+          isComplete: false,
+          classification: "invalid-profile-options",
+          profiling: null,
         };
       }
       const profileArgs = toProfileArgs(validation.options);

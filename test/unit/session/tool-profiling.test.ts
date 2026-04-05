@@ -219,7 +219,7 @@ test("agda_load includes profiling data in output when session returns profiling
     expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
     expect(result.structuredContent.data.elapsedMs).toBeGreaterThanOrEqual(0);
   } finally {
-    try { unlinkSync(testFile); } catch { /* ignore */ }
+    try { unlinkSync(testFile); } catch { /* cleanup: file may not exist if test failed before creation */ }
   }
 });
 
@@ -251,7 +251,7 @@ test("agda_load_no_metas includes profiling and elapsedMs in output", async () =
     expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
     expect(result.structuredContent.data.elapsedMs).toBeGreaterThanOrEqual(0);
   } finally {
-    try { unlinkSync(testFile); } catch { /* ignore */ }
+    try { unlinkSync(testFile); } catch { /* cleanup: file may not exist if test failed before creation */ }
   }
 });
 
@@ -286,7 +286,7 @@ test("agda_load accepts valid profile options without error", async () => {
     expect(result.structuredContent.data.profiling).toBeNull();
     expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
   } finally {
-    try { unlinkSync(testFile); } catch { /* ignore */ }
+    try { unlinkSync(testFile); } catch { /* cleanup: file may not exist if test failed before creation */ }
   }
 });
 
@@ -320,7 +320,7 @@ test("agda_load works without profileOptions parameter", async () => {
     expect(result.structuredContent.data.profiling).toBeNull();
     expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
   } finally {
-    try { unlinkSync(testFile); } catch { /* ignore */ }
+    try { unlinkSync(testFile); } catch { /* cleanup: file may not exist if test failed before creation */ }
   }
 });
 

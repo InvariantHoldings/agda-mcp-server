@@ -152,8 +152,7 @@ export function extractProfilingOutput(
       if (info.kind === "Time") {
         const time = timeInfoSchema.safeParse(info);
         if (time.success) {
-          const text = time.data.message
-            ?? (time.data.cpuTime != null ? String(time.data.cpuTime) : "");
+          const text = time.data.message ?? time.data.cpuTime?.toString() ?? "";
           if (text) parts.push(text);
         }
       }
