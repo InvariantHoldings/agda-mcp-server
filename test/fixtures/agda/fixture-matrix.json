@@ -412,5 +412,133 @@
     "expectedStrictSuccess": false,
     "expectedStrictClassification": "type-error",
     "minAgdaVersion": "2.7.0"
+  },
+  {
+    "name": "TypeError.agda",
+    "expectedSuccess": false,
+    "expectedClassification": "type-error",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "ParseError.agda",
+    "expectedSuccess": false,
+    "expectedClassification": "type-error",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "ImportMissing.agda",
+    "expectedSuccess": false,
+    "expectedClassification": "type-error",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "MixedGoalsErrors.agda",
+    "expectedSuccess": false,
+    "expectedClassification": "type-error",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "UniverseError.agda",
+    "expectedSuccess": false,
+    "expectedClassification": "type-error",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "NavigationQueries.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "WithPostulates.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "SearchAboutSupport.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "UniverseLevels.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "WithK.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "WithRewrite.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "SizedTypes.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "Cubical.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete",
+    "minAgdaVersion": "2.6.0"
+  },
+  {
+    "name": "UniverseCumulativity.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete",
+    "minAgdaVersion": "2.6.1"
   }
 ]
