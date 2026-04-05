@@ -381,6 +381,26 @@ export function registerStructuredTool(args: {
     annotations: args.annotations,
   });
 
+  // Wrap the callback to automatically measure wall-clock time.
+  // If the callback already sets elapsedMs on the envelope, that value
+  // is preserved. Otherwise elapsedMs is filled in automatically.
+  const timedCallback = async (cbArgs: any) => {
+    const startMs = performance.now();
+    const result = await args.callback(cbArgs);
+    const elapsed = Math.round(performance.now() - startMs);
+    if (
+      result &&
+      typeof result === "object" &&
+      "structuredContent" in result
+    ) {
+      const sc = (result as any).structuredContent;
+      if (sc && typeof sc === "object" && sc.elapsedMs === undefined) {
+        sc.elapsedMs = elapsed;
+      }
+    }
+    return result;
+  };
+
   args.server.registerTool(
     args.name,
     {
@@ -389,7 +409,7 @@ export function registerStructuredTool(args: {
       outputSchema: toolEnvelopeSchema(args.outputDataSchema),
       annotations: args.annotations,
     },
-    args.callback as never,
+    timedCallback as never,
   );
 }
 

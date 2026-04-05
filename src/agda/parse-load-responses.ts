@@ -34,6 +34,7 @@ export interface ParsedLoadResult extends LoadResult {
  */
 export function parseLoadResponses(
   responses: AgdaResponse[],
+  options?: { profilingEnabled?: boolean },
 ): ParsedLoadResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -110,7 +111,7 @@ export function parseLoadResponses(
     invisibleGoalCount,
   });
 
-  const profiling = extractProfilingOutput(responses);
+  const profiling = extractProfilingOutput(responses, options);
 
   return {
     success,
@@ -135,12 +136,18 @@ export function parseLoadResponses(
  * - DisplayInfo with info.kind === "Time" (timing/profiling summary)
  * - RunningInfo messages (incremental profiling output)
  *
+ * When `profilingEnabled` is false (the default), only DisplayInfo/Time
+ * responses are collected — RunningInfo is ignored because those messages
+ * are also used for general progress/status (e.g. "Checking Module …").
+ *
  * Returns the combined profiling text, or null if no profiling data
  * was found in the responses.
  */
 export function extractProfilingOutput(
   responses: AgdaResponse[],
+  options?: { profilingEnabled?: boolean },
 ): string | null {
+  const includeRunningInfo = options?.profilingEnabled ?? false;
   const parts: string[] = [];
 
   for (const resp of responses) {
@@ -158,7 +165,7 @@ export function extractProfilingOutput(
       }
     }
 
-    if (resp.kind === "RunningInfo") {
+    if (includeRunningInfo && resp.kind === "RunningInfo") {
       const running = parseResponseWithSchema(runningInfoResponseSchema, resp);
       if (running) {
         const text = running.message ?? running.text ?? "";

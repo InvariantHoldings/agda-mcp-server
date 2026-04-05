@@ -28,7 +28,11 @@ import {
   validateProfileOptions,
 } from "../protocol/profile-options.js";
 
-function missingFileResult(tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck", filePath: string) {
+function missingFileResult(
+  tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck",
+  filePath: string,
+  elapsedMs: number,
+) {
   return makeToolResult(
     errorEnvelope({
       tool,
@@ -45,6 +49,8 @@ function missingFileResult(tool: "agda_load" | "agda_load_no_metas" | "agda_type
         classification: "file-not-found",
         errors: [`File not found: ${filePath}`],
         warnings: [],
+        profiling: null,
+        elapsedMs,
         ...(tool === "agda_typecheck"
           ? {}
           : { reloaded: false, staleBeforeLoad: false }),
@@ -57,6 +63,7 @@ function processErrorResult(
   tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck",
   file: string,
   message: string,
+  elapsedMs: number,
 ) {
   return makeToolResult(
     errorEnvelope({
@@ -74,6 +81,8 @@ function processErrorResult(
         classification: "process-error",
         errors: [message],
         warnings: [],
+        profiling: null,
+        elapsedMs,
         ...(tool === "agda_typecheck"
           ? {}
           : { reloaded: false, staleBeforeLoad: false }),
@@ -86,6 +95,7 @@ function processErrorResult(
 function invalidPathResult(
   tool: "agda_load" | "agda_load_no_metas" | "agda_typecheck",
   file: string,
+  elapsedMs: number,
 ) {
   const message = `Invalid file path: ${file}`;
   return makeToolResult(
@@ -104,6 +114,8 @@ function invalidPathResult(
         classification: "invalid-path",
         errors: [message],
         warnings: [],
+        profiling: null,
+        elapsedMs,
         ...(tool === "agda_typecheck"
           ? {}
           : { reloaded: false, staleBeforeLoad: false }),
@@ -196,10 +208,10 @@ export function registerSessionLoadTools(
         if (!(err instanceof PathSandboxError)) {
           throw err;
         }
-        return invalidPathResult("agda_load", file);
+        return invalidPathResult("agda_load", file, Math.round(performance.now() - startMs));
       }
       if (!existsSync(requestedFilePath)) {
-        return missingFileResult("agda_load", requestedFilePath);
+        return missingFileResult("agda_load", requestedFilePath, Math.round(performance.now() - startMs));
       }
 
       try {
@@ -280,12 +292,13 @@ export function registerSessionLoadTools(
         );
       } catch (err) {
         if (err instanceof PathSandboxError) {
-          return invalidPathResult("agda_load", file);
+          return invalidPathResult("agda_load", file, Math.round(performance.now() - startMs));
         }
         return processErrorResult(
           "agda_load",
           file,
           `Agda load failed: ${err instanceof Error ? err.message : String(err)}`,
+          Math.round(performance.now() - startMs),
         );
       }
     },
@@ -310,10 +323,10 @@ export function registerSessionLoadTools(
         if (!(err instanceof PathSandboxError)) {
           throw err;
         }
-        return invalidPathResult("agda_load_no_metas", file);
+        return invalidPathResult("agda_load_no_metas", file, Math.round(performance.now() - startMs));
       }
       if (!existsSync(requestedFilePath)) {
-        return missingFileResult("agda_load_no_metas", requestedFilePath);
+        return missingFileResult("agda_load_no_metas", requestedFilePath, Math.round(performance.now() - startMs));
       }
 
       try {
@@ -367,12 +380,13 @@ export function registerSessionLoadTools(
         );
       } catch (err) {
         if (err instanceof PathSandboxError) {
-          return invalidPathResult("agda_load_no_metas", file);
+          return invalidPathResult("agda_load_no_metas", file, Math.round(performance.now() - startMs));
         }
         return processErrorResult(
           "agda_load_no_metas",
           file,
           `Agda strict load failed: ${err instanceof Error ? err.message : String(err)}`,
+          Math.round(performance.now() - startMs),
         );
       }
     },
@@ -431,10 +445,10 @@ export function registerSessionLoadTools(
         if (!(err instanceof PathSandboxError)) {
           throw err;
         }
-        return invalidPathResult("agda_typecheck", file);
+        return invalidPathResult("agda_typecheck", file, Math.round(performance.now() - startMs));
       }
       if (!existsSync(requestedFilePath)) {
-        return missingFileResult("agda_typecheck", requestedFilePath);
+        return missingFileResult("agda_typecheck", requestedFilePath, Math.round(performance.now() - startMs));
       }
 
       try {
@@ -485,12 +499,13 @@ export function registerSessionLoadTools(
         );
       } catch (err) {
         if (err instanceof PathSandboxError) {
-          return invalidPathResult("agda_typecheck", file);
+          return invalidPathResult("agda_typecheck", file, Math.round(performance.now() - startMs));
         }
         return processErrorResult(
           "agda_typecheck",
           file,
           `Agda invocation failed: ${err instanceof Error ? err.message : String(err)}`,
+          Math.round(performance.now() - startMs),
         );
       }
     },

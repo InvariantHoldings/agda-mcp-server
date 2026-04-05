@@ -71,7 +71,7 @@ test("parseLoadResponses includes profiling from RunningInfo", () => {
     { kind: "Status", checked: true },
   ];
 
-  const result = parseLoadResponses(responses);
+  const result = parseLoadResponses(responses, { profilingEnabled: true });
   expect(result.profiling).toBe("Module A: 0.3s\nModule B: 0.7s");
   expect(result.success).toBe(true);
   expect(result.goalIds).toEqual([0]);
@@ -101,7 +101,7 @@ test("parseLoadResponses combines RunningInfo and Time profiling", () => {
     { kind: "Status", checked: true },
   ];
 
-  const result = parseLoadResponses(responses);
+  const result = parseLoadResponses(responses, { profilingEnabled: true });
   expect(result.profiling).toBe("Checking module...\nTotal: 1.0s");
 });
 
@@ -119,8 +119,29 @@ test("parseLoadResponses profiling does not affect success/error classification"
     { kind: "Status", checked: false },
   ];
 
-  const result = parseLoadResponses(responses);
+  const result = parseLoadResponses(responses, { profilingEnabled: true });
   expect(result.success).toBe(false);
   expect(result.errors.length).toBeGreaterThan(0);
   expect(result.profiling).toBe("profiling data");
+});
+
+test("parseLoadResponses ignores RunningInfo when profilingEnabled is false", () => {
+  const responses: AgdaResponse[] = [
+    { kind: "RunningInfo", message: "Checking Module..." },
+    { kind: "InteractionPoints", interactionPoints: [] },
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [],
+        invisibleGoals: [],
+        errors: [],
+        warnings: [],
+      },
+    },
+    { kind: "Status", checked: true },
+  ];
+
+  const result = parseLoadResponses(responses);
+  expect(result.profiling).toBeNull();
 });

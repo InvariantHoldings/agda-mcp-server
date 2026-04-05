@@ -87,7 +87,7 @@ test("extracts profiling from RunningInfo with message", () => {
       message: "Checking module A...",
     },
   ];
-  const result = extractProfilingOutput(responses);
+  const result = extractProfilingOutput(responses, { profilingEnabled: true });
   expect(result).toBe("Checking module A...");
 });
 
@@ -98,7 +98,7 @@ test("extracts profiling from RunningInfo with text field", () => {
       text: "Module A: 0.5s",
     },
   ];
-  const result = extractProfilingOutput(responses);
+  const result = extractProfilingOutput(responses, { profilingEnabled: true });
   expect(result).toBe("Module A: 0.5s");
 });
 
@@ -110,7 +110,7 @@ test("combines multiple RunningInfo messages with newlines", () => {
     { kind: "RunningInfo", message: "Checking B..." },
     { kind: "RunningInfo", message: "Done." },
   ];
-  const result = extractProfilingOutput(responses);
+  const result = extractProfilingOutput(responses, { profilingEnabled: true });
   expect(result).toBe("Checking A...\nChecking B...\nDone.");
 });
 
@@ -127,7 +127,7 @@ test("combines RunningInfo and DisplayInfo Time responses", () => {
     },
     { kind: "Status", checked: true },
   ];
-  const result = extractProfilingOutput(responses);
+  const result = extractProfilingOutput(responses, { profilingEnabled: true });
   expect(result).toBe("Module profiling data\nTotal: 2.0s");
 });
 
@@ -138,7 +138,7 @@ test("skips RunningInfo with empty message", () => {
     { kind: "RunningInfo", message: "" },
     { kind: "RunningInfo", message: "real data" },
   ];
-  const result = extractProfilingOutput(responses);
+  const result = extractProfilingOutput(responses, { profilingEnabled: true });
   expect(result).toBe("real data");
 });
 
@@ -180,6 +180,31 @@ test("ignores non-profiling responses and extracts only profiling data", () => {
     },
     { kind: "Status", checked: true },
   ];
-  const result = extractProfilingOutput(responses);
+  const result = extractProfilingOutput(responses, { profilingEnabled: true });
   expect(result).toBe("profile data here");
+});
+
+// ── RunningInfo gating ───────────────────────────────────────────────
+
+test("ignores RunningInfo when profilingEnabled is false (default)", () => {
+  const responses: AgdaResponse[] = [
+    { kind: "RunningInfo", message: "Checking Module..." },
+  ];
+  expect(extractProfilingOutput(responses)).toBeNull();
+  expect(extractProfilingOutput(responses, { profilingEnabled: false })).toBeNull();
+});
+
+test("still extracts DisplayInfo/Time when profilingEnabled is false", () => {
+  const responses: AgdaResponse[] = [
+    { kind: "RunningInfo", message: "progress message" },
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "Time",
+        message: "Total: 1.0s",
+      },
+    },
+  ];
+  const result = extractProfilingOutput(responses, { profilingEnabled: false });
+  expect(result).toBe("Total: 1.0s");
 });

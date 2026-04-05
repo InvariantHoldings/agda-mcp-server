@@ -94,9 +94,9 @@ test("result is always null or a non-empty string", async () => {
   );
 });
 
-// ── RunningInfo messages are always included in output ────────────────
+// ── RunningInfo messages are included when profiling is enabled ───────
 
-test("non-empty RunningInfo messages always appear in profiling output", async () => {
+test("non-empty RunningInfo messages always appear in profiling output when enabled", async () => {
   await fc.assert(
     fc.property(
       fc.string({ minLength: 1 }),
@@ -104,8 +104,25 @@ test("non-empty RunningInfo messages always appear in profiling output", async (
         const responses: AgdaResponse[] = [
           { kind: "RunningInfo", message: msg },
         ];
-        const result = extractProfilingOutput(responses);
+        const result = extractProfilingOutput(responses, { profilingEnabled: true });
         expect(result).toContain(msg);
+      },
+    ),
+  );
+});
+
+// ── RunningInfo messages are ignored when profiling is disabled ──────
+
+test("RunningInfo messages are ignored when profilingEnabled is false", async () => {
+  await fc.assert(
+    fc.property(
+      fc.string({ minLength: 1 }),
+      (msg) => {
+        const responses: AgdaResponse[] = [
+          { kind: "RunningInfo", message: msg },
+        ];
+        const result = extractProfilingOutput(responses, { profilingEnabled: false });
+        expect(result).toBeNull();
       },
     ),
   );

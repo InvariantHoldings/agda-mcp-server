@@ -164,8 +164,8 @@ test("agda_typecheck rejects invalid profile options with classification invalid
 
 // ── Timing: elapsedMs is always present ──────────────────────────────
 
-for (const toolName of ["agda_load", "agda_load_no_metas"]) {
-  test(`${toolName} includes elapsedMs in data for missing file`, async () => {
+for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
+  test(`${toolName} includes profiling and elapsedMs in data for missing file`, async () => {
     clearToolManifest();
     const server = createCapturingServer();
 
@@ -179,9 +179,10 @@ for (const toolName of ["agda_load", "agda_load_no_metas"]) {
       file: "nonexistent.agda",
     });
 
-    // For missing files, elapsedMs may not be present since we don't time those paths
-    // But for valid profile option errors, it should be
     expect(result.isError).toBe(true);
+    expect(result.structuredContent.data.profiling).toBeNull();
+    expect(typeof result.structuredContent.data.elapsedMs).toBe("number");
+    expect(result.structuredContent.data.elapsedMs).toBeGreaterThanOrEqual(0);
   });
 }
 

@@ -310,7 +310,8 @@ export class AgdaSession {
     const responses = await this.sendCommand(
       this.buildIotcm(absPath, command("Cmd_load", quoted(absPath), optsList)),
     );
-    const parsed = parseLoadResponses(responses);
+    const profilingEnabled = (options?.profileOptions?.length ?? 0) > 0;
+    const parsed = parseLoadResponses(responses, { profilingEnabled });
 
     // Set session state before reconciling metas so follow-up queries can run
     this.currentFile = absPath;
@@ -380,7 +381,7 @@ export class AgdaSession {
     const responses = await this.sendCommand(
       this.buildIotcm(absPath, command("Cmd_load_no_metas", quoted(absPath))),
     );
-    const parsed = parseLoadResponses(responses);
+    const parsed = parseLoadResponses(responses, { profilingEnabled: false });
 
     // Set session state atomically AFTER command completes
     this.currentFile = absPath;
