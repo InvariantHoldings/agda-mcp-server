@@ -147,3 +147,51 @@ test("non-empty Time DisplayInfo messages always appear in profiling output", as
     ),
   );
 });
+
+// ── DisplayInfo Time is never gated by profilingEnabled ──────────────
+
+test("DisplayInfo Time is always captured regardless of profilingEnabled flag", async () => {
+  await fc.assert(
+    fc.property(
+      fc.string({ minLength: 1 }),
+      fc.boolean(),
+      (msg, profilingEnabled) => {
+        const responses: AgdaResponse[] = [
+          {
+            kind: "DisplayInfo",
+            info: { kind: "Time", message: msg },
+          },
+        ];
+        const result = extractProfilingOutput(responses, { profilingEnabled });
+        expect(result).toContain(msg);
+      },
+    ),
+  );
+});
+
+// ── profilingEnabled strictly controls RunningInfo inclusion ──────────
+
+test("profilingEnabled=true includes both RunningInfo and Time; false only Time", async () => {
+  await fc.assert(
+    fc.property(
+      fc.string({ minLength: 1 }),
+      fc.string({ minLength: 1 }),
+      (runningMsg, timeMsg) => {
+        const responses: AgdaResponse[] = [
+          { kind: "RunningInfo", message: runningMsg },
+          { kind: "DisplayInfo", info: { kind: "Time", message: timeMsg } },
+        ];
+
+        // With profiling enabled: both should appear
+        const withProfiling = extractProfilingOutput(responses, { profilingEnabled: true });
+        expect(withProfiling).toContain(runningMsg);
+        expect(withProfiling).toContain(timeMsg);
+
+        // Without profiling: only Time should appear
+        const withoutProfiling = extractProfilingOutput(responses, { profilingEnabled: false });
+        expect(withoutProfiling).not.toContain(runningMsg);
+        expect(withoutProfiling).toContain(timeMsg);
+      },
+    ),
+  );
+});

@@ -540,5 +540,52 @@
     "expectedStrictSuccess": true,
     "expectedStrictClassification": "ok-complete",
     "minAgdaVersion": "2.6.1"
+  },
+  {
+    "name": "Guardedness.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete",
+    "minAgdaVersion": "2.6.1"
+  },
+  {
+    "name": "GuardednessHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error",
+    "minAgdaVersion": "2.6.1"
+  },
+  {
+    "name": "ChainImport.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "MutualRecursion.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "MutualHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
   }
 ]
