@@ -6,7 +6,56 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
 import { registerGoalTextTool } from "./tool-helpers.js";
-import { applyProofEdit } from "../session/apply-proof-edit.js";
+import { applyProofEdit, type ProofEdit, type ApplyEditResult } from "../session/apply-proof-edit.js";
+import type { LoadResult } from "../agda/types.js";
+
+/**
+ * Apply a proof edit to the file, reload, and return output describing
+ * what happened. Handles both success and failure:
+ * - On success: writes the edit, reloads, surfaces any reload errors/warnings.
+ * - On edit failure: reloads the unchanged file to resync the Agda session
+ *   (which has already mutated its internal state).
+ */
+async function applyEditAndReload(
+  session: AgdaSession,
+  goalIdsBefore: number[],
+  edit: ProofEdit,
+): Promise<string> {
+  const filePath = session.currentFile;
+  if (!filePath) return "";
+
+  const editResult: ApplyEditResult = await applyProofEdit(filePath, goalIdsBefore, edit);
+
+  if (editResult.applied) {
+    const loadResult: LoadResult = await session.load(filePath);
+    let output = `\n${editResult.message}\n`;
+    if (loadResult.success) {
+      output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
+    } else {
+      output += `Reloaded with errors: ${loadResult.goalCount} goal(s) remaining.\n`;
+      if (loadResult.errors.length > 0) {
+        output += `**Errors:** ${loadResult.errors.join("; ")}\n`;
+      }
+    }
+    if (loadResult.warnings.length > 0) {
+      output += `**Warnings:** ${loadResult.warnings.join("; ")}\n`;
+    }
+    return output;
+  }
+
+  // Edit failed — session state is out of sync with the file on disk.
+  // Reload the unchanged file to resync.
+  let output = `\n**Warning:** ${editResult.message}\n`;
+  try {
+    const loadResult = await session.load(filePath);
+    output += `Reloaded unchanged file to resync session: ${loadResult.goalCount} goal(s).\n`;
+    output += `Apply the edit manually, then call \`agda_load\` to reload.\n`;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    output += `**Warning:** Failed to resync session after edit failure (${msg}). Run \`agda_load\` manually.\n`;
+  }
+  return output;
+}
 
 export function register(
   server: McpServer,
@@ -85,19 +134,9 @@ export function register(
         output += `### New clauses\n\`\`\`agda\n${result.clauses.join("\n")}\n\`\`\`\n`;
 
         if (shouldWrite && session.currentFile) {
-          const editResult = await applyProofEdit(
-            session.currentFile,
-            goalIdsBefore,
-            { kind: "replace-line", goalId, clauses: result.clauses },
-          );
-          if (editResult.applied) {
-            output += `\n${editResult.message}\n`;
-            const loadResult = await session.load(session.currentFile);
-            output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
-          } else {
-            output += `\n**Warning:** ${editResult.message}\n`;
-            output += `Replace the original clause manually, then call \`agda_load\` to reload.\n`;
-          }
+          output += await applyEditAndReload(session, goalIdsBefore, {
+            kind: "replace-line", goalId, clauses: result.clauses,
+          });
         } else {
           output += `\nReplace the original clause with these, then call \`agda_load\` to reload.\n`;
         }
@@ -128,18 +167,9 @@ export function register(
       output += result.result ? `**Result:** \`${result.result}\`\n` : `Expression accepted.\n`;
 
       if (shouldWrite && session.currentFile && result.replacementText) {
-        const editResult = await applyProofEdit(
-          session.currentFile,
-          goalIdsBefore,
-          { kind: "replace-hole", goalId, expr: result.replacementText },
-        );
-        if (editResult.applied) {
-          output += `\n${editResult.message}\n`;
-          const loadResult = await session.load(session.currentFile);
-          output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
-        } else {
-          output += `\n**Warning:** ${editResult.message}\n`;
-        }
+        output += await applyEditAndReload(session, goalIdsBefore, {
+          kind: "replace-hole", goalId, expr: result.replacementText,
+        });
       }
       return output;
     },
@@ -167,18 +197,9 @@ export function register(
         : `Refinement applied. Call \`agda_metas\` to see new goals.\n`;
 
       if (shouldWrite && session.currentFile && result.replacementText) {
-        const editResult = await applyProofEdit(
-          session.currentFile,
-          goalIdsBefore,
-          { kind: "replace-hole", goalId, expr: result.replacementText },
-        );
-        if (editResult.applied) {
-          output += `\n${editResult.message}\n`;
-          const loadResult = await session.load(session.currentFile);
-          output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
-        } else {
-          output += `\n**Warning:** ${editResult.message}\n`;
-        }
+        output += await applyEditAndReload(session, goalIdsBefore, {
+          kind: "replace-hole", goalId, expr: result.replacementText,
+        });
       }
       return output;
     },
@@ -206,18 +227,9 @@ export function register(
         : "Refinement applied. Call `agda_metas` to inspect resulting goals.\n";
 
       if (shouldWrite && session.currentFile && result.replacementText) {
-        const editResult = await applyProofEdit(
-          session.currentFile,
-          goalIdsBefore,
-          { kind: "replace-hole", goalId, expr: result.replacementText },
-        );
-        if (editResult.applied) {
-          output += `\n${editResult.message}\n`;
-          const loadResult = await session.load(session.currentFile);
-          output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
-        } else {
-          output += `\n**Warning:** ${editResult.message}\n`;
-        }
+        output += await applyEditAndReload(session, goalIdsBefore, {
+          kind: "replace-hole", goalId, expr: result.replacementText,
+        });
       }
       return output;
     },
@@ -245,18 +257,9 @@ export function register(
         : "Introduction applied. Call `agda_metas` to inspect resulting goals.\n";
 
       if (shouldWrite && session.currentFile && result.replacementText) {
-        const editResult = await applyProofEdit(
-          session.currentFile,
-          goalIdsBefore,
-          { kind: "replace-hole", goalId, expr: result.replacementText },
-        );
-        if (editResult.applied) {
-          output += `\n${editResult.message}\n`;
-          const loadResult = await session.load(session.currentFile);
-          output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
-        } else {
-          output += `\n**Warning:** ${editResult.message}\n`;
-        }
+        output += await applyEditAndReload(session, goalIdsBefore, {
+          kind: "replace-hole", goalId, expr: result.replacementText,
+        });
       }
       return output;
     },
@@ -281,18 +284,9 @@ export function register(
       output += result.solution ? `**Solution:** \`${result.solution}\`\n` : `No automatic solution found.\n`;
 
       if (shouldWrite && session.currentFile && result.solution) {
-        const editResult = await applyProofEdit(
-          session.currentFile,
-          goalIdsBefore,
-          { kind: "replace-hole", goalId, expr: result.solution },
-        );
-        if (editResult.applied) {
-          output += `\n${editResult.message}\n`;
-          const loadResult = await session.load(session.currentFile);
-          output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
-        } else {
-          output += `\n**Warning:** ${editResult.message}\n`;
-        }
+        output += await applyEditAndReload(session, goalIdsBefore, {
+          kind: "replace-hole", goalId, expr: result.solution,
+        });
       }
       return output;
     },

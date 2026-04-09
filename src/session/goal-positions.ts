@@ -87,7 +87,7 @@ export function findGoalPositions(source: string): GoalPosition[] {
       const startLine = line;
       i += 2; // skip {!
 
-      // Find matching !}
+      // Find matching !}, skipping strings and comments inside hole contents
       let depth = 1;
       while (i < source.length && depth > 0) {
         if (source[i] === "{" && source[i + 1] === "!") {
@@ -95,11 +95,35 @@ export function findGoalPositions(source: string): GoalPosition[] {
           i += 2;
         } else if (source[i] === "!" && source[i + 1] === "}") {
           depth--;
-          if (depth === 0) {
-            i += 2; // skip !}
-          } else {
-            i += 2;
+          i += 2;
+        } else if (source[i] === "-" && source[i + 1] === "-") {
+          // Skip line comments inside hole contents
+          while (i < source.length && source[i] !== "\n") i++;
+        } else if (source[i] === "{" && source[i + 1] === "-") {
+          // Skip block comments inside hole contents
+          let commentDepth = 1;
+          i += 2;
+          while (i < source.length && commentDepth > 0) {
+            if (source[i] === "{" && source[i + 1] === "-") {
+              commentDepth++;
+              i += 2;
+            } else if (source[i] === "-" && source[i + 1] === "}") {
+              commentDepth--;
+              i += 2;
+            } else {
+              if (source[i] === "\n") { line++; lineStart = i + 1; }
+              i++;
+            }
           }
+        } else if (source[i] === '"') {
+          // Skip string literals inside hole contents
+          i++;
+          while (i < source.length && source[i] !== '"') {
+            if (source[i] === "\\") i++;
+            if (source[i] === "\n") { line++; lineStart = i + 1; }
+            i++;
+          }
+          if (i < source.length) i++;
         } else {
           if (source[i] === "\n") {
             line++;

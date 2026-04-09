@@ -113,6 +113,27 @@ describe("findGoalPositions", () => {
     expect(positions).toHaveLength(0);
   });
 
+  test("handles !} inside string literal within hole", () => {
+    const source = 'test = {! "!}" !}';
+    const positions = findGoalPositions(source);
+    expect(positions).toHaveLength(1);
+    expect(positions[0].markerText).toBe('{! "!}" !}');
+  });
+
+  test("handles !} inside line comment within hole", () => {
+    const source = "test = {! -- !}\nreal !}";
+    const positions = findGoalPositions(source);
+    expect(positions).toHaveLength(1);
+    expect(positions[0].markerText).toBe("{! -- !}\nreal !}");
+  });
+
+  test("handles !} inside block comment within hole", () => {
+    const source = "test = {! {- !} -} real !}";
+    const positions = findGoalPositions(source);
+    expect(positions).toHaveLength(1);
+    expect(positions[0].markerText).toBe("{! {- !} -} real !}");
+  });
+
   test("handles nested {! {! !} !} holes", () => {
     const source = "test = {! {! inner !} !}";
     const positions = findGoalPositions(source);
