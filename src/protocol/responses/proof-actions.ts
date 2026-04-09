@@ -27,6 +27,41 @@ function renderGiveResult(val: string): string {
   return val;
 }
 
+/**
+ * Determine the replacement text for a give-like action.
+ *
+ * Agda's GiveResult tells us:
+ * - Give_String s  → replace the hole with string `s`
+ * - Give_Paren     → keep the input expression, parenthesized
+ * - Give_NoParen   → keep the input expression as-is
+ *
+ * Returns the text that should replace the hole in the source file,
+ * or null if no GiveAction was found in the responses.
+ */
+export function resolveGiveReplacementText(
+  responses: AgdaResponse[],
+  inputExpr: string,
+): string | null {
+  for (const resp of responses) {
+    const give = parseResponseWithSchema(giveActionResponseSchema, resp);
+    if (!give) continue;
+    const val = give.giveResult ?? give.result ?? "";
+    if (!val) return inputExpr;
+
+    try {
+      const parsed = JSON.parse(val);
+      if (parsed && typeof parsed === "object" && "paren" in parsed) {
+        return parsed.paren ? `(${inputExpr})` : inputExpr;
+      }
+    } catch {
+      // Not JSON — treat as Give_String
+    }
+    // Give_String: Agda returned the actual replacement text
+    return val;
+  }
+  return null;
+}
+
 export function decodeGiveLikeResponse(responses: AgdaResponse[]): string {
   let result = "";
   const displayMessages = decodeDisplayInfoEvents(responses)

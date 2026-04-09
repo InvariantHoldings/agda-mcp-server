@@ -84,6 +84,8 @@ export interface CaseSplitResult {
 
 export interface GiveResult {
   result: string;
+  /** The text that should replace the hole in the source file, if available. */
+  replacementText?: string | null;
 }
 
 export interface ComputeResult {

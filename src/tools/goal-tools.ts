@@ -6,6 +6,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
 import { registerGoalTextTool } from "./tool-helpers.js";
+import { applyProofEdit } from "../session/apply-proof-edit.js";
+import { resolveGiveReplacementText } from "../protocol/responses/proof-actions.js";
 
 export function register(
   server: McpServer,
@@ -67,19 +69,38 @@ export function register(
     server,
     session,
     name: "agda_case_split",
-    description: "Case-split on a variable in a goal. Returns the new function clauses that replace the current clause. The file must be reloaded after applying the split.",
+    description: "Case-split on a variable in a goal. Returns the new function clauses that replace the current clause. By default, writes changes to the file and reloads.",
     category: "proof",
     protocolCommands: ["Cmd_make_case"],
     inputSchema: {
       goalId: z.number().describe("The goal ID to case-split in"),
       variable: z.string().describe("The variable name to case-split on"),
+      writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
-    callback: async ({ goalId, variable }) => {
+    callback: async ({ goalId, variable, writeToFile }) => {
+      const shouldWrite = writeToFile !== false;
       const result = await session.goal.caseSplit(goalId, variable as string);
       let output = `## Case split on \`${variable}\` in ?${goalId}\n\n`;
       if (result.clauses.length > 0) {
         output += `### New clauses\n\`\`\`agda\n${result.clauses.join("\n")}\n\`\`\`\n`;
-        output += `\nReplace the original clause with these, then call \`agda_load\` to reload.\n`;
+
+        if (shouldWrite && session.currentFile) {
+          const editResult = await applyProofEdit(
+            session.currentFile,
+            session.getGoalIds(),
+            { kind: "replace-line", goalId, clauses: result.clauses },
+          );
+          if (editResult.applied) {
+            output += `\n${editResult.message}\n`;
+            const loadResult = await session.load(session.currentFile);
+            output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
+          } else {
+            output += `\n**Warning:** ${editResult.message}\n`;
+            output += `Replace the original clause manually, then call \`agda_load\` to reload.\n`;
+          }
+        } else {
+          output += `\nReplace the original clause with these, then call \`agda_load\` to reload.\n`;
+        }
       } else {
         output += `No clauses generated. The variable may not be splittable.\n`;
       }
@@ -91,17 +112,34 @@ export function register(
     server,
     session,
     name: "agda_give",
-    description: "Fill a goal with an expression. If the expression type-checks against the goal type, the goal is solved.",
+    description: "Fill a goal with an expression. If the expression type-checks against the goal type, the goal is solved. By default, writes the change to the file and reloads.",
     category: "proof",
     protocolCommands: ["Cmd_give"],
     inputSchema: {
       goalId: z.number().describe("The goal ID to fill"),
       expr: z.string().describe("The Agda expression to give"),
+      writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
-    callback: async ({ goalId, expr }) => {
+    callback: async ({ goalId, expr, writeToFile }) => {
+      const shouldWrite = writeToFile !== false;
       const result = await session.goal.give(goalId, expr as string);
       let output = `## Give \`${expr}\` to ?${goalId}\n\n`;
       output += result.result ? `**Result:** \`${result.result}\`\n` : `Expression accepted.\n`;
+
+      if (shouldWrite && session.currentFile && result.replacementText) {
+        const editResult = await applyProofEdit(
+          session.currentFile,
+          session.getGoalIds(),
+          { kind: "replace-hole", goalId, expr: result.replacementText },
+        );
+        if (editResult.applied) {
+          output += `\n${editResult.message}\n`;
+          const loadResult = await session.load(session.currentFile);
+          output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
+        } else {
+          output += `\n**Warning:** ${editResult.message}\n`;
+        }
+      }
       return output;
     },
   });
@@ -110,19 +148,36 @@ export function register(
     server,
     session,
     name: "agda_refine",
-    description: "Refine a goal by applying a function. Creates new subgoals for the function's arguments.",
+    description: "Refine a goal by applying a function. Creates new subgoals for the function's arguments. By default, writes changes to the file and reloads.",
     category: "proof",
     protocolCommands: ["Cmd_refine_or_intro"],
     inputSchema: {
       goalId: z.number().describe("The goal ID to refine"),
       expr: z.string().describe("The expression to refine with (can be empty to let Agda choose)"),
+      writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
-    callback: async ({ goalId, expr }) => {
+    callback: async ({ goalId, expr, writeToFile }) => {
+      const shouldWrite = writeToFile !== false;
       const result = await session.goal.refine(goalId, expr as string);
       let output = `## Refine ?${goalId} with \`${expr || "(auto)"}\`\n\n`;
       output += result.result
         ? `**Result:** \`${result.result}\`\n`
         : `Refinement applied. Call \`agda_metas\` to see new goals.\n`;
+
+      if (shouldWrite && session.currentFile && result.replacementText) {
+        const editResult = await applyProofEdit(
+          session.currentFile,
+          session.getGoalIds(),
+          { kind: "replace-hole", goalId, expr: result.replacementText },
+        );
+        if (editResult.applied) {
+          output += `\n${editResult.message}\n`;
+          const loadResult = await session.load(session.currentFile);
+          output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
+        } else {
+          output += `\n**Warning:** ${editResult.message}\n`;
+        }
+      }
       return output;
     },
   });
@@ -131,19 +186,36 @@ export function register(
     server,
     session,
     name: "agda_refine_exact",
-    description: "Refine a goal using Agda's exact Cmd_refine command.",
+    description: "Refine a goal using Agda's exact Cmd_refine command. By default, writes changes to the file and reloads.",
     category: "proof",
     protocolCommands: ["Cmd_refine"],
     inputSchema: {
       goalId: z.number().describe("The goal ID to refine"),
       expr: z.string().describe("The expression to refine with"),
+      writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
-    callback: async ({ goalId, expr }) => {
+    callback: async ({ goalId, expr, writeToFile }) => {
+      const shouldWrite = writeToFile !== false;
       const result = await session.goal.refineExact(goalId, expr as string);
       let output = `## Exact refine ?${goalId} with \`${expr}\`\n\n`;
       output += result.result
         ? `**Result:** \`${result.result}\`\n`
         : "Refinement applied. Call `agda_metas` to inspect resulting goals.\n";
+
+      if (shouldWrite && session.currentFile && result.replacementText) {
+        const editResult = await applyProofEdit(
+          session.currentFile,
+          session.getGoalIds(),
+          { kind: "replace-hole", goalId, expr: result.replacementText },
+        );
+        if (editResult.applied) {
+          output += `\n${editResult.message}\n`;
+          const loadResult = await session.load(session.currentFile);
+          output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
+        } else {
+          output += `\n**Warning:** ${editResult.message}\n`;
+        }
+      }
       return output;
     },
   });
@@ -152,19 +224,36 @@ export function register(
     server,
     session,
     name: "agda_intro",
-    description: "Introduce a lambda or constructor using Agda's exact Cmd_intro command.",
+    description: "Introduce a lambda or constructor using Agda's exact Cmd_intro command. By default, writes changes to the file and reloads.",
     category: "proof",
     protocolCommands: ["Cmd_intro"],
     inputSchema: {
       goalId: z.number().describe("The goal ID to introduce into"),
       expr: z.string().optional().describe("Optional existing goal contents to use as input"),
+      writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
-    callback: async ({ goalId, expr }) => {
+    callback: async ({ goalId, expr, writeToFile }) => {
+      const shouldWrite = writeToFile !== false;
       const result = await session.goal.intro(goalId, (expr as string) ?? "");
       let output = `## Intro ?${goalId}\n\n`;
       output += result.result
         ? `**Result:** \`${result.result}\`\n`
         : "Introduction applied. Call `agda_metas` to inspect resulting goals.\n";
+
+      if (shouldWrite && session.currentFile && result.replacementText) {
+        const editResult = await applyProofEdit(
+          session.currentFile,
+          session.getGoalIds(),
+          { kind: "replace-hole", goalId, expr: result.replacementText },
+        );
+        if (editResult.applied) {
+          output += `\n${editResult.message}\n`;
+          const loadResult = await session.load(session.currentFile);
+          output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
+        } else {
+          output += `\n**Warning:** ${editResult.message}\n`;
+        }
+      }
       return output;
     },
   });
@@ -173,14 +262,33 @@ export function register(
     server,
     session,
     name: "agda_auto",
-    description: "Attempt to automatically solve a goal using Agda's proof search.",
+    description: "Attempt to automatically solve a goal using Agda's proof search. By default, writes the solution to the file and reloads.",
     category: "proof",
     protocolCommands: ["Cmd_autoOne"],
-    inputSchema: { goalId: z.number().describe("The goal ID to auto-solve") },
-    callback: async ({ goalId }) => {
+    inputSchema: {
+      goalId: z.number().describe("The goal ID to auto-solve"),
+      writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
+    },
+    callback: async ({ goalId, writeToFile }) => {
+      const shouldWrite = writeToFile !== false;
       const result = await session.goal.autoOne(goalId);
       let output = `## Auto-solve ?${goalId}\n\n`;
       output += result.solution ? `**Solution:** \`${result.solution}\`\n` : `No automatic solution found.\n`;
+
+      if (shouldWrite && session.currentFile && result.solution) {
+        const editResult = await applyProofEdit(
+          session.currentFile,
+          session.getGoalIds(),
+          { kind: "replace-hole", goalId, expr: result.solution },
+        );
+        if (editResult.applied) {
+          output += `\n${editResult.message}\n`;
+          const loadResult = await session.load(session.currentFile);
+          output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
+        } else {
+          output += `\n**Warning:** ${editResult.message}\n`;
+        }
+      }
       return output;
     },
   });
