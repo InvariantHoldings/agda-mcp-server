@@ -78,6 +78,36 @@ test("prefers message over cpuTime in Time DisplayInfo", () => {
   expect(result).toBe("detailed timing info");
 });
 
+test("falls back to cpuTime when message is empty string", () => {
+  const responses: AgdaResponse[] = [
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "Time",
+        message: "",
+        cpuTime: 3.14,
+      },
+    },
+  ];
+  const result = extractProfilingOutput(responses);
+  expect(result).toBe("3.14");
+});
+
+test("falls back to cpuTime when message is whitespace-only", () => {
+  const responses: AgdaResponse[] = [
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "Time",
+        message: "   ",
+        cpuTime: 2.0,
+      },
+    },
+  ];
+  const result = extractProfilingOutput(responses);
+  expect(result).toBe("2");
+});
+
 // ── RunningInfo responses ────────────────────────────────────────────
 
 test("extracts profiling from RunningInfo with message", () => {
@@ -100,6 +130,30 @@ test("extracts profiling from RunningInfo with text field", () => {
   ];
   const result = extractProfilingOutput(responses, { profilingEnabled: true });
   expect(result).toBe("Module A: 0.5s");
+});
+
+test("falls back to text when RunningInfo message is empty string", () => {
+  const responses: AgdaResponse[] = [
+    {
+      kind: "RunningInfo",
+      message: "",
+      text: "Module B: 1.0s",
+    },
+  ];
+  const result = extractProfilingOutput(responses, { profilingEnabled: true });
+  expect(result).toBe("Module B: 1.0s");
+});
+
+test("falls back to text when RunningInfo message is whitespace-only", () => {
+  const responses: AgdaResponse[] = [
+    {
+      kind: "RunningInfo",
+      message: "  ",
+      text: "actual profiling data",
+    },
+  ];
+  const result = extractProfilingOutput(responses, { profilingEnabled: true });
+  expect(result).toBe("actual profiling data");
 });
 
 // ── Multiple profiling responses combine ─────────────────────────────

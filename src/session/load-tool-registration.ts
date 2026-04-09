@@ -213,7 +213,6 @@ export function registerSessionLoadTools(
         const isReload = previousFile === filePath;
         const wasStale = isReload && session.isFileStale();
         const result = await session.load(filePath, { profileOptions });
-        const elapsedMs = Math.round(performance.now() - startMs);
         const relPath = relative(repoRoot, requestedFilePath);
         const diagnostics = [
           ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),
@@ -235,6 +234,7 @@ export function registerSessionLoadTools(
             : "**Re-type-checking file.**"
           : undefined;
 
+        const elapsedMs = Math.round(performance.now() - startMs);
         const text = renderLoadLikeText({
           heading: "Loaded",
           file: relPath,
@@ -279,7 +279,6 @@ export function registerSessionLoadTools(
             diagnostics,
             stale: session.isFileStale() || undefined,
             provenance: { file: filePath, protocolCommands: ["Cmd_load", "Cmd_metas"] },
-            elapsedMs,
           }),
           renderedText,
         );
@@ -324,8 +323,8 @@ export function registerSessionLoadTools(
       try {
         const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
         const result = await session.loadNoMetas(filePath);
-        const elapsedMs = Math.round(performance.now() - startMs);
         const relPath = relative(repoRoot, requestedFilePath);
+        const elapsedMs = Math.round(performance.now() - startMs);
         const text = renderLoadLikeText({
           heading: "Loaded without metas",
           file: relPath,
@@ -366,7 +365,6 @@ export function registerSessionLoadTools(
             ],
             stale: session.isFileStale() || undefined,
             provenance: { file: filePath, protocolCommands: ["Cmd_load_no_metas"] },
-            elapsedMs,
           }),
           text,
         );
@@ -444,8 +442,8 @@ export function registerSessionLoadTools(
       try {
         const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
         const result = await typeCheckBatch(filePath, repoRoot, { profileOptions });
-        const elapsedMs = Math.round(performance.now() - startMs);
         const relPath = relative(repoRoot, requestedFilePath);
+        const elapsedMs = Math.round(performance.now() - startMs);
         const text = renderLoadLikeText({
           heading: "Type-check",
           file: relPath,
@@ -483,7 +481,6 @@ export function registerSessionLoadTools(
               ...result.warnings.map((message) => warningDiagnostic(message, "agda-warning")),
             ],
             provenance: { file: filePath, protocolCommands: ["Cmd_load", "Cmd_metas"] },
-            elapsedMs,
           }),
           text,
         );

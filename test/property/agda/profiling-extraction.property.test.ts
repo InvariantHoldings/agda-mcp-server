@@ -94,12 +94,16 @@ test("result is always null or a non-empty string", async () => {
   );
 });
 
+// Arbitrary that generates non-whitespace-only strings (whitespace-only
+// strings are correctly treated as empty by the trim-based fallback logic).
+const nonBlankString = fc.string({ minLength: 1 }).filter((s) => s.trim().length > 0);
+
 // ── RunningInfo messages are included when profiling is enabled ───────
 
 test("non-empty RunningInfo messages always appear in profiling output when enabled", async () => {
   await fc.assert(
     fc.property(
-      fc.string({ minLength: 1 }),
+      nonBlankString,
       (msg) => {
         const responses: AgdaResponse[] = [
           { kind: "RunningInfo", message: msg },
@@ -133,7 +137,7 @@ test("RunningInfo messages are ignored when profilingEnabled is false", async ()
 test("non-empty Time DisplayInfo messages always appear in profiling output", async () => {
   await fc.assert(
     fc.property(
-      fc.string({ minLength: 1 }),
+      nonBlankString,
       (msg) => {
         const responses: AgdaResponse[] = [
           {
@@ -153,7 +157,7 @@ test("non-empty Time DisplayInfo messages always appear in profiling output", as
 test("DisplayInfo Time is always captured regardless of profilingEnabled flag", async () => {
   await fc.assert(
     fc.property(
-      fc.string({ minLength: 1 }),
+      nonBlankString,
       fc.boolean(),
       (msg, profilingEnabled) => {
         const responses: AgdaResponse[] = [
@@ -174,8 +178,8 @@ test("DisplayInfo Time is always captured regardless of profilingEnabled flag", 
 test("profilingEnabled=true includes both RunningInfo and Time; false only Time", async () => {
   await fc.assert(
     fc.property(
-      fc.string({ minLength: 1 }),
-      fc.string({ minLength: 1 }),
+      nonBlankString,
+      nonBlankString,
       (runningMsg, timeMsg) => {
         const responses: AgdaResponse[] = [
           { kind: "RunningInfo", message: runningMsg },

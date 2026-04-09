@@ -159,7 +159,11 @@ export function extractProfilingOutput(
       if (info.kind === "Time") {
         const time = timeInfoSchema.safeParse(info);
         if (time.success) {
-          const text = time.data.message ?? time.data.cpuTime?.toString() ?? "";
+          const message = time.data.message;
+          const text =
+            typeof message === "string" && message.trim().length > 0
+              ? message
+              : time.data.cpuTime?.toString() ?? "";
           if (text) parts.push(text);
         }
       }
@@ -168,7 +172,12 @@ export function extractProfilingOutput(
     if (includeRunningInfo && resp.kind === "RunningInfo") {
       const running = parseResponseWithSchema(runningInfoResponseSchema, resp);
       if (running) {
-        const text = running.message ?? running.text ?? "";
+        const text =
+          running.message?.trim()
+            ? running.message
+            : running.text?.trim()
+              ? running.text
+              : "";
         if (text) parts.push(text);
       }
     }
