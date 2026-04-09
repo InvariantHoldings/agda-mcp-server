@@ -7,7 +7,6 @@ import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
 import { registerGoalTextTool } from "./tool-helpers.js";
 import { applyProofEdit } from "../session/apply-proof-edit.js";
-import { resolveGiveReplacementText } from "../protocol/responses/proof-actions.js";
 
 export function register(
   server: McpServer,
@@ -79,6 +78,7 @@ export function register(
     },
     callback: async ({ goalId, variable, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
+      const goalIdsBefore = session.getGoalIds();
       const result = await session.goal.caseSplit(goalId, variable as string);
       let output = `## Case split on \`${variable}\` in ?${goalId}\n\n`;
       if (result.clauses.length > 0) {
@@ -87,7 +87,7 @@ export function register(
         if (shouldWrite && session.currentFile) {
           const editResult = await applyProofEdit(
             session.currentFile,
-            session.getGoalIds(),
+            goalIdsBefore,
             { kind: "replace-line", goalId, clauses: result.clauses },
           );
           if (editResult.applied) {
@@ -122,6 +122,7 @@ export function register(
     },
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
+      const goalIdsBefore = session.getGoalIds();
       const result = await session.goal.give(goalId, expr as string);
       let output = `## Give \`${expr}\` to ?${goalId}\n\n`;
       output += result.result ? `**Result:** \`${result.result}\`\n` : `Expression accepted.\n`;
@@ -129,7 +130,7 @@ export function register(
       if (shouldWrite && session.currentFile && result.replacementText) {
         const editResult = await applyProofEdit(
           session.currentFile,
-          session.getGoalIds(),
+          goalIdsBefore,
           { kind: "replace-hole", goalId, expr: result.replacementText },
         );
         if (editResult.applied) {
@@ -158,6 +159,7 @@ export function register(
     },
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
+      const goalIdsBefore = session.getGoalIds();
       const result = await session.goal.refine(goalId, expr as string);
       let output = `## Refine ?${goalId} with \`${expr || "(auto)"}\`\n\n`;
       output += result.result
@@ -167,7 +169,7 @@ export function register(
       if (shouldWrite && session.currentFile && result.replacementText) {
         const editResult = await applyProofEdit(
           session.currentFile,
-          session.getGoalIds(),
+          goalIdsBefore,
           { kind: "replace-hole", goalId, expr: result.replacementText },
         );
         if (editResult.applied) {
@@ -196,6 +198,7 @@ export function register(
     },
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
+      const goalIdsBefore = session.getGoalIds();
       const result = await session.goal.refineExact(goalId, expr as string);
       let output = `## Exact refine ?${goalId} with \`${expr}\`\n\n`;
       output += result.result
@@ -205,7 +208,7 @@ export function register(
       if (shouldWrite && session.currentFile && result.replacementText) {
         const editResult = await applyProofEdit(
           session.currentFile,
-          session.getGoalIds(),
+          goalIdsBefore,
           { kind: "replace-hole", goalId, expr: result.replacementText },
         );
         if (editResult.applied) {
@@ -234,6 +237,7 @@ export function register(
     },
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
+      const goalIdsBefore = session.getGoalIds();
       const result = await session.goal.intro(goalId, (expr as string) ?? "");
       let output = `## Intro ?${goalId}\n\n`;
       output += result.result
@@ -243,7 +247,7 @@ export function register(
       if (shouldWrite && session.currentFile && result.replacementText) {
         const editResult = await applyProofEdit(
           session.currentFile,
-          session.getGoalIds(),
+          goalIdsBefore,
           { kind: "replace-hole", goalId, expr: result.replacementText },
         );
         if (editResult.applied) {
@@ -271,6 +275,7 @@ export function register(
     },
     callback: async ({ goalId, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
+      const goalIdsBefore = session.getGoalIds();
       const result = await session.goal.autoOne(goalId);
       let output = `## Auto-solve ?${goalId}\n\n`;
       output += result.solution ? `**Solution:** \`${result.solution}\`\n` : `No automatic solution found.\n`;
@@ -278,7 +283,7 @@ export function register(
       if (shouldWrite && session.currentFile && result.solution) {
         const editResult = await applyProofEdit(
           session.currentFile,
-          session.getGoalIds(),
+          goalIdsBefore,
           { kind: "replace-hole", goalId, expr: result.solution },
         );
         if (editResult.applied) {

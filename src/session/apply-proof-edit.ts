@@ -81,11 +81,16 @@ export async function applyProofEdit(
     }
 
     case "replace-line": {
+      // Detect the file's newline style for consistent line endings
+      const eol = source.includes("\r\n") ? "\r\n" : "\n";
+
       // Find the full line(s) containing the goal marker.
       // For case split, we replace the entire clause line.
       const lineStart = source.lastIndexOf("\n", pos.startOffset) + 1;
       let lineEnd = source.indexOf("\n", pos.endOffset);
       if (lineEnd === -1) lineEnd = source.length;
+      // Include the \r before \n if present (CRLF)
+      if (lineEnd > 0 && source[lineEnd - 1] === "\r") lineEnd--;
 
       // Detect indentation of the original line
       const originalLine = source.slice(lineStart, lineEnd);
@@ -104,7 +109,7 @@ export async function applyProofEdit(
 
       newSource =
         source.slice(0, lineStart) +
-        indentedClauses.join("\n") +
+        indentedClauses.join(eol) +
         source.slice(lineEnd);
       break;
     }

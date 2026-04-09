@@ -86,6 +86,13 @@ describe("findGoalPositions", () => {
     expect(positions[0].line).toBe(1);
   });
 
+  test("skips holes inside --- triple-dash line comments", () => {
+    const source = "--- {!!}\nreal = {!!}";
+    const positions = findGoalPositions(source);
+    expect(positions).toHaveLength(1);
+    expect(positions[0].line).toBe(1);
+  });
+
   test("skips holes inside block comments", () => {
     const source = "{- {!!} -}\nreal = {!!}";
     const positions = findGoalPositions(source);

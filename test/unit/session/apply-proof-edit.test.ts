@@ -189,5 +189,21 @@ describe("applyProofEdit", () => {
       expect(result.applied).toBe(false);
       expect(await readFile(tempFile, "utf-8")).toBe("f n = {!!}");
     });
+
+    test("preserves CRLF line endings", async () => {
+      const source = "module Test where\r\nf n = {!!}\r\n-- end";
+      await writeFile(tempFile, source);
+
+      const result = await applyProofEdit(tempFile, [0], {
+        kind: "replace-line",
+        goalId: 0,
+        clauses: ["f zero = {!!}", "f (suc n) = {!!}"],
+      });
+
+      expect(result.applied).toBe(true);
+      const updated = await readFile(tempFile, "utf-8");
+      expect(updated).toContain("f zero = {!!}\r\nf (suc n) = {!!}");
+      expect(updated).toContain("module Test where\r\n");
+    });
   });
 });

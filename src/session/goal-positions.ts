@@ -6,9 +6,9 @@
 // the InteractionPoints response.
 
 export interface GoalPosition {
-  /** 0-based byte offset of the start of the hole marker. */
+  /** 0-based UTF-16 code-unit offset of the start of the hole marker in `source`. */
   startOffset: number;
-  /** 0-based byte offset past the end of the hole marker. */
+  /** 0-based UTF-16 code-unit offset past the end of the hole marker in `source`. */
   endOffset: number;
   /** 0-based line number. */
   line: number;
@@ -37,19 +37,14 @@ export function findGoalPositions(source: string): GoalPosition[] {
   let lineStart = 0;
 
   while (i < source.length) {
-    // Skip line comments: -- to end of line
-    if (source[i] === "-" && source[i + 1] === "-" && (i + 2 >= source.length || source[i + 2] !== "-")) {
-      // Check it's a proper line comment (-- not followed by operator chars
-      // that would make it part of a longer operator)
-      const afterDash = source[i + 2];
-      if (afterDash === undefined || afterDash === " " || afterDash === "\t" || afterDash === "\n" || afterDash === "\r") {
-        while (i < source.length && source[i] !== "\n") i++;
-        continue;
-      }
+    // Skip line comments: any -- starts a comment to end of line
+    if (source[i] === "-" && source[i + 1] === "-") {
+      while (i < source.length && source[i] !== "\n") i++;
+      continue;
     }
 
     // Skip block comments: {- ... -} (nested)
-    if (source[i] === "{" && source[i + 1] === "-" && source[i + 2] !== "!") {
+    if (source[i] === "{" && source[i + 1] === "-") {
       let depth = 1;
       i += 2;
       while (i < source.length && depth > 0) {
