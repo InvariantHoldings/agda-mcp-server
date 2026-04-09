@@ -39,3 +39,7 @@ Thumbs.db
 *.sw[op]
 *~
 .eslintcache
+
+# AI assistants
+.claude/
+.codex/
