@@ -60,6 +60,8 @@ export interface LoadResult {
   hasHoles: boolean;
   isComplete: boolean;
   classification: string;
+  /** Profiling output from Agda when --profile options are active. */
+  profiling: string | null;
 }
 
 export interface GoalInfo {
@@ -165,4 +167,6 @@ export interface TypeCheckResult {
   hasHoles: boolean;
   isComplete: boolean;
   classification: string;
+  /** Profiling output from Agda when --profile options are active. */
+  profiling: string | null;
 }
