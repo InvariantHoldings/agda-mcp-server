@@ -187,12 +187,16 @@ test("envelopeBaseSchema rejects non-integer elapsedMs", async () => {
   const { z } = await import("zod");
   const schema = toolEnvelopeSchema(z.object({ text: z.string() }));
 
+  // Test with very small non-integers and larger floats
+  const nonIntArb = fc.oneof(
+    fc.double({ min: 0.0001, max: 0.999, noNaN: true }),
+    fc.double({ min: 1.001, max: 1_000_000, noNaN: true }),
+  ).filter((n) => !Number.isInteger(n));
+
   await fc.assert(
     fc.property(
-      fc.double({ min: 0.001, max: 1_000_000, noNaN: true }),
+      nonIntArb,
       (floatMs) => {
-        // Only test non-integers
-        if (Number.isInteger(floatMs)) return;
         const result = schema.safeParse({
           tool: "test",
           ok: true,
