@@ -354,6 +354,91 @@ test("sessionErrorStateGate tolerates sessions that lack the getLastClassificati
   expect(result).toBeNull();
 });
 
+// §1.3 wrapper coverage: registerTextTool auto-gates when given a
+// session whose last classification is type-error. Callback must not
+// run. Regression guard against a future refactor that drops the
+// auto-gate from the wrapper.
+test("registerTextTool auto-gates when session.getLastClassification() === 'type-error'", async () => {
+  clearToolManifest();
+  const server = createCapturingServer();
+  let callbackRan = false;
+  const session = {
+    getLastClassification: () => "type-error",
+    getLoadedFile: () => "/repo/File.agda",
+  } as unknown as AgdaSession;
+
+  registerTextTool({
+    server: server as unknown as McpServer,
+    session,
+    name: "agda_test_autogate_text",
+    description: "test",
+    category: "proof",
+    inputSchema: {},
+    callback: async () => {
+      callbackRan = true;
+      return "should not be reached";
+    },
+  });
+
+  const result = await server.getRegistered()!.callback({});
+  expect(callbackRan).toBe(false);
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent.classification).toBe("unavailable");
+});
+
+test("registerTextTool auto-gate is skipped when no session is passed", async () => {
+  clearToolManifest();
+  const server = createCapturingServer();
+  let callbackRan = false;
+
+  registerTextTool({
+    server: server as unknown as McpServer,
+    // no session — gate does not apply
+    name: "agda_test_nogate_text",
+    description: "test",
+    category: "proof",
+    inputSchema: {},
+    callback: async () => {
+      callbackRan = true;
+      return "ran";
+    },
+  });
+
+  const result = await server.getRegistered()!.callback({});
+  expect(callbackRan).toBe(true);
+  expect(result.isError).toBe(false);
+});
+
+test("registerGoalTextTool auto-gates when session is in type-error state even with a valid goalId", async () => {
+  clearToolManifest();
+  const server = createCapturingServer();
+  let callbackRan = false;
+  const session = {
+    getLoadedFile: () => "/repo/File.agda",
+    getGoalIds: () => [0], // stale goal id from a previous successful load
+    getLastClassification: () => "type-error",
+    isFileStale: () => false,
+  } as unknown as AgdaSession;
+
+  registerGoalTextTool({
+    server: server as unknown as McpServer,
+    session,
+    name: "agda_test_autogate_goal",
+    description: "test",
+    category: "proof",
+    inputSchema: {},
+    callback: async () => {
+      callbackRan = true;
+      return "should not be reached";
+    },
+  });
+
+  const result = await server.getRegistered()!.callback({ goalId: 0 });
+  expect(callbackRan).toBe(false);
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent.classification).toBe("unavailable");
+});
+
 test("sessionErrorStateGate summary omits file hint when no file is loaded", () => {
   const session = stubSession("type-error", null);
   const result = sessionErrorStateGate(session, "agda_infer", { expr: "", goalId: undefined, inferredType: "" });

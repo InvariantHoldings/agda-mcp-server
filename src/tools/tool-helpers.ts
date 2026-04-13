@@ -207,6 +207,7 @@ export function errorEnvelope<T extends Record<string, unknown>>(args: {
   diagnostics?: ToolDiagnostic[];
   stale?: boolean;
   provenance?: Record<string, unknown>;
+  elapsedMs?: number;
 }): ToolEnvelope<T> {
   return {
     tool: args.tool,
@@ -217,6 +218,7 @@ export function errorEnvelope<T extends Record<string, unknown>>(args: {
     diagnostics: args.diagnostics ?? [errorDiagnostic(args.summary)],
     stale: args.stale,
     provenance: mergeProvenance(args.provenance),
+    elapsedMs: args.elapsedMs,
   };
 }
 
@@ -582,6 +584,17 @@ export function registerTextTool(args: {
   inputSchema?: unknown;
   annotations?: ToolAnnotations;
   outputDataSchema?: z.ZodTypeAny;
+  /**
+   * Optional session reference. When provided, the wrapper short-
+   * circuits the tool with an `unavailable` envelope if the session's
+   * most recent load classification is `type-error` — see §1.3 in the
+   * agent UX observations doc. Callers that are informational in
+   * nature (status tools, load-family, tools that MUST run in error
+   * state to surface the errors themselves) should omit the session
+   * argument so the wrapper doesn't gate them. If omitted, the
+   * behavior is unchanged from the pre-#39 release.
+   */
+  session?: AgdaSession;
   callback: (cbArgs: any) => Promise<string>;
 }): void {
   const outputDataSchema =
@@ -598,6 +611,10 @@ export function registerTextTool(args: {
     outputDataSchema,
     callback: async (cbArgs: any) => {
       const startMs = performance.now();
+      if (args.session) {
+        const unavailable = sessionErrorStateGate(args.session, args.name, { text: "" });
+        if (unavailable) return unavailable;
+      }
       try {
         const textValue = await args.callback(cbArgs);
         return makeToolResult(
@@ -647,6 +664,18 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
       if (invalid) {
         return invalid;
       }
+
+      // §1.3: gate goal-based tools when the session's last load
+      // failed with type-error. Even with a valid goalId that was
+      // captured during the previous successful load, the session
+      // can no longer answer goal queries coherently and Agda will
+      // echo the stale error — surface it as `unavailable` instead.
+      const unavailable = sessionErrorStateGate(
+        args.session,
+        args.name,
+        { text: "", goalId: cbArgs.goalId },
+      );
+      if (unavailable) return unavailable;
 
       try {
         const warn = stalenessWarning(args.session);

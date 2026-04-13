@@ -160,6 +160,7 @@ export function register(
 
   registerTextTool({
     server,
+    session,
     name: "agda_auto_all",
     description: "Attempt to automatically solve all goals using Agda's proof search.",
     category: "proof",
@@ -177,6 +178,7 @@ export function register(
 
   registerTextTool({
     server,
+    session,
     name: "agda_solve_all",
     description: "Attempt to solve all goals that have unique solutions.",
     category: "proof",
@@ -216,6 +218,7 @@ export function register(
 
   registerTextTool({
     server,
+    session,
     name: "agda_constraints",
     description: "Show the current constraint set for the loaded file.",
     category: "proof",
