@@ -41,7 +41,7 @@ response envelopes include `previousClassification` / `previousLoadedAtMs` on
 reloads plus a `session-regression` info diagnostic when a reload drops from a
 previously successful classification into a failed load.
 
-### 1.2 `agda_metas` returned errors from a *different* loaded file
+### 1.2 `agda_metas` returned errors from a *different* loaded file — **✓ shipped**
 
 After `agda_load File.agda` reported `classification: ok-complete,
 goalCount: 0`, a follow-up `agda_metas` returned a well-formatted error
@@ -55,7 +55,18 @@ its owning file and separates "metas in the loaded file" from "diagnostics
 accrued from dependencies". Today an agent has to assume any error anywhere
 invalidates the load.
 
-### 1.3 Query tools returned the previous typecheck error instead of an answer
+**Status:** shipped in this release. `agda_metas` is now a structured
+tool whose response includes a `loadedFile` field plus `errorsByFile`
+and `warningsByFile` arrays. Each entry in those arrays is
+`{ file, ownedByLoadedFile, messages }`, so a caller immediately sees
+which diagnostics belong to the currently-loaded file versus a
+transitive dependency. A `dependency-errors` warning-level diagnostic
+fires whenever any error is attributed to a file other than the loaded
+one, with the count in the message. The null-file bucket collects any
+diagnostics whose text didn't embed a parseable path, and is always
+tagged `ownedByLoadedFile: false` for safety.
+
+### 1.3 Query tools returned the previous typecheck error instead of an answer — **✓ shipped**
 
 A query tool was invoked on a name while a file with an unrelated error was
 loaded. The response body echoed the type error verbatim as the value of the
@@ -69,7 +80,17 @@ its result because the session is in an error state, the response should be a
 structured `unavailable` classification with the blocking error, not the error
 embedded in a happy-path payload.
 
-### 1.4 `ok-complete` classification despite holes in the source
+**Status:** shipped in this release. A new `sessionErrorStateGate` helper
+short-circuits each of those five query tools when
+`session.getLastClassification() === "type-error"`. The gated response is
+an error envelope with `classification: "unavailable"` and a
+`session-unavailable` diagnostic naming the loaded file and the remediation
+(fix the load errors first, then re-run `agda_load`). The gate is
+conservative — `ok-with-holes`, `ok-complete`, and the no-load-yet state
+all let queries proceed exactly as before — and it tolerates session
+stubs that don't implement the getter (short-circuits to null).
+
+### 1.4 `ok-complete` classification despite holes in the source — **✓ shipped**
 
 `agda_load` returned `classification: ok-complete, hasHoles: false,
 goalCount: 0` on a file whose source contained multiple `{!!}` holes. Root
@@ -82,6 +103,19 @@ the report needs to reflect "I never scope-checked past line N" rather than
 `lastCheckedLine` (or `scopeCheckReached`) field in the load response so
 agents know how much of the file was actually seen. A `hasHoles: false` on an
 aborted load is actively misleading.
+
+**Status:** shipped in this release. `parseLoadResponses` now scans
+errors and warnings for `file.agda:LINE[:COL]` locations and records
+the smallest line number as `lastCheckedLine` on the load response.
+`LoadResult` and `loadDataSchema` both expose the field, and `agda_load`
+emits a `scope-check-extent` info diagnostic whenever it's non-null.
+The diagnostic has two variants: a loud "treat hasHoles/goalCount as
+lower bounds" message when the load looks clean but carries a
+diagnostic location, and a softer "earliest diagnostic at line N"
+message when the load is genuinely failing. Extraction is defensive
+against non-Agda paths, zero/negative line numbers, and non-string
+entries; it handles absolute and relative paths, column-suffixed and
+column-range formats, and the literate `.lagda.md` variant.
 
 ---
 
@@ -327,7 +361,7 @@ cache or always bust it — and it should tell the agent which mode it's in.
 - A `forceRecompile: true` flag on `agda_load` as an opt-in escape hatch for
   when an agent suspects a stale cache.
 
-### 6.3 Toolchain version in every response
+### 6.3 Toolchain version in every response — **✓ shipped**
 
 `agda_show_version` exists as a dedicated tool. Stamping the Agda version
 into every response's `provenance` field would save an agent from ever
@@ -335,6 +369,16 @@ re-asking.
 
 **Ask:** include `agdaVersion` in the `provenance` block returned by every
 tool. Cheap observability win.
+
+**Status:** shipped in this release. `src/index.ts` captures
+`agda --version` via `execFileSync` at server startup (with `shell: false`
+so there is no shell-injection surface) and stamps both `serverVersion`
+and `agdaVersion` into a module-scoped `globalProvenance` registry.
+`okEnvelope` / `errorEnvelope` merge that registry into every
+response's `provenance` block, with tool-local provenance keys
+overriding global ones with the same name. The registry is a
+null-prototype object and refuses `__proto__` / `constructor` /
+`prototype` keys (defense-in-depth for CWE-1321).
 
 ---
 
@@ -363,20 +407,26 @@ auto-reload after edit, plus fixture tests for each.
 
 ## Priority ranking
 
-If one afternoon of server work is available, spend it on:
+§1.x is now fully shipped in this release:
 
-1. **§1.x consistency** — partially addressed in this release for
-   `agda_load` / `agda_typecheck` (#39); §1.2, §1.3, §1.4 remain open and
-   are the highest correctness priority.
-2. **§7 write-back for proof actions** — tracked on
+- §1.1 `agda_load` / `agda_typecheck` session-state unification (#39). ✓
+- §1.2 `agda_metas` error attribution by owning file. ✓
+- §1.3 query tools return `unavailable` on session error state. ✓
+- §1.4 `lastCheckedLine` surfaced on silent-abort loads. ✓
+
+If one afternoon of server work is available after that, spend it on:
+
+1. **§7 write-back for proof actions** — tracked on
    `feature/write-proof-actions-to-file`.
-3. **§2.2 pre-load triage classifier** — biggest throughput win on a large
+2. **§2.2 pre-load triage classifier** — biggest throughput win on a large
    codebase.
-4. **§3.6 fixity-inference diagnostic** — high-surprise bug class, cheap to
+3. **§3.6 fixity-inference diagnostic** — high-surprise bug class, cheap to
    build.
-5. **§4.1 module-wide `agda_term_search`** — turns the interactive loop
+4. **§4.1 module-wide `agda_term_search`** — turns the interactive loop
    from three round-trips to one on most applications.
-6. **§2.1 / §2.3 bulk status + dependency impact** — makes a many-hundred
+5. **§2.1 / §2.3 bulk status + dependency impact** — makes a many-hundred
    module codebase actually navigable.
+6. **§6.2 `forceRecompile` / `agda_cache_info`** — stale `.agdai` escape
+   hatch; directly complements the #39 fix.
 
 Everything after that is incremental.
