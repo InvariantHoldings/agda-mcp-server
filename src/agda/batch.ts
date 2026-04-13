@@ -3,6 +3,13 @@
 // Stateless batch type-checking — spawns a temporary AgdaSession,
 // loads the file, and destroys the session. Reuses the same
 // normalization and parsing infrastructure as the interactive path.
+//
+// WARNING: do not call this from MCP tool handlers. A disposable session
+// shares the repo's _build/ with the singleton AgdaSession but does not
+// share currentFile/lastLoadedMtime, which desynchronizes the two tools'
+// view of file state (issue #39). Tool handlers should call session.load()
+// on the shared singleton instead. This helper exists for standalone tests
+// and probes that deliberately exercise the disposable code path.
 
 import type { TypeCheckResult } from "./types.js";
 import { AgdaSession } from "./session.js";

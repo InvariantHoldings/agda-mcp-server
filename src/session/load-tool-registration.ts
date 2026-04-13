@@ -7,7 +7,7 @@ import { z } from "zod";
 import { existsSync } from "node:fs";
 import { relative } from "node:path";
 
-import { AgdaSession, typeCheckBatch } from "../agda-process.js";
+import { AgdaSession } from "../agda-process.js";
 import {
   errorDiagnostic,
   errorEnvelope,
@@ -352,7 +352,10 @@ export function registerSessionLoadTools(
 
       try {
         const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
-        const result = await typeCheckBatch(filePath, repoRoot);
+        // Route through the singleton session so agda_typecheck and agda_load
+        // share one authoritative view of loaded file + mtime + _build state.
+        // See issue #39.
+        const result = await session.load(filePath);
         const relPath = relative(repoRoot, requestedFilePath);
         const text = renderLoadLikeText({
           heading: "Type-check",

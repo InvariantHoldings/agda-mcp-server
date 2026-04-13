@@ -111,6 +111,47 @@ it("MCP end-to-end: session status and typecheck tools", async () => {
   });
 });
 
+// Regression for issue #39: agda_typecheck and agda_load must share one
+// authoritative view of session state. Before the fix, agda_typecheck ran
+// on a disposable AgdaSession, so the singleton never saw the load and
+// agda_session_status reported loadedFile=null right after a successful
+// typecheck. That split between filesystem state (shared _build/) and
+// session state (disjoint currentFile/mtime) is the bug's root cause.
+it("MCP end-to-end: agda_typecheck updates singleton session state", async () => {
+  await withHarness(async (harness) => {
+    const before = await callToolStep(harness, "session status before typecheck", "agda_session_status", {});
+    expect(before.isError).toBe(false);
+    expect(before.structuredContent.data.loadedFile).toBe(null);
+
+    const typecheck = await callToolStep(
+      harness,
+      "typecheck clean fixture",
+      "agda_typecheck",
+      { file: "CompleteFixture.agda" },
+    );
+    expect(typecheck.isError).toBe(false);
+    expect(typecheck.structuredContent.data.classification).toBe("ok-complete");
+
+    const afterTypecheck = await callToolStep(
+      harness,
+      "session status after typecheck",
+      "agda_session_status",
+      {},
+    );
+    expect(afterTypecheck.isError).toBe(false);
+    expect(afterTypecheck.structuredContent.data.loadedFile).toBe("CompleteFixture.agda");
+
+    const load = await callToolStep(
+      harness,
+      "load same fixture immediately after typecheck",
+      "agda_load",
+      { file: "CompleteFixture.agda" },
+    );
+    expect(load.isError).toBe(false);
+    expect(load.structuredContent.data.classification).toBe("ok-complete");
+  });
+});
+
 test("MCP end-to-end: file navigation tools", async () => {
   const projectRoot = createFileToolProject();
 
