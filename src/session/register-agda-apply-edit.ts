@@ -12,6 +12,7 @@
 // and any missed Edit silently desynchronized the server state from disk.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { realpathSync } from "node:fs";
 import { z } from "zod";
 
 import { AgdaSession } from "../agda-process.js";
@@ -19,6 +20,21 @@ import { resolveFileWithinRoot } from "../repo-root.js";
 import { registerTextTool } from "../tools/tool-helpers.js";
 import { applyTextEdit } from "./apply-proof-edit.js";
 import { reloadAndDiagnose } from "./reload-and-diagnose.js";
+
+/**
+ * Canonicalize a filesystem path for identity comparison. Resolves
+ * symlinks and normalizes `..`, trailing slashes, etc. If the path
+ * does not exist, falls back to the original string (the file may
+ * not yet exist, which is fine — a later readFile will surface the
+ * real error).
+ */
+function canonicalize(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
 
 export function registerAgdaApplyEdit(
   server: McpServer,
@@ -57,10 +73,20 @@ export function registerAgdaApplyEdit(
       // underlying errno, so we get a better message and no race.
 
       // Capture goal IDs before the edit so the reload can report a
-      // {solved, new} diff. Only meaningful when the edited file is the
-      // currently loaded one — otherwise the "before" set is empty and
-      // the diff degenerates to "all new".
-      const isLoadedFile = session.currentFile === resolvedPath;
+      // {solved, new} diff. Only meaningful when the edited file is
+      // the currently loaded one — otherwise the "before" set is
+      // empty and the diff degenerates to "all new".
+      //
+      // Compare canonicalized paths so symlinks, `..` segments, and
+      // trailing slashes don't cause us to miss the "is this the
+      // loaded file?" check. A plain string compare on
+      // session.currentFile === resolvedPath silently fails when one
+      // side was resolved via realpath and the other wasn't.
+      const canonicalResolved = canonicalize(resolvedPath);
+      const canonicalLoaded = session.currentFile
+        ? canonicalize(session.currentFile)
+        : null;
+      const isLoadedFile = canonicalLoaded === canonicalResolved;
       const goalIdsBefore = isLoadedFile ? session.getGoalIds() : undefined;
 
       const editResult = await applyTextEdit(
