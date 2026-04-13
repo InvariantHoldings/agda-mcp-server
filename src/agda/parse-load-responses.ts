@@ -9,6 +9,8 @@ import { classifyCompleteness } from "./completeness.js";
 import {
   displayInfoResponseSchema,
   parseResponseWithSchema,
+  timeInfoSchema,
+  runningInfoResponseSchema,
 } from "../protocol/response-schemas.js";
 import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
 import { decodeLoadDisplayResponses } from "../protocol/responses/load-display.js";
@@ -32,6 +34,7 @@ export interface ParsedLoadResult extends LoadResult {
  */
 export function parseLoadResponses(
   responses: AgdaResponse[],
+  options?: { profilingEnabled?: boolean },
 ): ParsedLoadResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -108,6 +111,8 @@ export function parseLoadResponses(
     invisibleGoalCount,
   });
 
+  const profiling = extractProfilingOutput(responses, options);
+
   return {
     success,
     errors,
@@ -120,5 +125,63 @@ export function parseLoadResponses(
     hasHoles: completeness.hasHoles,
     isComplete: completeness.isComplete,
     classification: completeness.classification,
+    profiling,
   };
+}
+
+/**
+ * Extract profiling output from Agda responses.
+ *
+ * When `--profile=` options are active, Agda emits profiling data via:
+ * - DisplayInfo with info.kind === "Time" (timing/profiling summary)
+ * - RunningInfo messages (incremental profiling output)
+ *
+ * When `profilingEnabled` is false (the default), only DisplayInfo/Time
+ * responses are collected — RunningInfo is ignored because those messages
+ * are also used for general progress/status (e.g. "Checking Module …").
+ *
+ * Returns the combined profiling text, or null if no profiling data
+ * was found in the responses.
+ */
+export function extractProfilingOutput(
+  responses: AgdaResponse[],
+  options?: { profilingEnabled?: boolean },
+): string | null {
+  const includeRunningInfo = options?.profilingEnabled ?? false;
+  const parts: string[] = [];
+
+  for (const resp of responses) {
+    if (resp.kind === "DisplayInfo") {
+      const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
+      if (!display) continue;
+      const info = display.info;
+
+      if (info.kind === "Time") {
+        const time = timeInfoSchema.safeParse(info);
+        if (time.success) {
+          const message = time.data.message;
+          const text =
+            typeof message === "string" && message.trim().length > 0
+              ? message
+              : time.data.cpuTime?.toString() ?? "";
+          if (text) parts.push(text);
+        }
+      }
+    }
+
+    if (includeRunningInfo && resp.kind === "RunningInfo") {
+      const running = parseResponseWithSchema(runningInfoResponseSchema, resp);
+      if (running) {
+        const text =
+          running.message?.trim()
+            ? running.message
+            : running.text?.trim()
+              ? running.text
+              : "";
+        if (text) parts.push(text);
+      }
+    }
+  }
+
+  return parts.length > 0 ? parts.join("\n") : null;
 }
