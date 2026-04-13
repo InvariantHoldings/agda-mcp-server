@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -108,5 +108,16 @@ describe("applyTextEdit", () => {
     const result = await applyTextEdit(tempFile, "bar", "qux");
     expect(result.applied).toBe(true);
     expect(await readFile(tempFile, "utf-8")).toBe("foo\r\nqux\r\nbaz\r\n");
+  });
+
+  test("leaves no temp file after a successful write (atomic rename)", async () => {
+    await writeFile(tempFile, "foo bar baz");
+    const result = await applyTextEdit(tempFile, "bar", "qux");
+    expect(result.applied).toBe(true);
+
+    // Verify no stray .agda-mcp-tmp-* files are left behind in the dir
+    const entries = await readdir(tempDir);
+    const leaked = entries.filter((name) => name.includes("agda-mcp-tmp-"));
+    expect(leaked).toEqual([]);
   });
 });

@@ -26,12 +26,16 @@ export function registerAgdaApplyEdit(
   session: AgdaSession,
   repoRoot: string,
 ): void {
+  // Deliberately do NOT pass `session` to registerTextTool here: that
+  // would enable sessionErrorStateGate, which refuses to run tools when
+  // the last load classification is `type-error`. agda_apply_edit is
+  // precisely the tool an agent needs to repair a file that failed to
+  // load, so gating it there would be counterproductive.
   registerTextTool({
     server,
-    session,
     name: "agda_apply_edit",
     description:
-      "Apply a targeted text substitution to an Agda file and reload it. For edits that aren't goal actions — adding imports, renaming symbols, fixing typos. oldText must match exactly once unless `occurrence` is provided. Auto-reloads the file after writing so the Agda session stays in sync.",
+      "Apply a targeted text substitution to an Agda file and reload it. For edits that aren't goal actions — adding imports, renaming symbols, fixing typos. oldText must match exactly once unless `occurrence` is provided. Auto-reloads the file after writing so the Agda session stays in sync. Runs even when the session is in a type-error state, since the whole point is to repair that state.",
     category: "session",
     inputSchema: {
       file: z.string().describe("Path to the .agda file (relative to repo root or absolute)"),

@@ -7,8 +7,37 @@
 // editors are expected to apply the edit themselves. This module does
 // that for MCP clients that have no editor buffer.
 
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, rename, unlink } from "node:fs/promises";
 import { findGoalPosition, findGoalPositions } from "./goal-positions.js";
+
+/**
+ * Write `content` to `filePath` atomically via temp-file-rename.
+ *
+ * `fs.writeFile` truncates and rewrites the target in place: a
+ * reader that opens the file mid-write can see a truncated or
+ * partially-written state. We instead write to a sibling temp file
+ * and `rename()` it over the target, which is atomic on POSIX and
+ * NTFS when both paths are on the same filesystem.
+ *
+ * On failure we attempt to unlink the temp file so we don't leak
+ * `.agda-mcp-tmp-*` turds next to user sources. Unlink errors are
+ * swallowed because the primary write error is more interesting.
+ */
+async function writeFileAtomic(filePath: string, content: string): Promise<void> {
+  // Same-directory temp file so rename() stays on one filesystem.
+  const tmpPath = `${filePath}.agda-mcp-tmp-${process.pid}-${Date.now()}`;
+  try {
+    await writeFile(tmpPath, content, "utf-8");
+    await rename(tmpPath, filePath);
+  } catch (err) {
+    try {
+      await unlink(tmpPath);
+    } catch {
+      // Ignore cleanup failure — the real error is more informative.
+    }
+    throw err;
+  }
+}
 
 // ── Edit types ───────────────────────────────────────────────────────
 
@@ -105,7 +134,7 @@ export async function applyBatchHoleReplacements(
     newSource = newSource.slice(0, edit.start) + edit.expr + newSource.slice(edit.end);
   }
 
-  await writeFile(filePath, newSource, "utf-8");
+  await writeFileAtomic(filePath, newSource);
 
   const failedMsg =
     failedGoalIds.length > 0
@@ -143,7 +172,11 @@ export interface TextEditResult {
  * - By default, `oldText` must match exactly once (fails if 0 or >1).
  * - Pass `occurrence: n` (1-based) to target a specific match when
  *   there are duplicates.
- * - The file is written atomically via fs/promises writeFile.
+ * - The file is written via `writeFileAtomic` (temp file + rename),
+ *   so concurrent readers never observe a truncated or half-written
+ *   state. The rename is atomic on POSIX and NTFS when both paths
+ *   are on the same filesystem, which is always true here because
+ *   the temp path is a sibling of the target.
  * - The file is NOT reloaded here — that's the caller's job.
  */
 export async function applyTextEdit(
@@ -210,7 +243,7 @@ export async function applyTextEdit(
   const newSource =
     source.slice(0, targetIndex) + newText + source.slice(targetIndex + oldText.length);
 
-  await writeFile(filePath, newSource, "utf-8");
+  await writeFileAtomic(filePath, newSource);
 
   // Compute 1-based line number of the edit start
   let line = 1;
@@ -300,7 +333,7 @@ export async function applyProofEdit(
     }
   }
 
-  await writeFile(filePath, newSource, "utf-8");
+  await writeFileAtomic(filePath, newSource);
 
   return {
     applied: true,

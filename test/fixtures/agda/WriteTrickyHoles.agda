@@ -17,6 +17,6 @@ afterComment = {!!}
 nested : Nat
 nested = {! {! zero !} !}
 
--- Hole with string containing !} inside (scanner edge case)
+-- Hole with a block comment containing !} inside (scanner edge case)
 withBlockComment : Nat
 withBlockComment = {! {- !} -} zero !}
