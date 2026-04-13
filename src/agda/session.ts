@@ -46,6 +46,7 @@ import { parseLoadResponses } from "./parse-load-responses.js";
 import { logger } from "./logger.js";
 import { command, quoted } from "../protocol/command-builder.js";
 import { type AgdaVersion, parseAgdaVersion } from "./agda-version.js";
+import { decodeDisplayTextResponses } from "../protocol/responses/text-display.js";
 
 // ── Binary discovery ──────────────────────────────────────────────────
 
@@ -170,19 +171,19 @@ export class AgdaSession {
   }
 
   /**
-   * Scan responses from Cmd_show_version and return the first raw version
-   * string found, or undefined if none is present.
+   * Scan responses from Cmd_show_version and return the version string, or
+   * undefined if no Version DisplayInfo response is present.
    *
-   * Agda may surface the version in `info.version`, `info.message`, or
-   * `info.text` depending on the protocol version.
+   * Filters strictly to `kind === "DisplayInfo"` / `info.kind === "Version"`
+   * responses to avoid mis-parsing timing output or other messages as
+   * version strings. Reuses the same decoder that `showVersion()` uses.
    */
   private static extractRawVersionString(responses: AgdaResponse[]): string | undefined {
-    for (const resp of responses) {
-      const info = (resp as any).info;
-      const raw: string | undefined = info?.version ?? info?.message ?? info?.text;
-      if (raw) return raw;
-    }
-    return undefined;
+    const { text } = decodeDisplayTextResponses(responses, {
+      infoKinds: ["Version"],
+      position: "first",
+    });
+    return text || undefined;
   }
 
   /**

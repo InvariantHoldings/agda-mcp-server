@@ -38,7 +38,7 @@ export function register(
     name: "agda_read_module",
     description: "Read an Agda module file and return its contents with line numbers.",
     category: "navigation",
-    inputSchema: { file: z.string().describe(filePathDescription()) },
+    inputSchema: { file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)) },
     callback: async ({ file }: { file: string }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(requestedFilePath)) {
@@ -112,7 +112,7 @@ export function register(
     name: "agda_check_postulates",
     description: "Check an Agda file for postulate declarations. In Kernel/ files, postulates are forbidden by construction.",
     category: "navigation",
-    inputSchema: { file: z.string().describe(filePathDescription()) },
+    inputSchema: { file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)) },
     callback: async ({ file }: { file: string }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(requestedFilePath)) {

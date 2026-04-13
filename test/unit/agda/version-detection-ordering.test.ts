@@ -16,7 +16,8 @@ const fakeProc = { exitCode: null } as unknown as ChildProcess;
 function makeVersionMock(versionString: string) {
   return async function (_proc: unknown, command: string, _timeout: unknown) {
     if (command.includes("Cmd_show_version")) {
-      return [{ kind: "DisplayInfo", info: { version: versionString } }];
+      // Real Agda protocol: kind=DisplayInfo at response level, kind=Version at info level
+      return [{ kind: "DisplayInfo", info: { kind: "Version", version: versionString } }];
     }
     return [{ kind: "Status" }];
   };
@@ -54,6 +55,58 @@ test("getAgdaVersion() is populated for subsequent commands too", async () => {
   session.destroy();
 });
 
+// ── Filtering: non-Version DisplayInfo responses are not mis-parsed ─────────
+
+test("detection ignores timing and other non-Version DisplayInfo responses", async () => {
+  const session = new AgdaSession(process.cwd());
+  let callCount = 0;
+  session["transport"].sendCommand = async function (_proc: unknown, command: string) {
+    if (command.includes("Cmd_show_version")) {
+      callCount++;
+      // Return a Time response followed by the real Version response.
+      // The Time message contains digit sequences that could be mistakenly
+      // parsed as a version if the kind filtering is absent.
+      return [
+        { kind: "DisplayInfo", info: { kind: "Time", cpuTime: 0.042, message: "Time: 0.042s" } },
+        { kind: "DisplayInfo", info: { kind: "Version", version: "Agda version 2.9.0" } },
+      ];
+    }
+    return [{ kind: "Status" }];
+  } as any;
+  session.ensureProcess = () => fakeProc;
+
+  await session.sendCommand("IOTCM cmd1");
+
+  // Must parse as 2.9.0, not as something derived from timing output
+  expect(session.getAgdaVersion()).not.toBeNull();
+  expect(session.getAgdaVersion()!.parts).toEqual([2, 9, 0]);
+
+  session.destroy();
+});
+
+test("detection stays null when Cmd_show_version returns only non-Version DisplayInfo", async () => {
+  const session = new AgdaSession(process.cwd());
+  session["transport"].sendCommand = async function (_proc: unknown, command: string) {
+    if (command.includes("Cmd_show_version")) {
+      // No Version info — only a Time response
+      return [
+        { kind: "DisplayInfo", info: { kind: "Time", cpuTime: 2, message: "2.9" } },
+      ];
+    }
+    return [{ kind: "Status" }];
+  } as any;
+  session.ensureProcess = () => fakeProc;
+
+  await session.sendCommand("IOTCM cmd1");
+
+  // The Time message contains "2.9" — a string that would parse as a valid
+  // Agda version if kind filtering were absent. Asserting null proves the
+  // filter is working and "2.9" was not extracted from the Time response.
+  expect(session.getAgdaVersion()).toBeNull();
+
+  session.destroy();
+});
+
 // ── Retry: transient detection failures are retried on the next command ────
 
 test("detection retries after a transient transport failure", async () => {
@@ -63,7 +116,7 @@ test("detection retries after a transient transport failure", async () => {
     if (command.includes("Cmd_show_version")) {
       attempt++;
       if (attempt === 1) throw new Error("transient error");
-      return [{ kind: "DisplayInfo", info: { version: "Agda version 2.6.4" } }];
+      return [{ kind: "DisplayInfo", info: { kind: "Version", version: "Agda version 2.6.4" } }];
     }
     return [{ kind: "Status" }];
   } as any;
