@@ -136,7 +136,18 @@ export async function applyEditAndReload(
   edit: ProofEdit,
 ): Promise<string> {
   const filePath = session.currentFile;
-  if (!filePath) return "";
+  if (!filePath) {
+    // Defense in depth: the proof-action tool wrappers already
+    // short-circuit on no-file-loaded, so this branch should be
+    // unreachable from them. We still return a visible warning
+    // rather than a silent empty string, because a silent "" would
+    // be indistinguishable from "everything succeeded and produced
+    // no output" on the caller's side.
+    return (
+      "\n**Warning:** No file is currently loaded, so the edit was " +
+      "not applied. Run `agda_load` first.\n"
+    );
+  }
 
   const staleMsg = stalenessBlockMessage(session);
   if (staleMsg) return staleMsg;

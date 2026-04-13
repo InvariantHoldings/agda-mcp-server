@@ -79,6 +79,30 @@ describe("staleness guard in applyEditAndReload", () => {
     expect(await readFile(tempFile, "utf-8")).toBe("test = {!!}");
   });
 
+  test("returns visible warning when session has no loaded file", async () => {
+    // Defense-in-depth path: the proof-action tool wrappers already
+    // short-circuit on no-file-loaded, but applyEditAndReload should
+    // emit a user-visible warning rather than returning "" silently.
+    const session = {
+      currentFile: null,
+      getGoalIds: () => [],
+      isFileStale: () => false,
+      load: async () => {
+        throw new Error("load() should not be called when no file is loaded");
+      },
+    } as unknown as AgdaSession;
+
+    const output = await applyEditAndReload(session, [], {
+      kind: "replace-hole",
+      goalId: 0,
+      expr: "refl",
+    });
+
+    expect(output).toContain("No file is currently loaded");
+    expect(output).toContain("agda_load");
+    expect(output.length).toBeGreaterThan(0);
+  });
+
   test("does not block when session reports fresh file", async () => {
     // To avoid pulling in a real session, we assert only the negative:
     // when stale=false the guard doesn't short-circuit, so we'd reach
