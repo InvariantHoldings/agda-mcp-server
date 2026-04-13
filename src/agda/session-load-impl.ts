@@ -19,6 +19,7 @@ import type { AgdaSession } from "./session.js";
 import type { LoadResult } from "./types.js";
 import { NOT_FOUND_RESULT } from "./session-constants.js";
 import { parseLoadResponses } from "./parse-load-responses.js";
+import { throwOnFatalProtocolStderr } from "./protocol-errors.js";
 import { mergeGoals } from "./goal-merging.js";
 import { logger } from "./logger.js";
 import { command, quoted, profileOptionsList } from "../protocol/command-builder.js";
@@ -107,6 +108,7 @@ export async function runLoad(
   const responses = await session.sendCommand(
     session.iotcmFor(absPath, command("Cmd_load", quoted(absPath), optsBuild.optsList)),
   );
+  throwOnFatalProtocolStderr(responses);
   const parsed = parseLoadResponses(responses, { profilingEnabled: optsBuild.profilingEnabled });
 
   // Set session state before reconciling metas so follow-up queries can run.
@@ -174,6 +176,7 @@ export async function runLoadNoMetas(
   const responses = await session.sendCommand(
     session.iotcmFor(absPath, command("Cmd_load_no_metas", quoted(absPath))),
   );
+  throwOnFatalProtocolStderr(responses);
   const parsed = parseLoadResponses(responses, { profilingEnabled: false });
 
   // Set session state atomically AFTER command completes.

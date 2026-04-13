@@ -116,11 +116,9 @@ export function parseLoadResponses(
     }
   }
 
-  for (const text of stderrTexts) {
-    if (/\berror\b/i.test(text)) {
-      errors.push(text);
-      success = false;
-    }
+  if (stderrTexts.length > 0) {
+    errors.push(...stderrTexts);
+    success = false;
   }
 
   if (loadDisplay.errors.length > 0) {
