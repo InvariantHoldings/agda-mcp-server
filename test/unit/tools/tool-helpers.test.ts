@@ -202,3 +202,82 @@ test("okEnvelope returns undefined provenance when global is empty and no local 
   });
   expect(envelope.provenance).toBeUndefined();
 });
+
+// Security: the global provenance registry must not allow prototype-
+// pollution writes via special property names, and the merged result
+// must not inherit from Object.prototype.
+test("registerGlobalProvenance rejects __proto__ / constructor / prototype keys", () => {
+  clearGlobalProvenance();
+
+  // Snapshot Object.prototype so we can detect pollution.
+  const protoKeysBefore = Object.getOwnPropertyNames(Object.prototype).sort();
+
+  registerGlobalProvenance("__proto__", { polluted: true });
+  registerGlobalProvenance("constructor", { polluted: true });
+  registerGlobalProvenance("prototype", { polluted: true });
+
+  // Valid key still works.
+  registerGlobalProvenance("safeKey", "safeValue");
+
+  const envelope = okEnvelope({
+    tool: "agda_test",
+    summary: "test",
+    data: {},
+  });
+
+  // Unsafe keys dropped, safe key present.
+  expect(envelope.provenance).toEqual({ safeKey: "safeValue" });
+
+  // Object.prototype must not have gained any new property.
+  const protoKeysAfter = Object.getOwnPropertyNames(Object.prototype).sort();
+  expect(protoKeysAfter).toEqual(protoKeysBefore);
+
+  // A fresh object must not have inherited a "polluted" property.
+  expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+
+  clearGlobalProvenance();
+});
+
+test("merged provenance object has a null prototype", () => {
+  clearGlobalProvenance();
+  registerGlobalProvenance("agdaVersion", "Agda 2.9.0");
+
+  try {
+    const envelope = okEnvelope({
+      tool: "agda_test",
+      summary: "test",
+      data: {},
+      provenance: { file: "/tmp/x.agda" },
+    });
+
+    // The returned provenance object must not inherit from Object.prototype
+    // so a future consumer can't accidentally pick up polluted properties
+    // via the prototype chain.
+    expect(Object.getPrototypeOf(envelope.provenance)).toBeNull();
+
+    // toString (from Object.prototype) should NOT be reachable on a null-
+    // prototype object, so accessing it returns undefined rather than the
+    // inherited method.
+    expect((envelope.provenance as any).toString).toBeUndefined();
+  } finally {
+    clearGlobalProvenance();
+  }
+});
+
+test("registerGlobalProvenance rejects empty or non-string keys", () => {
+  clearGlobalProvenance();
+
+  registerGlobalProvenance("", "dropped");
+  registerGlobalProvenance(42 as unknown as string, "dropped");
+  registerGlobalProvenance(null as unknown as string, "dropped");
+  registerGlobalProvenance("kept", "kept");
+
+  const envelope = okEnvelope({
+    tool: "agda_test",
+    summary: "test",
+    data: {},
+  });
+  expect(envelope.provenance).toEqual({ kept: "kept" });
+
+  clearGlobalProvenance();
+});
