@@ -1,6 +1,9 @@
 import { describe, test, expect } from "vitest";
 
-import { diffGoalIds } from "../../../src/session/reload-and-diagnose.js";
+import {
+  diffGoalIds,
+  formatGoalIdDiff,
+} from "../../../src/session/reload-and-diagnose.js";
 
 describe("diffGoalIds", () => {
   test("empty before and after", () => {
@@ -64,5 +67,31 @@ describe("diffGoalIds", () => {
     expect(diff.introduced).toEqual([2]);
     // remaining preserves order + duplication from input
     expect(diff.remaining).toEqual([0, 0]);
+  });
+});
+
+describe("formatGoalIdDiff", () => {
+  test("returns empty string when no changes", () => {
+    expect(formatGoalIdDiff({ solved: [], introduced: [], remaining: [0, 1] })).toBe("");
+  });
+
+  test("formats solved only", () => {
+    const out = formatGoalIdDiff({ solved: [0], introduced: [], remaining: [1] });
+    expect(out).toBe("Goal diff: solved ?0.\n");
+  });
+
+  test("formats introduced only", () => {
+    const out = formatGoalIdDiff({ solved: [], introduced: [2, 3], remaining: [1] });
+    expect(out).toBe("Goal diff: new ?2, ?3.\n");
+  });
+
+  test("formats both solved and introduced", () => {
+    const out = formatGoalIdDiff({ solved: [0], introduced: [2, 3], remaining: [1] });
+    expect(out).toBe("Goal diff: solved ?0; new ?2, ?3.\n");
+  });
+
+  test("formats multiple solved", () => {
+    const out = formatGoalIdDiff({ solved: [0, 2, 4], introduced: [], remaining: [] });
+    expect(out).toBe("Goal diff: solved ?0, ?2, ?4.\n");
   });
 });

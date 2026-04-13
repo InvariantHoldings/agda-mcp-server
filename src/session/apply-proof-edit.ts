@@ -333,7 +333,13 @@ export async function applyTextEdit(
  *
  * For ReplaceHole: replaces the {! !} or ? marker with the expression.
  * For ReplaceLine: replaces the entire line containing the goal with
- * the new clause lines (used for case split).
+ * the new clause lines (used for case split). If the hole spans
+ * multiple lines (e.g. `{! multi\n line !}`), the edit wipes
+ * everything from the start of the opening line to the end of the
+ * closing line. This is acceptable for Agda's Cmd_make_case because
+ * that command is only invoked on single-line function clauses in
+ * practice — we pin the behavior in tests rather than assert on the
+ * single-line shape.
  *
  * Returns a result indicating whether the edit was applied.
  */

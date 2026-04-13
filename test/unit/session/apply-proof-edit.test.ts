@@ -205,5 +205,41 @@ describe("applyProofEdit", () => {
       expect(updated).toContain("f zero = {!!}\r\nf (suc n) = {!!}");
       expect(updated).toContain("module Test where\r\n");
     });
+
+    test("multi-line hole: replaces from opening line start to closing line end", async () => {
+      // Documented behavior: if a hole spans multiple lines, the
+      // replace-line branch wipes everything from the start of the
+      // line the hole opens on to the end of the line the hole closes
+      // on. Agda's Cmd_make_case never hands us a multi-line hole in
+      // practice, so this is a defensive test — it pins the current
+      // behavior rather than endorsing the multi-line path.
+      const source = [
+        "module Test where",
+        "f n = {! this",
+        "          expression",
+        "          spans lines !}",
+        "-- end",
+      ].join("\n");
+      await writeFile(tempFile, source);
+
+      const result = await applyProofEdit(tempFile, [0], {
+        kind: "replace-line",
+        goalId: 0,
+        clauses: ["f zero = {!!}", "f (suc n) = {!!}"],
+      });
+
+      expect(result.applied).toBe(true);
+      const updated = await readFile(tempFile, "utf-8");
+      // All three lines the hole occupied are gone.
+      expect(updated).not.toContain("f n = {! this");
+      expect(updated).not.toContain("expression");
+      expect(updated).not.toContain("spans lines !}");
+      // The new clauses are present...
+      expect(updated).toContain("f zero = {!!}");
+      expect(updated).toContain("f (suc n) = {!!}");
+      // ...and the surrounding content is preserved.
+      expect(updated).toContain("module Test where");
+      expect(updated).toContain("-- end");
+    });
   });
 });

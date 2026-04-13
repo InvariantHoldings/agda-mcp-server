@@ -42,7 +42,7 @@ export function diffGoalIds(before: number[], after: number[]): GoalIdDiff {
   return { solved, introduced, remaining };
 }
 
-function formatGoalIdDiff(diff: GoalIdDiff): string {
+export function formatGoalIdDiff(diff: GoalIdDiff): string {
   const parts: string[] = [];
   if (diff.solved.length > 0) {
     parts.push(`solved ${diff.solved.map((id) => `?${id}`).join(", ")}`);
