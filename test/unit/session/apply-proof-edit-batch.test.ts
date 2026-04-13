@@ -114,4 +114,16 @@ describe("applyBatchHoleReplacements", () => {
     expect(result.message).toContain("?7");
     expect(await readFile(tempFile, "utf-8")).toBe("a = refl\nb = zero");
   });
+
+  test("deduplicates: first replacement wins when same goalId appears twice", async () => {
+    await writeFile(tempFile, "test = {!!}");
+    const result = await applyBatchHoleReplacements(tempFile, [0], [
+      { goalId: 0, expr: "first" },
+      { goalId: 0, expr: "second" },
+    ]);
+
+    expect(result.appliedCount).toBe(1);
+    expect(result.failedGoalIds).toEqual([]);
+    expect(await readFile(tempFile, "utf-8")).toBe("test = first");
+  });
 });

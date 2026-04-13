@@ -24,7 +24,24 @@ async function applyEditAndReload(
   const filePath = session.currentFile;
   if (!filePath) return "";
 
-  const editResult: ApplyEditResult = await applyProofEdit(filePath, goalIdsBefore, edit);
+  let editResult: ApplyEditResult;
+  try {
+    editResult = await applyProofEdit(filePath, goalIdsBefore, edit);
+  } catch (err) {
+    // FS error (permissions, missing file, etc.) — the file is unchanged
+    // but the Agda session has already mutated. Reload to resync.
+    const msg = err instanceof Error ? err.message : String(err);
+    let output = `\n**Warning:** File edit failed: ${msg}\n`;
+    try {
+      const loadResult = await session.load(filePath);
+      output += `Reloaded unchanged file to resync session: ${loadResult.goalCount} goal(s).\n`;
+    } catch (reloadErr) {
+      const reloadMsg = reloadErr instanceof Error ? reloadErr.message : String(reloadErr);
+      output += `**Warning:** Failed to resync session (${reloadMsg}). Run \`agda_load\` manually.\n`;
+    }
+    output += `Apply the edit manually, then call \`agda_load\` to reload.\n`;
+    return output;
+  }
 
   if (editResult.applied) {
     const loadResult: LoadResult = await session.load(filePath);

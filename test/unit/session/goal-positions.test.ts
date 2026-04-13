@@ -51,6 +51,24 @@ describe("findGoalPositions", () => {
     expect(positions).toHaveLength(0);
   });
 
+  test("matches ? surrounded by Agda reserved delimiters", () => {
+    // ? inside parens
+    expect(findGoalPositions("f (?)")).toHaveLength(1);
+    // ? inside braces
+    expect(findGoalPositions("{?}")).toHaveLength(1);
+    // ? preceded by ;
+    expect(findGoalPositions(";?")).toHaveLength(1);
+    // ? after @
+    expect(findGoalPositions("@?")).toHaveLength(1);
+  });
+
+  test("does not match ? adjacent to identifier-legal chars", () => {
+    // [ ] = : > are legal in Agda identifiers, so ?] etc. is one token
+    expect(findGoalPositions("f [?]")).toHaveLength(0);
+    expect(findGoalPositions("f ?abc")).toHaveLength(0);
+    expect(findGoalPositions("f abc?")).toHaveLength(0);
+  });
+
   test("finds multiple holes in order", () => {
     const source = [
       "module M where",

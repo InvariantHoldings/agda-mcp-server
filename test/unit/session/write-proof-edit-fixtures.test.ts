@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { findGoalPositions } from "../../../src/session/goal-positions.js";
 import { applyProofEdit } from "../../../src/session/apply-proof-edit.js";
 
-const fixturesDir = resolve(__dirname, "../../fixtures/agda");
+const fixturesDir = resolve(import.meta.dirname, "../../fixtures/agda");
 
 function fixture(name: string): string {
   return readFileSync(join(fixturesDir, name), "utf-8");

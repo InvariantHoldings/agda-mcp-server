@@ -145,14 +145,22 @@ export function findGoalPositions(source: string): GoalPosition[] {
 
     // Match ? question-mark holes
     if (source[i] === "?") {
-      // ? is a hole only when it's a standalone token:
-      // - preceded by whitespace, =, (, {, or start of file
-      // - followed by whitespace, ), }, newline, end of file, or certain punctuation
-      const prevChar = i > 0 ? source[i - 1] : " ";
-      const nextChar = i + 1 < source.length ? source[i + 1] : " ";
+      // ? is a hole only when it's a standalone token — not part of
+      // an identifier. Agda identifiers can contain almost any Unicode
+      // letter/digit/symbol except whitespace and a few reserved chars.
+      // We treat ? as standalone when the neighbouring characters are
+      // NOT identifier-legal (i.e. they are whitespace, punctuation
+      // delimiters, or start/end of file).
+      const prevChar = i > 0 ? source[i - 1] : "\n";
+      const nextChar = i + 1 < source.length ? source[i + 1] : "\n";
 
-      const prevOk = /[\s=({,;]/.test(prevChar) || i === 0;
-      const nextOk = /[\s)}\n\r,;]/.test(nextChar) || i + 1 >= source.length;
+      // An Agda identifier character is anything that is NOT whitespace
+      // and NOT one of the reserved delimiter characters.
+      const isIdentChar = (ch: string) =>
+        ch.length === 1 && !/[\s.;{}()@"']/.test(ch);
+
+      const prevOk = !isIdentChar(prevChar);
+      const nextOk = !isIdentChar(nextChar);
 
       if (prevOk && nextOk) {
         positions.push({

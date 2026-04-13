@@ -68,8 +68,14 @@ export async function applyBatchHoleReplacements(
 
   const edits: Array<{ start: number; end: number; expr: string; goalId: number }> = [];
   const failedGoalIds: number[] = [];
+  const seenGoalIds = new Set<number>();
 
   for (const { goalId, expr } of replacements) {
+    // Deduplicate: if the same goalId appears more than once, keep
+    // only the first replacement to prevent corrupting file offsets.
+    if (seenGoalIds.has(goalId)) continue;
+    seenGoalIds.add(goalId);
+
     const index = goalIds.indexOf(goalId);
     if (index < 0 || index >= allPositions.length) {
       failedGoalIds.push(goalId);
