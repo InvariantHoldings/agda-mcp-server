@@ -1,4 +1,7 @@
 import { test, expect } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { PathSandboxError } from "../../../src/repo-root.js";
@@ -106,3 +109,67 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
     expect(result.structuredContent.classification).toBe("invalid-path");
   });
 }
+
+// Regression for issue #39: agda_typecheck and agda_load must route through
+// the SAME AgdaSession instance passed to registerSessionLoadTools. Any
+// implementation that spins up a parallel session for agda_typecheck
+// desynchronizes currentFile/lastLoadedMtime/_build state between the two
+// tools. This test is Agda-free and is the fast guard rail for the SSOT
+// invariant — the full interaction is covered by the e2e test in
+// test/integration/mcp/mcp-remaining-tools-e2e.test.ts.
+test("agda_typecheck and agda_load share the injected AgdaSession instance", async () => {
+  clearToolManifest();
+  const server = createCapturingServer();
+
+  const root = mkdtempSync(resolve(tmpdir(), "agda-mcp-ssot-"));
+  const fileName = "Probe.agda";
+  writeFileSync(resolve(root, fileName), "module Probe where\n", "utf8");
+
+  const loadCalls: Array<{ sessionRef: object; filePath: string }> = [];
+  const loadResult = {
+    success: true,
+    errors: [],
+    warnings: [],
+    goals: [],
+    allGoalsText: "",
+    invisibleGoalCount: 0,
+    goalCount: 0,
+    hasHoles: false,
+    isComplete: true,
+    classification: "ok-complete",
+  };
+
+  const session = {
+    getLoadedFile() {
+      return null;
+    },
+    getGoalIds() {
+      return [];
+    },
+    isFileStale() {
+      return false;
+    },
+    load(this: object, filePath: string) {
+      loadCalls.push({ sessionRef: this, filePath });
+      return Promise.resolve(loadResult);
+    },
+    loadNoMetas: async () => loadResult,
+  };
+
+  try {
+    registerSessionLoadTools(server as unknown as McpServer, session as any, root);
+
+    const typecheck = await server.get("agda_typecheck")!.callback({ file: fileName });
+    expect(typecheck.isError).toBe(false);
+
+    const load = await server.get("agda_load")!.callback({ file: fileName });
+    expect(load.isError).toBe(false);
+
+    expect(loadCalls).toHaveLength(2);
+    expect(loadCalls[0].sessionRef).toBe(session);
+    expect(loadCalls[1].sessionRef).toBe(session);
+    expect(loadCalls[0].filePath).toBe(loadCalls[1].filePath);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
