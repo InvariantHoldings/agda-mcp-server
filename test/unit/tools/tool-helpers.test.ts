@@ -4,7 +4,11 @@ import type { AgdaSession } from "../../../src/agda-process.js";
 
 import {
   ToolInvocationError,
+  clearGlobalProvenance,
+  errorEnvelope,
   missingPathToolError,
+  okEnvelope,
+  registerGlobalProvenance,
   registerGoalTextTool,
   registerTextTool,
 } from "../../../src/tools/tool-helpers.js";
@@ -118,4 +122,83 @@ test("registerGoalTextTool invalid goal responses include text for the default s
   expect(result.structuredContent.classification).toBe("invalid-goal");
   expect(result.structuredContent.data.text).toBe("");
   expect(result.structuredContent.data.goalId).toBe(4);
+});
+
+test("registerGlobalProvenance values are merged into okEnvelope and errorEnvelope", () => {
+  clearGlobalProvenance();
+  registerGlobalProvenance("agdaVersion", "Agda 2.9.0");
+  registerGlobalProvenance("serverVersion", "0.6.4");
+
+  try {
+    const ok = okEnvelope({
+      tool: "agda_test",
+      summary: "test",
+      data: {},
+      provenance: { file: "/tmp/x.agda" },
+    });
+    expect(ok.provenance).toEqual({
+      agdaVersion: "Agda 2.9.0",
+      serverVersion: "0.6.4",
+      file: "/tmp/x.agda",
+    });
+
+    const err = errorEnvelope({
+      tool: "agda_test",
+      summary: "boom",
+      data: {},
+    });
+    expect(err.provenance).toEqual({
+      agdaVersion: "Agda 2.9.0",
+      serverVersion: "0.6.4",
+    });
+  } finally {
+    clearGlobalProvenance();
+  }
+});
+
+test("local provenance keys override global ones with the same name", () => {
+  clearGlobalProvenance();
+  registerGlobalProvenance("agdaVersion", "Agda 2.9.0");
+
+  try {
+    const envelope = okEnvelope({
+      tool: "agda_test",
+      summary: "test",
+      data: {},
+      provenance: { agdaVersion: "Agda 2.8.0", file: "/tmp/x.agda" },
+    });
+    expect(envelope.provenance).toEqual({
+      agdaVersion: "Agda 2.8.0",
+      file: "/tmp/x.agda",
+    });
+  } finally {
+    clearGlobalProvenance();
+  }
+});
+
+test("registerGlobalProvenance with nullish value removes the key", () => {
+  clearGlobalProvenance();
+  registerGlobalProvenance("agdaVersion", "Agda 2.9.0");
+  registerGlobalProvenance("agdaVersion", null);
+
+  try {
+    const envelope = okEnvelope({
+      tool: "agda_test",
+      summary: "test",
+      data: {},
+    });
+    expect(envelope.provenance).toBeUndefined();
+  } finally {
+    clearGlobalProvenance();
+  }
+});
+
+test("okEnvelope returns undefined provenance when global is empty and no local provided", () => {
+  clearGlobalProvenance();
+  const envelope = okEnvelope({
+    tool: "agda_test",
+    summary: "test",
+    data: {},
+  });
+  expect(envelope.provenance).toBeUndefined();
 });

@@ -29,6 +29,41 @@ export interface ToolEnvelope<T extends Record<string, unknown>> {
   provenance?: Record<string, unknown>;
 }
 
+// ── Global provenance ─────────────────────────────────────────────────
+//
+// Keys registered here are merged into every tool envelope's `provenance`
+// field by okEnvelope / errorEnvelope. Used for process-wide metadata
+// (Agda version, server version, toolchain hash) that every response
+// should carry so an agent doesn't have to re-ask. Tool-specific
+// provenance keys from the call site always override global keys with
+// the same name.
+
+const globalProvenance: Record<string, unknown> = {};
+
+export function registerGlobalProvenance(key: string, value: unknown): void {
+  if (value === undefined || value === null) {
+    delete globalProvenance[key];
+    return;
+  }
+  globalProvenance[key] = value;
+}
+
+export function clearGlobalProvenance(): void {
+  for (const key of Object.keys(globalProvenance)) {
+    delete globalProvenance[key];
+  }
+}
+
+function mergeProvenance(
+  local: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const globalKeys = Object.keys(globalProvenance);
+  if (globalKeys.length === 0) {
+    return local;
+  }
+  return { ...globalProvenance, ...(local ?? {}) };
+}
+
 export class ToolInvocationError<T extends Record<string, unknown> = Record<string, unknown>> extends Error {
   classification: string;
   diagnostics: ToolDiagnostic[];
@@ -121,7 +156,7 @@ export function okEnvelope<T extends Record<string, unknown>>(args: {
     data: args.data,
     diagnostics: args.diagnostics ?? [],
     stale: args.stale,
-    provenance: args.provenance,
+    provenance: mergeProvenance(args.provenance),
   };
 }
 
@@ -142,7 +177,7 @@ export function errorEnvelope<T extends Record<string, unknown>>(args: {
     data: args.data,
     diagnostics: args.diagnostics ?? [errorDiagnostic(args.summary)],
     stale: args.stale,
-    provenance: args.provenance,
+    provenance: mergeProvenance(args.provenance),
   };
 }
 
