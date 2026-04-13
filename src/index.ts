@@ -16,7 +16,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -50,13 +50,25 @@ const session = new AgdaSession(PROJECT_ROOT);
 // re-call agda_show_version per tool use or infer from context. Version
 // capture is best-effort: if `agda --version` fails, the provenance
 // entry is simply omitted so tools continue to work.
+//
+// SECURITY: we use execFileSync, not execSync, because agdaBin is derived
+// from PROJECT_ROOT which is derived from the AGDA_MCP_ROOT env var (and
+// can also be the AGDA_BIN env var directly). execSync's string form runs
+// the command through `/bin/sh -c`, which would interpret any shell
+// metacharacter in an attacker-controlled env var as a command separator
+// (CVE class: CWE-78). execFileSync calls execvp() on the raw path with
+// the args array, so the shell is never involved and no metacharacter
+// interpretation occurs. The `shell: false` option is the default and is
+// passed explicitly as belt-and-suspenders to prevent a future maintainer
+// from re-enabling shell semantics.
 registerGlobalProvenance("serverVersion", getServerVersion());
 try {
   const agdaBin = findAgdaBinary(PROJECT_ROOT);
-  const rawVersion = execSync(`${agdaBin} --version`, {
+  const rawVersion = execFileSync(agdaBin, ["--version"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
     timeout: 5000,
+    shell: false,
   });
   const firstLine = rawVersion.split(/\r?\n/u)[0]?.trim();
   if (firstLine) {
