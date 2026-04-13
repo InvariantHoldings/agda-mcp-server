@@ -1,6 +1,34 @@
 import { describe, test, expect } from "vitest";
 
-import { resolveGiveReplacementText } from "../../../src/protocol/responses/proof-actions.js";
+import {
+  hasReplacementText,
+  resolveGiveReplacementText,
+} from "../../../src/protocol/responses/proof-actions.js";
+
+describe("hasReplacementText", () => {
+  test("rejects null", () => {
+    expect(hasReplacementText(null)).toBe(false);
+  });
+
+  test("rejects undefined", () => {
+    expect(hasReplacementText(undefined)).toBe(false);
+  });
+
+  test("rejects empty string", () => {
+    expect(hasReplacementText("")).toBe(false);
+  });
+
+  test("accepts non-empty string", () => {
+    expect(hasReplacementText("refl")).toBe(true);
+  });
+
+  test("accepts whitespace-only string", () => {
+    // Intentional: Agda could return whitespace as a valid (if weird)
+    // replacement, and rejecting it would be overreach. If this ever
+    // becomes a problem the caller can tighten the guard.
+    expect(hasReplacementText(" ")).toBe(true);
+  });
+});
 
 describe("resolveGiveReplacementText", () => {
   test("Give_NoParen returns input expression as-is", () => {

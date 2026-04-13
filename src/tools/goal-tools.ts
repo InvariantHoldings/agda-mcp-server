@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
 import { registerGoalTextTool } from "./tool-helpers.js";
 import { applyEditAndReload } from "../session/reload-and-diagnose.js";
+import { hasReplacementText } from "../protocol/responses/proof-actions.js";
 
 export function register(
   server: McpServer,
@@ -119,7 +120,7 @@ export function register(
       output += result.result ? `**Result:** \`${result.result}\`\n` : `Expression accepted.\n`;
 
       if (shouldWrite && session.currentFile) {
-        if (result.replacementText != null) {
+        if (hasReplacementText(result.replacementText)) {
           output += await applyEditAndReload(session, goalIdsBefore, {
             kind: "replace-hole", goalId, expr: result.replacementText,
           });
@@ -154,7 +155,7 @@ export function register(
         : `Refinement applied. Call \`agda_metas\` to see new goals.\n`;
 
       if (shouldWrite && session.currentFile) {
-        if (typeof result.replacementText === "string" && result.replacementText.length > 0) {
+        if (hasReplacementText(result.replacementText)) {
           output += await applyEditAndReload(session, goalIdsBefore, {
             kind: "replace-hole", goalId, expr: result.replacementText,
           });
@@ -189,7 +190,7 @@ export function register(
         : "Refinement applied. Call `agda_metas` to inspect resulting goals.\n";
 
       if (shouldWrite && session.currentFile) {
-        if (result.replacementText != null) {
+        if (hasReplacementText(result.replacementText)) {
           output += await applyEditAndReload(session, goalIdsBefore, {
             kind: "replace-hole", goalId, expr: result.replacementText,
           });
@@ -224,7 +225,7 @@ export function register(
         : "Introduction applied. Call `agda_metas` to inspect resulting goals.\n";
 
       if (shouldWrite && session.currentFile) {
-        if (result.replacementText != null) {
+        if (hasReplacementText(result.replacementText)) {
           output += await applyEditAndReload(session, goalIdsBefore, {
             kind: "replace-hole", goalId, expr: result.replacementText,
           });
@@ -254,10 +255,14 @@ export function register(
       let output = `## Auto-solve ?${goalId}\n\n`;
       output += result.solution ? `**Solution:** \`${result.solution}\`\n` : `No automatic solution found.\n`;
 
-      if (shouldWrite && session.currentFile && result.solution) {
-        output += await applyEditAndReload(session, goalIdsBefore, {
-          kind: "replace-hole", goalId, expr: result.solution,
-        });
+      if (shouldWrite && session.currentFile) {
+        if (hasReplacementText(result.solution)) {
+          output += await applyEditAndReload(session, goalIdsBefore, {
+            kind: "replace-hole", goalId, expr: result.solution,
+          });
+        } else {
+          output += `\nAuto returned no solution, so the file was left unchanged.\n`;
+        }
       }
       return output;
     },

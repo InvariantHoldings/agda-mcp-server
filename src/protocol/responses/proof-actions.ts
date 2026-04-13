@@ -28,6 +28,22 @@ function renderGiveResult(val: string): string {
 }
 
 /**
+ * Guard used by every proof-action tool before writing a result to
+ * the source file. A write should only happen when the candidate is
+ * a non-null, non-empty string. An empty string would remove the
+ * hole marker without replacing it, silently corrupting the source.
+ *
+ * Unified helper to eliminate drift between give/refine/refine_exact/
+ * intro/auto callbacks (each was subtly different — see PR #37
+ * audit H4).
+ */
+export function hasReplacementText(
+  candidate: string | null | undefined,
+): candidate is string {
+  return typeof candidate === "string" && candidate.length > 0;
+}
+
+/**
  * Determine the replacement text for a give-like action.
  *
  * Agda's GiveResult tells us:
