@@ -181,7 +181,7 @@ export function register(
     server,
     session,
     name: "agda_solve_all",
-    description: "Attempt to solve all goals that have unique solutions.",
+    description: "Attempt to solve all goals that have unique solutions. By default, writes the solutions to the file and reloads. File writes are capped at 512 KiB of Agda source; larger files are refused.",
     category: "proof",
     protocolCommands: ["Cmd_solveAll"],
     inputSchema: {
@@ -215,7 +215,7 @@ export function register(
     server,
     session,
     name: "agda_solve_one",
-    description: "Attempt to solve one goal that has a unique solution using Agda's exact Cmd_solveOne command.",
+    description: "Attempt to solve one goal that has a unique solution using Agda's exact Cmd_solveOne command. By default, writes the solution to the file and reloads. File writes are capped at 512 KiB of Agda source; larger files are refused.",
     category: "proof",
     protocolCommands: ["Cmd_solveOne"],
     inputSchema: {

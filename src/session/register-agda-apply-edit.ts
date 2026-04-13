@@ -82,7 +82,7 @@ export function registerAgdaApplyEdit(
     server,
     name: "agda_apply_edit",
     description:
-      "Apply a targeted text substitution to an Agda file and reload it. For edits that aren't goal actions — adding imports, renaming symbols, fixing typos. oldText must match exactly once unless `occurrence` is provided. Auto-reloads the file after writing so the Agda session stays in sync. Runs even when the session is in a type-error state, since the whole point is to repair that state.",
+      "Apply a targeted text substitution to an Agda file and reload it. For edits that aren't goal actions — adding imports, renaming symbols, fixing typos. oldText must match exactly once unless `occurrence` is provided. Auto-reloads the file after writing so the Agda session stays in sync. Runs even when the session is in a type-error state, since the whole point is to repair that state. Restricted to Agda source files (.agda, .lagda, .lagda.{md,rst,tex,org,typ}) and to source files ≤ 512 KiB; refuses symlink targets and out-of-sandbox paths.",
     category: "session",
     inputSchema: {
       file: z.string().describe("Path to the .agda file (relative to repo root or absolute)"),

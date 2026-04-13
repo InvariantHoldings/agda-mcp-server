@@ -9,6 +9,13 @@ import { registerGoalTextTool } from "./tool-helpers.js";
 import { applyEditAndReload } from "../session/reload-and-diagnose.js";
 import { hasReplacementText } from "../protocol/responses/proof-actions.js";
 
+// Appended to every write-capable proof-action tool description so
+// MCP clients surface the 512 KiB guard in their introspection. The
+// cap is shared with `agda_apply_edit` and the raw edit primitives
+// in `apply-proof-edit.ts`; see `MAX_AGDA_SOURCE_BYTES` there.
+const WRITE_LIMITS_NOTE =
+  " File writes are capped at 512 KiB of Agda source; larger files are refused.";
+
 export function register(
   server: McpServer,
   session: AgdaSession,
@@ -69,7 +76,7 @@ export function register(
     server,
     session,
     name: "agda_case_split",
-    description: "Case-split on a variable in a goal. Returns the new function clauses that replace the current clause. By default, writes changes to the file and reloads.",
+    description: "Case-split on a variable in a goal. Returns the new function clauses that replace the current clause. By default, writes changes to the file and reloads." + WRITE_LIMITS_NOTE,
     category: "proof",
     protocolCommands: ["Cmd_make_case"],
     inputSchema: {
@@ -103,7 +110,7 @@ export function register(
     server,
     session,
     name: "agda_give",
-    description: "Fill a goal with an expression. If the expression type-checks against the goal type, the goal is solved. By default, writes the change to the file and reloads.",
+    description: "Fill a goal with an expression. If the expression type-checks against the goal type, the goal is solved. By default, writes the change to the file and reloads." + WRITE_LIMITS_NOTE,
     category: "proof",
     protocolCommands: ["Cmd_give"],
     inputSchema: {
@@ -136,7 +143,7 @@ export function register(
     server,
     session,
     name: "agda_refine",
-    description: "Refine a goal by applying a function. Creates new subgoals for the function's arguments. By default, writes changes to the file and reloads.",
+    description: "Refine a goal by applying a function. Creates new subgoals for the function's arguments. By default, writes changes to the file and reloads." + WRITE_LIMITS_NOTE,
     category: "proof",
     protocolCommands: ["Cmd_refine_or_intro"],
     inputSchema: {
@@ -171,7 +178,7 @@ export function register(
     server,
     session,
     name: "agda_refine_exact",
-    description: "Refine a goal using Agda's exact Cmd_refine command. By default, writes changes to the file and reloads.",
+    description: "Refine a goal using Agda's exact Cmd_refine command. By default, writes changes to the file and reloads." + WRITE_LIMITS_NOTE,
     category: "proof",
     protocolCommands: ["Cmd_refine"],
     inputSchema: {
@@ -206,7 +213,7 @@ export function register(
     server,
     session,
     name: "agda_intro",
-    description: "Introduce a lambda or constructor using Agda's exact Cmd_intro command. By default, writes changes to the file and reloads.",
+    description: "Introduce a lambda or constructor using Agda's exact Cmd_intro command. By default, writes changes to the file and reloads." + WRITE_LIMITS_NOTE,
     category: "proof",
     protocolCommands: ["Cmd_intro"],
     inputSchema: {
@@ -241,7 +248,7 @@ export function register(
     server,
     session,
     name: "agda_auto",
-    description: "Attempt to automatically solve a goal using Agda's proof search. By default, writes the solution to the file and reloads.",
+    description: "Attempt to automatically solve a goal using Agda's proof search. By default, writes the solution to the file and reloads." + WRITE_LIMITS_NOTE,
     category: "proof",
     protocolCommands: ["Cmd_autoOne"],
     inputSchema: {

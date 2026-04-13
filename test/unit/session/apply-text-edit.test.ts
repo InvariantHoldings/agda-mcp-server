@@ -1,9 +1,12 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, readdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { applyTextEdit } from "../../../src/session/apply-proof-edit.js";
+import {
+  MAX_AGDA_SOURCE_BYTES,
+  applyTextEdit,
+} from "../../../src/session/apply-proof-edit.js";
 
 describe("applyTextEdit", () => {
   let tempDir: string;
@@ -209,6 +212,65 @@ describe("applyTextEdit", () => {
       const result = await applyTextEdit(tempFile, "𝟘", "zero");
       expect(result.applied).toBe(true);
       expect(await readFile(tempFile, "utf-8")).toBe("foo zero baz");
+    });
+
+    test("refuses to follow a symlink at the canonical path (O_NOFOLLOW)", async () => {
+      // Simulate a post-canonicalization symlink race: the target
+      // path is a symlink, not a regular file. readAgdaSourceFile
+      // opens with O_NOFOLLOW, so the read fails with ELOOP rather
+      // than silently following the symlink to an arbitrary target.
+      const realTarget = join(tempDir, "real.txt");
+      const linkPath = join(tempDir, "Linked.agda");
+      await writeFile(realTarget, "secret-outside-sandbox");
+      await symlink(realTarget, linkPath);
+
+      const result = await applyTextEdit(linkPath, "secret", "oops");
+      expect(result.applied).toBe(false);
+      // ELOOP is the POSIX errno for "a symlink was encountered
+      // while resolving a path with O_NOFOLLOW set".
+      expect(result.message).toContain("ELOOP");
+      expect(result.message.toLowerCase()).toContain("symlink");
+      // Real target is untouched.
+      expect(await readFile(realTarget, "utf-8")).toBe("secret-outside-sandbox");
+    });
+
+    test("refuses a file larger than MAX_AGDA_SOURCE_BYTES", async () => {
+      // Write a file one byte over the cap. The helper stats the
+      // fd before reading, so we never allocate the content.
+      const oversized = "x".repeat(MAX_AGDA_SOURCE_BYTES + 1);
+      await writeFile(tempFile, oversized);
+
+      const result = await applyTextEdit(tempFile, "x", "y");
+      expect(result.applied).toBe(false);
+      expect(result.message).toContain("too large");
+      expect(result.message).toContain(`${MAX_AGDA_SOURCE_BYTES}`);
+      // File still intact.
+      expect((await readFile(tempFile, "utf-8")).length).toBe(oversized.length);
+    });
+
+    test("accepts a file exactly at the cap", async () => {
+      // Off-by-one check: the cap is inclusive, so length ===
+      // MAX_AGDA_SOURCE_BYTES must still succeed.
+      const exact = "y".repeat(MAX_AGDA_SOURCE_BYTES);
+      await writeFile(tempFile, exact);
+
+      const result = await applyTextEdit(tempFile, "y", "z", { occurrence: 1 });
+      expect(result.applied).toBe(true);
+    });
+
+    test("refuses an edit whose RESULT would exceed the cap", async () => {
+      // Start well under the cap, but replace the anchor with a
+      // newText that pushes the result past the limit by one byte.
+      // The post-edit size check must catch this even though the
+      // read succeeded.
+      await writeFile(tempFile, "anchor");
+      const huge = "z".repeat(MAX_AGDA_SOURCE_BYTES + 1);
+
+      const result = await applyTextEdit(tempFile, "anchor", huge);
+      expect(result.applied).toBe(false);
+      expect(result.message).toContain("exceeds");
+      // File untouched.
+      expect(await readFile(tempFile, "utf-8")).toBe("anchor");
     });
   });
 });
