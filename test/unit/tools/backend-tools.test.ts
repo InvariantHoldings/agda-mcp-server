@@ -21,6 +21,7 @@ test("agda_compile returns ok=false for a missing file", async () => {
   clearToolManifest();
   const server = createCapturingServer();
   const session = {
+    getAgdaVersion: () => null,
     backend: {
       compile: async () => {
         throw new Error("unreachable");
@@ -46,6 +47,7 @@ test("agda_compile returns invalid-path for sandbox escapes", async () => {
   clearToolManifest();
   const server = createCapturingServer();
   const session = {
+    getAgdaVersion: () => null,
     backend: {
       compile: async () => {
         throw new Error("unreachable");

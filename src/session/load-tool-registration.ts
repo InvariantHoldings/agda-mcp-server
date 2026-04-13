@@ -7,7 +7,7 @@ import { z } from "zod";
 import { existsSync } from "node:fs";
 import { relative } from "node:path";
 
-import { AgdaSession, typeCheckBatch } from "../agda-process.js";
+import { AgdaSession, filePathDescription, typeCheckBatch } from "../agda-process.js";
 import {
   errorDiagnostic,
   errorEnvelope,
@@ -136,6 +136,8 @@ export function registerSessionLoadTools(
   } = {},
 ): void {
   const resolveInputFile = options.resolveInputFile ?? resolveFileWithinRoot;
+  // filePathDescription takes AgdaVersion | undefined (not null), hence ?? undefined.
+  const detectedVersion = session.getAgdaVersion() ?? undefined;
 
   registerStructuredTool({
     server,
@@ -144,7 +146,7 @@ export function registerSessionLoadTools(
     category: "session",
     protocolCommands: ["Cmd_load", "Cmd_metas"],
     inputSchema: {
-      file: z.string().describe("Path to an Agda source file (.agda or literate .lagda*) — relative to repo root or absolute"),
+      file: z.string().describe(filePathDescription(detectedVersion)),
     },
     outputDataSchema: loadDataSchema,
     callback: async ({ file }: { file: string }) => {
@@ -252,7 +254,7 @@ export function registerSessionLoadTools(
     category: "session",
     protocolCommands: ["Cmd_load_no_metas"],
     inputSchema: {
-      file: z.string().describe("Path to an Agda source file (.agda or literate .lagda*) — relative to repo root or absolute"),
+      file: z.string().describe(filePathDescription(detectedVersion)),
     },
     outputDataSchema: loadDataSchema,
     callback: async ({ file }: { file: string }) => {
@@ -333,7 +335,7 @@ export function registerSessionLoadTools(
     category: "session",
     protocolCommands: ["Cmd_load", "Cmd_metas"],
     inputSchema: {
-      file: z.string().describe("Path to an Agda source file (.agda or literate .lagda*) — relative to repo root or absolute"),
+      file: z.string().describe(filePathDescription(detectedVersion)),
     },
     outputDataSchema: typecheckDataSchema,
     callback: async ({ file }: { file: string }) => {

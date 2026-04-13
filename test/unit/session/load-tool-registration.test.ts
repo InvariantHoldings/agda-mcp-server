@@ -20,6 +20,9 @@ function createCapturingServer() {
 
 function createSessionStub() {
   return {
+    getAgdaVersion() {
+      return null;
+    },
     getLoadedFile() {
       return null;
     },

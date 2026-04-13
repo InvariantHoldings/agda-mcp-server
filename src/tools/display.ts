@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { relative } from "node:path";
 import { existsSync } from "node:fs";
-import { AgdaSession } from "../agda-process.js";
+import { AgdaSession, filePathDescription } from "../agda-process.js";
 import {
   missingPathToolError,
   registerGoalTextTool,
@@ -25,7 +25,7 @@ export function register(
     description: "Load highlighting information for a file using Agda's Cmd_load_highlighting_info.",
     category: "highlighting",
     protocolCommands: ["Cmd_load_highlighting_info"],
-    inputSchema: { file: z.string().describe("Path to an Agda source file (.agda or literate .lagda*) — relative to repo root or absolute") },
+    inputSchema: { file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)) },
     callback: async ({ file }: { file: string }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(requestedFilePath)) {
@@ -44,7 +44,7 @@ export function register(
     category: "highlighting",
     protocolCommands: ["Cmd_tokenHighlighting"],
     inputSchema: {
-      file: z.string().describe("Path to an Agda source file (.agda or literate .lagda*) — relative to repo root or absolute"),
+      file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
     },
     callback: async ({ file }: { file: string }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
