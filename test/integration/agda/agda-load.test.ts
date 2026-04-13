@@ -1,7 +1,8 @@
 import { test, expect } from "vitest";
 import { resolve } from "node:path";
 
-import { AgdaSession, typeCheckBatch } from "../../../src/agda-process.js";
+import { AgdaSession } from "../../../src/agda-process.js";
+import { typeCheckDisposable } from "../../helpers/typecheck-disposable.js";
 import {
   detectAgdaVersion,
   parseAgdaVersion,
@@ -282,13 +283,13 @@ itSince("2.6.0")("UniverseCumulativity.agda: loads with --cumulativity", async (
 
 // ── typecheck matches load ───────────────────────────────
 
-it("typeCheckBatch matches agda_load for clean file", async () => {
-  const batch = await typeCheckBatch("CompleteFixture.agda", FIXTURES);
+it("typeCheckDisposable matches agda_load for clean file", async () => {
+  const batch = await typeCheckDisposable("CompleteFixture.agda", FIXTURES);
   expect(batch.success).toBe(true);
 });
 
-it("typeCheckBatch matches agda_load for type error", async () => {
-  const batch = await typeCheckBatch("TypeError.agda", FIXTURES);
+it("typeCheckDisposable matches agda_load for type error", async () => {
+  const batch = await typeCheckDisposable("TypeError.agda", FIXTURES);
   expect(batch.success).toBe(false);
   expect(batch.errors.length >= 1).toBeTruthy();
 });

@@ -2,7 +2,8 @@ import { test, expect } from "vitest";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 
-import { AgdaSession, typeCheckBatch } from "../../../src/agda-process.js";
+import { AgdaSession } from "../../../src/agda-process.js";
+import { typeCheckDisposable } from "../../helpers/typecheck-disposable.js";
 import { fixtureMatrix } from "../../fixtures/agda/fixture-matrix.js";
 import {
   detectAgdaVersion,
@@ -110,7 +111,7 @@ for (const fixture of selectedFixtures()) {
       }
 
       if (phases.has("batch")) {
-        const batch = await timedStep(ctx, "batch", () => typeCheckBatch(fixture.name, FIXTURES));
+        const batch = await timedStep(ctx, "batch", () => typeCheckDisposable(fixture.name, FIXTURES));
         expect(batch.success).toBe(fixture.expectedSuccess);
         expect(batch.classification).toBe(fixture.expectedClassification);
         expect(
