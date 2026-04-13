@@ -50,6 +50,13 @@ export function registerAgdaApplyEdit(
         return `## agda_apply_edit\n\n**Error:** File not found: ${file}\n`;
       }
 
+      // Capture goal IDs before the edit so the reload can report a
+      // {solved, new} diff. Only meaningful when the edited file is the
+      // currently loaded one — otherwise the "before" set is empty and
+      // the diff degenerates to "all new".
+      const isLoadedFile = session.currentFile === resolvedPath;
+      const goalIdsBefore = isLoadedFile ? session.getGoalIds() : undefined;
+
       const editResult = await applyTextEdit(
         resolvedPath,
         oldText as string,
@@ -69,7 +76,7 @@ export function registerAgdaApplyEdit(
       // Reload to resync session state with the new on-disk file.
       // If this file is the currently loaded one, session.currentFile
       // is updated; otherwise session.load() sets it to the edited file.
-      output += await reloadAndDiagnose(session, resolvedPath, "\n");
+      output += await reloadAndDiagnose(session, resolvedPath, "\n", goalIdsBefore);
 
       return output;
     },

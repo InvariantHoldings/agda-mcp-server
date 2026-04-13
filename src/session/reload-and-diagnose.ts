@@ -11,6 +11,49 @@ import { applyProofEdit, applyBatchHoleReplacements } from "./apply-proof-edit.j
 import type { ProofEdit, ApplyEditResult, BatchApplyResult } from "./apply-proof-edit.js";
 import type { LoadResult } from "../agda/types.js";
 
+// ── Goal-ID diff ────────────────────────────────────────────────────
+
+/**
+ * Diff of goal IDs across a reload.
+ *
+ * - `solved`   — IDs that existed before the reload but not after
+ * - `introduced` — IDs that are new after the reload (e.g. subgoals
+ *                  produced by refine/case-split)
+ * - `remaining` — IDs that exist in both sets
+ *
+ * Helps agents track goals across edits without having to re-identify
+ * by type after every reload. This addresses the §4.3 ask in
+ * docs/bug-reports/agent-ux-observations.md — our best-effort version
+ * relies on set diff rather than declaration-site identity, which is
+ * enough for the common "what disappeared, what appeared" question.
+ */
+export interface GoalIdDiff {
+  solved: number[];
+  introduced: number[];
+  remaining: number[];
+}
+
+export function diffGoalIds(before: number[], after: number[]): GoalIdDiff {
+  const beforeSet = new Set(before);
+  const afterSet = new Set(after);
+  const solved = before.filter((id) => !afterSet.has(id));
+  const introduced = after.filter((id) => !beforeSet.has(id));
+  const remaining = before.filter((id) => afterSet.has(id));
+  return { solved, introduced, remaining };
+}
+
+function formatGoalIdDiff(diff: GoalIdDiff): string {
+  const parts: string[] = [];
+  if (diff.solved.length > 0) {
+    parts.push(`solved ${diff.solved.map((id) => `?${id}`).join(", ")}`);
+  }
+  if (diff.introduced.length > 0) {
+    parts.push(`new ${diff.introduced.map((id) => `?${id}`).join(", ")}`);
+  }
+  if (parts.length === 0) return "";
+  return `Goal diff: ${parts.join("; ")}.\n`;
+}
+
 // ── Reload diagnostics ──────────────────────────────────────────────
 
 /**
@@ -19,11 +62,16 @@ import type { LoadResult } from "../agda/types.js";
  * Wraps `session.load()` in try/catch so a transient Agda-process
  * failure after a successful file write still returns a usable message
  * rather than propagating an exception.
+ *
+ * When `goalIdsBefore` is provided, the summary also includes a goal
+ * diff (solved / new / remaining) computed by comparing the
+ * pre-reload IDs to the post-reload IDs from the session.
  */
 export async function reloadAndDiagnose(
   session: AgdaSession,
   filePath: string,
   preamble: string,
+  goalIdsBefore?: number[],
 ): Promise<string> {
   let output = preamble;
   try {
@@ -38,6 +86,11 @@ export async function reloadAndDiagnose(
     }
     if (loadResult.warnings.length > 0) {
       output += `**Warnings:** ${loadResult.warnings.join("; ")}\n`;
+    }
+    if (goalIdsBefore !== undefined) {
+      const diff = diffGoalIds(goalIdsBefore, session.getGoalIds());
+      const formatted = formatGoalIdDiff(diff);
+      if (formatted) output += formatted;
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -78,7 +131,9 @@ export async function applyEditAndReload(
   }
 
   if (editResult.applied) {
-    return reloadAndDiagnose(session, filePath, `\n${editResult.message}\n`);
+    return reloadAndDiagnose(
+      session, filePath, `\n${editResult.message}\n`, goalIdsBefore,
+    );
   }
 
   // Edit failed — session state is out of sync with the file on disk.
@@ -116,7 +171,9 @@ export async function applyBatchEditAndReload(
   }
 
   if (batchResult.appliedCount > 0) {
-    return reloadAndDiagnose(session, filePath, `\n${batchResult.message}\n`);
+    return reloadAndDiagnose(
+      session, filePath, `\n${batchResult.message}\n`, goalIdsBefore,
+    );
   }
 
   // No edits applied — resync session with unchanged file.
