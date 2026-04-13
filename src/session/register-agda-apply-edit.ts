@@ -16,19 +16,20 @@ import { realpathSync } from "node:fs";
 import { z } from "zod";
 
 import { AgdaSession } from "../agda-process.js";
-import { resolveFileWithinRoot } from "../repo-root.js";
+import { PathSandboxError, resolveExistingPathWithinRoot } from "../repo-root.js";
 import { registerTextTool } from "../tools/tool-helpers.js";
 import { applyTextEdit } from "./apply-proof-edit.js";
 import { reloadAndDiagnose } from "./reload-and-diagnose.js";
 
 /**
- * Canonicalize a filesystem path for identity comparison. Resolves
- * symlinks and normalizes `..`, trailing slashes, etc. If the path
- * does not exist, falls back to the original string (the file may
- * not yet exist, which is fine — a later readFile will surface the
- * real error).
+ * Canonicalize `session.currentFile` for identity comparison. The
+ * session's path is set by `agda_load`, which does not realpath —
+ * so a direct `===` against a just-realpathed target would miss
+ * symlink and `..` equivalences. If realpath fails (e.g. the
+ * session file was deleted externally), fall back to the literal
+ * string so the comparison is at least self-consistent.
  */
-function canonicalize(path: string): string {
+function canonicalizeLoadedFile(path: string): string {
   try {
     return realpathSync(path);
   } catch {
@@ -64,33 +65,46 @@ export function registerAgdaApplyEdit(
         .describe("1-based occurrence number when oldText appears multiple times."),
     },
     callback: async ({ file, oldText, newText, occurrence }) => {
-      const resolvedPath = resolveFileWithinRoot(repoRoot, file as string);
-
-      // Do NOT probe existence here with existsSync: that would be a
-      // classic TOCTOU race (file deleted between the check and the
-      // read). applyTextEdit now catches readFile errors itself and
-      // returns a structured {applied: false, message} with the
-      // underlying errno, so we get a better message and no race.
+      // Resolve AND canonicalize within the project root. Unlike the
+      // lexical-only `resolveFileWithinRoot`, this helper runs
+      // `realpath` on the target and verifies the canonical path is
+      // still inside the canonical root — so a symlink that lexically
+      // lives under the project root but physically points outside
+      // can't be used to escape the sandbox when we write to disk.
+      // The returned canonical path is also the form we want to hand
+      // to `session.load()` so `session.currentFile` stays canonical
+      // for future reload-detection.
+      let canonicalPath: string;
+      try {
+        canonicalPath = resolveExistingPathWithinRoot(repoRoot, file as string);
+      } catch (err) {
+        if (err instanceof PathSandboxError) {
+          return `## agda_apply_edit\n\n**Error:** ${err.message}\n`;
+        }
+        // realpath failure (ENOENT, permissions, etc.) — the file
+        // either doesn't exist yet or is unreadable. Surface a
+        // structured failure rather than throwing.
+        const msg = err instanceof Error ? err.message : String(err);
+        return `## agda_apply_edit\n\n**Error:** Could not resolve file path: ${msg}\n`;
+      }
 
       // Capture goal IDs before the edit so the reload can report a
       // {solved, new} diff. Only meaningful when the edited file is
       // the currently loaded one — otherwise the "before" set is
       // empty and the diff degenerates to "all new".
       //
-      // Compare canonicalized paths so symlinks, `..` segments, and
-      // trailing slashes don't cause us to miss the "is this the
-      // loaded file?" check. A plain string compare on
-      // session.currentFile === resolvedPath silently fails when one
-      // side was resolved via realpath and the other wasn't.
-      const canonicalResolved = canonicalize(resolvedPath);
+      // session.currentFile is whatever `agda_load` happened to be
+      // called with, which may be non-canonical. Canonicalize it
+      // before comparing so symlink and `..` differences don't cause
+      // us to miss the "is this the loaded file?" check.
       const canonicalLoaded = session.currentFile
-        ? canonicalize(session.currentFile)
+        ? canonicalizeLoadedFile(session.currentFile)
         : null;
-      const isLoadedFile = canonicalLoaded === canonicalResolved;
+      const isLoadedFile = canonicalLoaded === canonicalPath;
       const goalIdsBefore = isLoadedFile ? session.getGoalIds() : undefined;
 
       const editResult = await applyTextEdit(
-        resolvedPath,
+        canonicalPath,
         oldText as string,
         newText as string,
         { occurrence: occurrence as number | undefined },
@@ -105,10 +119,12 @@ export function registerAgdaApplyEdit(
 
       output += `${editResult.message}\n`;
 
-      // Reload to resync session state with the new on-disk file.
-      // If this file is the currently loaded one, session.currentFile
-      // is updated; otherwise session.load() sets it to the edited file.
-      output += await reloadAndDiagnose(session, resolvedPath, "\n", goalIdsBefore);
+      // Pass the canonical path to the reload so `session.currentFile`
+      // stays in the same normalized form used by the loaded-file
+      // comparison above. Without this, a later edit could feed a
+      // non-canonical path to `session.load()` and break reload
+      // detection on subsequent calls.
+      output += await reloadAndDiagnose(session, canonicalPath, "\n", goalIdsBefore);
 
       return output;
     },

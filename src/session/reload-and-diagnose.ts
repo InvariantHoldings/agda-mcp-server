@@ -194,7 +194,14 @@ export async function applyBatchEditAndReload(
   filePath: string,
   rawSolutions: Array<{ goalId: number; expr: string }>,
 ): Promise<string> {
-  const staleMsg = stalenessBlockMessage(session);
+  // `session.isFileStale()` compares the session's currently-loaded
+  // file against its recorded mtime; it has no notion of an
+  // arbitrary `filePath`. Only run the guard when the batch edit is
+  // actually targeting the currently-loaded file, otherwise the
+  // warning text would be misleading ("the loaded file changed on
+  // disk" when in fact we're editing a different file entirely).
+  const staleMsg =
+    filePath === session.currentFile ? stalenessBlockMessage(session) : null;
   if (staleMsg) return staleMsg;
 
   let batchResult: BatchApplyResult;
