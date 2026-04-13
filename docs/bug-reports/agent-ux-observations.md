@@ -292,7 +292,7 @@ has depth/mode flags; the MCP tool exposes none.
 parameters. Let an agent say "try auto with depth 5 and `+helper-module`"
 before giving up.
 
-### 4.3 Goal renumbering after edits is opaque
+### 4.3 Goal renumbering after edits is opaque — **✓ shipped (partial)**
 
 Every time an agent edits-then-reloads, goal IDs can renumber. `agda_reload`
 currently reports the post-reload state but doesn't *map* old IDs to new
@@ -302,6 +302,15 @@ type.
 **Ask:** `agda_reload` returns `{solved: [oldIds], new: [newIds],
 renumbered: [{old, new}]}` with a best-effort stable identity based on the
 declaration site, not the metavariable counter.
+
+**Status:** the set-diff half of this ask shipped with the write-back
+work on PR #37. After any proof-action reload, tool output now
+includes a `Goal diff: solved ?X; new ?Y.` line computed by
+`diffGoalIds(goalIdsBefore, goalIdsAfter)` in
+`src/session/reload-and-diagnose.ts`. The `renumbered` mapping
+(declaration-site-stable identity across edits) is still an open
+follow-up — it needs source-position tracking across edits and is
+harder than the set diff.
 
 ---
 
@@ -382,14 +391,14 @@ null-prototype object and refuses `__proto__` / `constructor` /
 
 ---
 
-## 7. Write-back for proof actions — **→ tracked on `feature/write-proof-actions-to-file`**
+## 7. Write-back for proof actions — **✓ shipped (PR #37)**
 
 An agent following Emacs semantics expects `agda_give`, `agda_refine`,
 `agda_case_split`, `agda_auto`, `agda_solve_one`, and `agda_solve_all` to
-rewrite the source file. Today some of them only mutate the interactive
-session's in-memory state; the agent has to round-trip through a separate
-`Edit` call, and any missed `Edit` silently desynchronizes the server state
-from disk state.
+rewrite the source file. Previously some of them only mutated the
+interactive session's in-memory state; the agent had to round-trip
+through a separate `Edit` call, and any missed `Edit` silently
+desynchronized the server state from disk state.
 
 **Ask:** every proof-action tool should either (a) write back to disk by
 default and return the exact diff that was applied, or (b) take an explicit
@@ -398,35 +407,49 @@ default. Pair this with a blessed `agda_apply_edit(file, old, new)` that
 performs the edit AND invalidates the server's interactive state AND
 reloads, all in one call.
 
-**Status:** tracked on the `feature/write-proof-actions-to-file` branch.
-That branch ships persist-by-default `agda_give` / `agda_solve_*` /
-`agda_case_split`, an `agda_apply_edit` round-trip primitive, and
-auto-reload after edit, plus fixture tests for each.
+**Status:** shipped in PR #37. All eight proof-action tools
+(`agda_give`, `agda_refine`, `agda_refine_exact`, `agda_intro`,
+`agda_auto`, `agda_case_split`, `agda_solve_one`, `agda_solve_all`)
+now accept `writeToFile: boolean` with default `true`, write via a
+shared atomic-write (`writeFileAtomic` = temp-file + rename), auto-
+reload through `reloadAndDiagnose`, and surface a goal-ID diff with
+every reload. A new `agda_apply_edit(file, oldText, newText,
+occurrence?)` round-trip primitive covers non-goal edits (imports,
+renames, typos) and bypasses the session-error gate so it can be
+used to repair files that failed to load. The pipeline enforces a
+staleness guard (`isFileStale()`) to refuse edits when the file
+changed on disk since the last load. See
+[write-proof-actions-audit.md](./write-proof-actions-audit.md) for
+the audit log and any deferred follow-ups. The "exact diff" part
+of the ask is not shipped — we return a summary message and the
+goal-ID diff, not a textual patch.
 
 ---
 
 ## Priority ranking
 
-§1.x is now fully shipped in this release:
+Shipped in recent releases:
 
 - §1.1 `agda_load` / `agda_typecheck` session-state unification (#39). ✓
 - §1.2 `agda_metas` error attribution by owning file. ✓
 - §1.3 query tools return `unavailable` on session error state. ✓
 - §1.4 `lastCheckedLine` surfaced on silent-abort loads. ✓
+- §7 write-back for proof actions + `agda_apply_edit` (PR #37). ✓
+- §4.3 set-diff half of goal-ID renumbering (PR #37). ✓
 
 If one afternoon of server work is available after that, spend it on:
 
-1. **§7 write-back for proof actions** — tracked on
-   `feature/write-proof-actions-to-file`.
-2. **§2.2 pre-load triage classifier** — biggest throughput win on a large
+1. **§2.2 pre-load triage classifier** — biggest throughput win on a large
    codebase.
-3. **§3.6 fixity-inference diagnostic** — high-surprise bug class, cheap to
+2. **§3.6 fixity-inference diagnostic** — high-surprise bug class, cheap to
    build.
-4. **§4.1 module-wide `agda_term_search`** — turns the interactive loop
+3. **§4.1 module-wide `agda_term_search`** — turns the interactive loop
    from three round-trips to one on most applications.
-5. **§2.1 / §2.3 bulk status + dependency impact** — makes a many-hundred
+4. **§2.1 / §2.3 bulk status + dependency impact** — makes a many-hundred
    module codebase actually navigable.
-6. **§6.2 `forceRecompile` / `agda_cache_info`** — stale `.agdai` escape
+5. **§6.2 `forceRecompile` / `agda_cache_info`** — stale `.agdai` escape
    hatch; directly complements the #39 fix.
+6. **§4.3 declaration-site-stable goal identity** — the `renumbered`
+   mapping the doc originally asks for; set diff is already shipped.
 
 Everything after that is incremental.
