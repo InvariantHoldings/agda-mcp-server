@@ -31,7 +31,15 @@ type ExtensionRegister = (
   projectRoot: string,
 ) => void | Promise<void>;
 
-// Single shared session — Agda is stateful, one file at a time
+// Single shared session — the authoritative source of truth for Agda
+// session state in the running server. Every load-family tool
+// (agda_load, agda_load_no_metas, agda_typecheck, ...) MUST route
+// through this instance so currentFile, lastLoadedMtime, goalIds, and
+// the repo's _build/ interface state stay coherent across tool calls.
+// A second, parallel AgdaSession would share _build/ on disk but not
+// its session state, leaving tools with divergent views of what is
+// loaded. See issue #39 for the concrete regression this invariant
+// fixes.
 const session = new AgdaSession(PROJECT_ROOT);
 
 const server = new McpServer({
