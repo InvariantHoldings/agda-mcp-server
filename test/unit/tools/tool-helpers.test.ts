@@ -6,6 +6,7 @@ import {
   ToolInvocationError,
   clearGlobalProvenance,
   errorEnvelope,
+  groupDiagnosticsByFile,
   missingPathToolError,
   okEnvelope,
   registerGlobalProvenance,
@@ -360,4 +361,53 @@ test("sessionErrorStateGate summary omits file hint when no file is loaded", () 
   expect(result).not.toBeNull();
   expect(result!.structuredContent.summary).not.toContain("(loaded file:");
   expect(result!.structuredContent.summary).toContain("type-error");
+});
+
+// §1.2: diagnostic-grouping helper
+test("groupDiagnosticsByFile groups by leading file path and preserves insertion order", () => {
+  const groups = groupDiagnosticsByFile([
+    "/repo/src/A.agda:12: error: first A",
+    "/repo/src/B.agda:3: error: first B",
+    "/repo/src/A.agda:45: error: second A",
+    "no file path here",
+    "docs/M.lagda.md:7: info",
+  ]);
+  expect(groups).toEqual([
+    {
+      file: "/repo/src/A.agda",
+      messages: [
+        "/repo/src/A.agda:12: error: first A",
+        "/repo/src/A.agda:45: error: second A",
+      ],
+    },
+    {
+      file: "/repo/src/B.agda",
+      messages: ["/repo/src/B.agda:3: error: first B"],
+    },
+    {
+      file: null,
+      messages: ["no file path here"],
+    },
+    {
+      file: "docs/M.lagda.md",
+      messages: ["docs/M.lagda.md:7: info"],
+    },
+  ]);
+});
+
+test("groupDiagnosticsByFile tolerates non-string and empty entries", () => {
+  const groups = groupDiagnosticsByFile([
+    "" as string,
+    null as unknown as string,
+    undefined as unknown as string,
+    42 as unknown as string,
+    "/repo/src/Real.agda:1: real",
+  ]);
+  expect(groups).toEqual([
+    { file: "/repo/src/Real.agda", messages: ["/repo/src/Real.agda:1: real"] },
+  ]);
+});
+
+test("groupDiagnosticsByFile returns empty array for empty input", () => {
+  expect(groupDiagnosticsByFile([])).toEqual([]);
 });

@@ -233,6 +233,49 @@ export function stalenessWarning(session: AgdaSession): string {
   return "";
 }
 
+// Matches the leading file path in an Agda diagnostic. Same family of
+// patterns as parse-load-responses.ts#ERROR_LOCATION_PATTERN, but we
+// capture the filename (group 1) instead of the line number because
+// the caller cares about which file the diagnostic is *about*, not
+// where in it the error was. Deliberately loose on the path so that
+// both absolute and relative forms match, and both .agda and .lagda
+// variants are recognized.
+const DIAGNOSTIC_FILE_PATTERN = /([^\s:]+?\.(?:lagda\.md|lagda|agda)):\d+/u;
+
+/**
+ * Group diagnostic strings by the file path mentioned at their head.
+ *
+ * §1.2 from docs/bug-reports/agent-ux-observations.md: an agent that
+ * calls agda_metas after a seemingly-clean agda_load can see a
+ * well-formatted error from a transitive dependency of the loaded
+ * file. Today those messages are a flat string array with no source
+ * attribution, so the agent can't distinguish "the loaded file is
+ * broken" from "a dependency is broken". Grouping the messages by the
+ * file they reference — with a null bucket for messages whose text
+ * didn't carry a parseable file path — gives that attribution back.
+ *
+ * Ordering: the returned array preserves insertion order (the order
+ * files were first seen in the input), which matches the order in
+ * which Agda emitted the diagnostics.
+ */
+export function groupDiagnosticsByFile(
+  messages: readonly string[],
+): Array<{ file: string | null; messages: string[] }> {
+  const groups = new Map<string | null, string[]>();
+  for (const message of messages) {
+    if (typeof message !== "string" || message.length === 0) continue;
+    const match = DIAGNOSTIC_FILE_PATTERN.exec(message);
+    const file = match ? match[1] : null;
+    const bucket = groups.get(file);
+    if (bucket) {
+      bucket.push(message);
+    } else {
+      groups.set(file, [message]);
+    }
+  }
+  return Array.from(groups, ([file, msgs]) => ({ file, messages: msgs }));
+}
+
 /**
  * Session-error gate for query-style tools.
  *
