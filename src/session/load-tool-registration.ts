@@ -204,6 +204,23 @@ export function registerSessionLoadTools(
           );
         }
 
+        // §1.4: when a diagnostic carried a source line location, Agda
+        // may have aborted scope-checking at that line — so `hasHoles`
+        // and `goalCount` reflect only what was reached before the
+        // abort, not the whole file. Surface the line so the caller
+        // can decide whether to trust a nominally-clean classification.
+        const lastCheckedLine = result.lastCheckedLine ?? null;
+        if (lastCheckedLine !== null) {
+          const suspectClean = result.success && !result.hasHoles;
+          const message = suspectClean
+            ? `Load reported ${result.classification} but a diagnostic was emitted at line ${lastCheckedLine}. `
+              + "Agda may have aborted scope-checking before reaching every hole in the file — "
+              + "treat hasHoles and goalCount as lower bounds."
+            : `Earliest diagnostic location in this load: line ${lastCheckedLine}. `
+              + "Contents past this line may not have been fully scope-checked.";
+          diagnostics.push(infoDiagnostic(message, "scope-check-extent"));
+        }
+
         const textLead = isReload
           ? wasStale
             ? "**Reloading modified file.**"
@@ -249,6 +266,7 @@ export function registerSessionLoadTools(
               staleBeforeLoad: wasStale,
               previousClassification,
               previousLoadedAtMs,
+              lastCheckedLine,
             },
             diagnostics,
             stale: session.isFileStale() || undefined,

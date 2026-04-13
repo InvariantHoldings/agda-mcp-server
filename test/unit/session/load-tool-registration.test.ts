@@ -240,6 +240,173 @@ test("agda_load surfaces regression diagnostic when reload drops from ok-complet
   }
 });
 
+// §1.4: a nominally-clean load that carries a diagnostic location
+// should emit the scope-check-extent info diagnostic so the caller
+// knows hasHoles/goalCount may be under-reported.
+test("agda_load surfaces scope-check-extent diagnostic on apparent-clean-but-suspect load", async () => {
+  clearToolManifest();
+  const server = createCapturingServer();
+
+  const root = realpathSync(mkdtempSync(resolve(tmpdir(), "agda-mcp-scope-extent-")));
+  const fileName = "Probe.agda";
+  writeFileSync(resolve(root, fileName), "module Probe where\n", "utf8");
+
+  const session = {
+    getLoadedFile() {
+      return null;
+    },
+    getGoalIds() {
+      return [];
+    },
+    isFileStale() {
+      return false;
+    },
+    load: async () => ({
+      success: true,
+      errors: [],
+      warnings: [],
+      goals: [],
+      allGoalsText: "",
+      invisibleGoalCount: 0,
+      goalCount: 0,
+      hasHoles: false,
+      isComplete: true,
+      classification: "ok-complete",
+      lastCheckedLine: 47,
+    }),
+    loadNoMetas: async () => {
+      throw new Error("unreachable");
+    },
+  };
+
+  try {
+    registerSessionLoadTools(server as unknown as McpServer, session as any, root);
+    const result = await server.get("agda_load")!.callback({ file: fileName });
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent.data.lastCheckedLine).toBe(47);
+
+    const extentDiag = result.structuredContent.diagnostics.find(
+      (diag: { code: string }) => diag.code === "scope-check-extent",
+    );
+    expect(extentDiag).toBeDefined();
+    expect(extentDiag.severity).toBe("info");
+    expect(extentDiag.message).toContain("line 47");
+    // In the success-shaped-but-suspect case, the diagnostic must
+    // explicitly tell the caller to treat hasHoles as a lower bound.
+    expect(extentDiag.message).toContain("lower bounds");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// §1.4: on a genuinely failed load (success=false), the diagnostic
+// still appears but with a softer message — the agent already knows
+// something's wrong, the line number is context not an alarm.
+test("agda_load surfaces scope-check-extent diagnostic with context-level message on failed load", async () => {
+  clearToolManifest();
+  const server = createCapturingServer();
+
+  const root = realpathSync(mkdtempSync(resolve(tmpdir(), "agda-mcp-scope-fail-")));
+  const fileName = "Probe.agda";
+  writeFileSync(resolve(root, fileName), "module Probe where\n", "utf8");
+
+  const session = {
+    getLoadedFile() {
+      return null;
+    },
+    getGoalIds() {
+      return [];
+    },
+    isFileStale() {
+      return false;
+    },
+    load: async () => ({
+      success: false,
+      errors: ["/tmp/Probe.agda:12: error: type mismatch"],
+      warnings: [],
+      goals: [],
+      allGoalsText: "",
+      invisibleGoalCount: 0,
+      goalCount: 0,
+      hasHoles: false,
+      isComplete: false,
+      classification: "type-error",
+      lastCheckedLine: 12,
+    }),
+    loadNoMetas: async () => {
+      throw new Error("unreachable");
+    },
+  };
+
+  try {
+    registerSessionLoadTools(server as unknown as McpServer, session as any, root);
+    const result = await server.get("agda_load")!.callback({ file: fileName });
+
+    const extentDiag = result.structuredContent.diagnostics.find(
+      (diag: { code: string }) => diag.code === "scope-check-extent",
+    );
+    expect(extentDiag).toBeDefined();
+    expect(extentDiag.message).toContain("line 12");
+    // Different phrasing for the genuinely-failed case.
+    expect(extentDiag.message).not.toContain("lower bounds");
+    expect(extentDiag.message).toContain("may not have been fully scope-checked");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// §1.4 no-op: when lastCheckedLine is null, the scope-check-extent
+// diagnostic must NOT appear at all.
+test("agda_load omits scope-check-extent diagnostic when lastCheckedLine is null", async () => {
+  clearToolManifest();
+  const server = createCapturingServer();
+
+  const root = realpathSync(mkdtempSync(resolve(tmpdir(), "agda-mcp-scope-none-")));
+  const fileName = "Probe.agda";
+  writeFileSync(resolve(root, fileName), "module Probe where\n", "utf8");
+
+  const session = {
+    getLoadedFile() {
+      return null;
+    },
+    getGoalIds() {
+      return [];
+    },
+    isFileStale() {
+      return false;
+    },
+    load: async () => ({
+      success: true,
+      errors: [],
+      warnings: [],
+      goals: [],
+      allGoalsText: "",
+      invisibleGoalCount: 0,
+      goalCount: 0,
+      hasHoles: false,
+      isComplete: true,
+      classification: "ok-complete",
+      lastCheckedLine: null,
+    }),
+    loadNoMetas: async () => {
+      throw new Error("unreachable");
+    },
+  };
+
+  try {
+    registerSessionLoadTools(server as unknown as McpServer, session as any, root);
+    const result = await server.get("agda_load")!.callback({ file: fileName });
+
+    const extentDiag = result.structuredContent.diagnostics.find(
+      (diag: { code: string }) => diag.code === "scope-check-extent",
+    );
+    expect(extentDiag).toBeUndefined();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // Corollary: a first-time load (not a reload) must NOT surface the
 // regression diagnostic, and previousClassification/previousLoadedAtMs
 // must be null.

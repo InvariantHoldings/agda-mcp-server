@@ -21,6 +21,7 @@ export const loadDataSchema = z.object({
   staleBeforeLoad: z.boolean(),
   previousClassification: z.string().nullable().optional(),
   previousLoadedAtMs: z.number().nullable().optional(),
+  lastCheckedLine: z.number().int().positive().nullable().optional(),
 });
 
 export const sessionStatusDataSchema = z.object({

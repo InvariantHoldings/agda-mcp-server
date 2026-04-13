@@ -334,6 +334,7 @@ export class AgdaSession {
       hasHoles,
       isComplete,
       classification,
+      lastCheckedLine: parsed.lastCheckedLine ?? null,
     };
   }
 
@@ -369,6 +370,7 @@ export class AgdaSession {
       hasHoles: parsed.hasHoles,
       isComplete: parsed.isComplete,
       classification: parsed.classification,
+      lastCheckedLine: parsed.lastCheckedLine ?? null,
     };
   }
 
