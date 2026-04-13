@@ -90,7 +90,8 @@ export async function applyBatchHoleReplacements(
     };
   }
 
-  // Sort by start offset in descending order so earlier positions aren't invalidated
+  // Apply in reverse offset order: modifying later positions first keeps
+  // earlier offsets valid for subsequent replacements.
   edits.sort((a, b) => b.start - a.start);
 
   let newSource = source;
