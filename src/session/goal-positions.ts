@@ -18,6 +18,147 @@ export interface GoalPosition {
   markerText: string;
 }
 
+// ── Scan state ─────────────────────────────────────────────────────
+
+/**
+ * Mutable scan state passed between the top-level scanner and the
+ * skip helpers (`skipLineComment`, `skipBlockComment`, etc.). Holding
+ * the cursor, line, and lineStart together lets each helper advance
+ * them consistently without returning a tuple.
+ */
+interface ScanState {
+  i: number;
+  line: number;
+  lineStart: number;
+}
+
+/** If `source[st.i]` is a `\n`, advance the line counter. */
+function bumpLineIfNewline(source: string, st: ScanState): void {
+  if (source[st.i] === "\n") {
+    st.line++;
+    st.lineStart = st.i + 1;
+  }
+}
+
+/**
+ * Skip an Agda line comment starting at `st.i` (`-- ... \n`).
+ * Returns `true` and advances `st` to the character after the
+ * newline (or EOF) if a line comment was matched; otherwise returns
+ * `false` without touching `st`.
+ */
+function skipLineComment(source: string, st: ScanState): boolean {
+  if (source[st.i] !== "-" || source[st.i + 1] !== "-") return false;
+  while (st.i < source.length && source[st.i] !== "\n") st.i++;
+  return true;
+}
+
+/**
+ * Skip an Agda nested block comment starting at `st.i` (`{- ... -}`).
+ * Returns `true` and advances `st` past the closing `-}` (or EOF) if
+ * a block comment was matched; otherwise returns `false`.
+ */
+function skipBlockComment(source: string, st: ScanState): boolean {
+  if (source[st.i] !== "{" || source[st.i + 1] !== "-") return false;
+  let depth = 1;
+  st.i += 2;
+  while (st.i < source.length && depth > 0) {
+    if (source[st.i] === "{" && source[st.i + 1] === "-") {
+      depth++;
+      st.i += 2;
+    } else if (source[st.i] === "-" && source[st.i + 1] === "}") {
+      depth--;
+      st.i += 2;
+    } else {
+      bumpLineIfNewline(source, st);
+      st.i++;
+    }
+  }
+  return true;
+}
+
+/**
+ * Skip a double-quoted string literal starting at `st.i` (`"..."`,
+ * including `\"` escapes). Returns `true` and advances past the
+ * closing quote (or EOF) if a string was matched; otherwise `false`.
+ */
+function skipStringLiteral(source: string, st: ScanState): boolean {
+  if (source[st.i] !== '"') return false;
+  st.i++;
+  while (st.i < source.length && source[st.i] !== '"') {
+    if (source[st.i] === "\\") st.i++; // skip next char (escape)
+    bumpLineIfNewline(source, st);
+    st.i++;
+  }
+  if (st.i < source.length) st.i++; // closing quote
+  return true;
+}
+
+/**
+ * Skip an Agda character literal starting at `st.i` (`'a'`, `'\n'`,
+ * etc.). Returns `true` and advances past the closing quote if a
+ * char literal was matched; otherwise `false`. Leaves `st` alone on
+ * non-match so the top-level scanner can keep looking.
+ */
+function skipCharLiteral(source: string, st: ScanState): boolean {
+  if (source[st.i] !== "'" || st.i + 2 >= source.length) return false;
+  // Escaped: '\n', '\t', '\\' — requires 4 chars total.
+  if (source[st.i + 1] === "\\" && st.i + 3 < source.length && source[st.i + 3] === "'") {
+    st.i += 4;
+    return true;
+  }
+  // Simple: 'a', '?', '0' — 3 chars total.
+  if (source[st.i + 1] !== "'" && source[st.i + 2] === "'") {
+    st.i += 3;
+    return true;
+  }
+  return false;
+}
+
+// ── Unicode-aware identifier detection ────────────────────────────
+
+/**
+ * Agda identifier characters are anything that is NOT whitespace and
+ * NOT one of these reserved delimiters: `.` `;` `{` `}` `(` `)` `@`
+ * `"` `'`. Everything else — including astral-plane mathematical
+ * symbols like `𝟘`, `𝒇`, or emoji — is a legal identifier char.
+ *
+ * The `u` flag makes `\s` match Unicode whitespace (e.g. U+00A0
+ * NBSP) and lets `String.fromCodePoint` accept full code points.
+ */
+const DELIMITER_RE = /^[\s.;{}()@"']$/u;
+
+function isIdentCodePoint(cp: number | undefined): boolean {
+  if (cp === undefined) return false;
+  return !DELIMITER_RE.test(String.fromCodePoint(cp));
+}
+
+/**
+ * Return the Unicode code point of the character immediately before
+ * `i` in `source`, or `undefined` at the start of the string. Handles
+ * surrogate pairs: if `source[i-1]` is a low surrogate, the real
+ * character starts at `i-2`.
+ */
+function codePointBefore(source: string, i: number): number | undefined {
+  if (i <= 0) return undefined;
+  const lowCode = source.charCodeAt(i - 1);
+  if (lowCode >= 0xdc00 && lowCode <= 0xdfff && i >= 2) {
+    return source.codePointAt(i - 2);
+  }
+  return source.codePointAt(i - 1);
+}
+
+/**
+ * Return the Unicode code point of the character starting at `i`, or
+ * `undefined` at EOF. `String.prototype.codePointAt` already handles
+ * surrogate pairs when called on the high surrogate position.
+ */
+function codePointAtSafe(source: string, i: number): number | undefined {
+  if (i >= source.length) return undefined;
+  return source.codePointAt(i);
+}
+
+// ── Main scanner ───────────────────────────────────────────────────
+
 /**
  * Find all goal (hole) positions in an Agda source string.
  *
@@ -31,188 +172,89 @@ export interface GoalPosition {
  */
 export function findGoalPositions(source: string): GoalPosition[] {
   const positions: GoalPosition[] = [];
+  const st: ScanState = { i: 0, line: 0, lineStart: 0 };
 
-  let i = 0;
-  let line = 0;
-  let lineStart = 0;
-
-  while (i < source.length) {
-    // Skip line comments: any -- starts a comment to end of line
-    if (source[i] === "-" && source[i + 1] === "-") {
-      while (i < source.length && source[i] !== "\n") i++;
-      continue;
-    }
-
-    // Skip block comments: {- ... -} (nested)
-    if (source[i] === "{" && source[i + 1] === "-") {
-      let depth = 1;
-      i += 2;
-      while (i < source.length && depth > 0) {
-        if (source[i] === "{" && source[i + 1] === "-") {
-          depth++;
-          i += 2;
-        } else if (source[i] === "-" && source[i + 1] === "}") {
-          depth--;
-          i += 2;
-        } else {
-          if (source[i] === "\n") {
-            line++;
-            lineStart = i + 1;
-          }
-          i++;
-        }
-      }
-      continue;
-    }
-
-    // Skip string literals
-    if (source[i] === '"') {
-      i++;
-      while (i < source.length && source[i] !== '"') {
-        if (source[i] === "\\") i++; // skip escaped char
-        if (source[i] === "\n") {
-          line++;
-          lineStart = i + 1;
-        }
-        i++;
-      }
-      if (i < source.length) i++; // skip closing quote
-      continue;
-    }
-
-    // Skip character literals (e.g. 'a', '\n', '?')
-    // Agda char literals: single quote, one char or escape sequence, single quote
-    if (source[i] === "'" && i + 2 < source.length) {
-      if (source[i + 1] === "\\" && i + 3 < source.length && source[i + 3] === "'") {
-        // Escaped char literal like '\n', '\t', '\\'
-        i += 4;
-        continue;
-      }
-      if (source[i + 1] !== "'" && source[i + 2] === "'") {
-        // Simple char literal like 'a', '?', '0'
-        i += 3;
-        continue;
-      }
-    }
+  while (st.i < source.length) {
+    if (skipLineComment(source, st)) continue;
+    if (skipBlockComment(source, st)) continue;
+    if (skipStringLiteral(source, st)) continue;
+    if (skipCharLiteral(source, st)) continue;
 
     // Match {! ... !} interaction holes
-    if (source[i] === "{" && source[i + 1] === "!") {
-      const start = i;
-      const col = i - lineStart;
-      const startLine = line;
-      const startLineStart = lineStart;
-      const lineBefore = line;
-      i += 2; // skip {!
+    if (source[st.i] === "{" && source[st.i + 1] === "!") {
+      const start = st.i;
+      const col = st.i - st.lineStart;
+      const startLine = st.line;
+      const rewindState: ScanState = { i: st.i, line: st.line, lineStart: st.lineStart };
+      st.i += 2; // skip {!
 
-      // Find matching !}, skipping strings and comments inside hole contents
+      // Find matching !}, skipping strings and comments inside
+      // hole contents via the shared helpers.
       let depth = 1;
-      while (i < source.length && depth > 0) {
-        if (source[i] === "{" && source[i + 1] === "!") {
+      while (st.i < source.length && depth > 0) {
+        if (source[st.i] === "{" && source[st.i + 1] === "!") {
           depth++;
-          i += 2;
-        } else if (source[i] === "!" && source[i + 1] === "}") {
-          depth--;
-          i += 2;
-        } else if (source[i] === "-" && source[i + 1] === "-") {
-          // Skip line comments inside hole contents
-          while (i < source.length && source[i] !== "\n") i++;
-        } else if (source[i] === "{" && source[i + 1] === "-") {
-          // Skip block comments inside hole contents
-          let commentDepth = 1;
-          i += 2;
-          while (i < source.length && commentDepth > 0) {
-            if (source[i] === "{" && source[i + 1] === "-") {
-              commentDepth++;
-              i += 2;
-            } else if (source[i] === "-" && source[i + 1] === "}") {
-              commentDepth--;
-              i += 2;
-            } else {
-              if (source[i] === "\n") { line++; lineStart = i + 1; }
-              i++;
-            }
-          }
-        } else if (source[i] === '"') {
-          // Skip string literals inside hole contents
-          i++;
-          while (i < source.length && source[i] !== '"') {
-            if (source[i] === "\\") i++;
-            if (source[i] === "\n") { line++; lineStart = i + 1; }
-            i++;
-          }
-          if (i < source.length) i++;
-        } else {
-          if (source[i] === "\n") {
-            line++;
-            lineStart = i + 1;
-          }
-          i++;
+          st.i += 2;
+          continue;
         }
+        if (source[st.i] === "!" && source[st.i + 1] === "}") {
+          depth--;
+          st.i += 2;
+          continue;
+        }
+        if (skipLineComment(source, st)) continue;
+        if (skipBlockComment(source, st)) continue;
+        if (skipStringLiteral(source, st)) continue;
+        if (skipCharLiteral(source, st)) continue;
+        bumpLineIfNewline(source, st);
+        st.i++;
       }
 
       // Unterminated hole safety: if we ran to EOF with depth > 0
       // the source is malformed (agent mid-edit, corrupt file). We
       // MUST NOT record a "hole" that stretches to EOF — a follow-up
       // applyProofEdit would then replace everything from `{!` to
-      // EOF, catastrophically. Rewind our line tracker and skip
-      // past the `{!` instead, so the rest of the file is scanned
-      // normally but this position is not counted as a hole.
+      // EOF, catastrophically. Rewind the scan state and skip past
+      // the stray `{!` so the rest of the file can still be scanned.
       if (depth > 0) {
-        line = lineBefore;
-        lineStart = startLineStart;
-        i = start + 2; // skip the stray `{!` and keep scanning
+        st.i = rewindState.i + 2;
+        st.line = rewindState.line;
+        st.lineStart = rewindState.lineStart;
         continue;
       }
 
       positions.push({
         startOffset: start,
-        endOffset: i,
+        endOffset: st.i,
         line: startLine,
         column: col,
-        markerText: source.slice(start, i),
+        markerText: source.slice(start, st.i),
       });
       continue;
     }
 
-    // Match ? question-mark holes
-    if (source[i] === "?") {
-      // ? is a hole only when it's a standalone token — not part of
-      // an identifier. Agda identifiers can contain almost any Unicode
-      // letter/digit/symbol except whitespace and a few reserved chars.
-      // We treat ? as standalone when the neighbouring characters are
-      // NOT identifier-legal (i.e. they are whitespace, punctuation
-      // delimiters, or start/end of file).
-      const prevChar = i > 0 ? source[i - 1] : "\n";
-      const nextChar = i + 1 < source.length ? source[i + 1] : "\n";
-
-      // An Agda identifier character is anything that is NOT whitespace
-      // and NOT one of the reserved delimiter characters.
-      const isIdentChar = (ch: string) =>
-        ch.length === 1 && !/[\s.;{}()@"']/.test(ch);
-
-      const prevOk = !isIdentChar(prevChar);
-      const nextOk = !isIdentChar(nextChar);
+    // Match ? question-mark holes — standalone only.
+    if (source[st.i] === "?") {
+      const prevCp = codePointBefore(source, st.i);
+      const nextCp = codePointAtSafe(source, st.i + 1);
+      const prevOk = !isIdentCodePoint(prevCp);
+      const nextOk = !isIdentCodePoint(nextCp);
 
       if (prevOk && nextOk) {
         positions.push({
-          startOffset: i,
-          endOffset: i + 1,
-          line,
-          column: i - lineStart,
+          startOffset: st.i,
+          endOffset: st.i + 1,
+          line: st.line,
+          column: st.i - st.lineStart,
           markerText: "?",
         });
-        i++;
+        st.i++;
         continue;
       }
     }
 
-    // Track line numbers
-    if (source[i] === "\n") {
-      line++;
-      lineStart = i + 1;
-    }
-
-    i++;
+    bumpLineIfNewline(source, st);
+    st.i++;
   }
 
   return positions;

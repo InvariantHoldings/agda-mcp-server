@@ -69,6 +69,27 @@ describe("findGoalPositions", () => {
     expect(findGoalPositions("f abc?")).toHaveLength(0);
   });
 
+  test("does not match ? adjacent to astral identifier characters", () => {
+    // 𝟘 (U+1D7D8 MATHEMATICAL DOUBLE-STRUCK DIGIT ZERO) is a valid
+    // Agda identifier character encoded as a surrogate pair in JS
+    // strings. Before the Unicode-aware fix, the scanner tested
+    // ch.length === 1 which returned false for surrogate pairs,
+    // causing the low surrogate to look like "not an ident char"
+    // and misidentifying the `?` as a hole. Post-fix, the scanner
+    // should see 𝟘 as an identifier char and NOT match `?`.
+    expect(findGoalPositions("𝟘?")).toHaveLength(0);
+    expect(findGoalPositions("?𝟘")).toHaveLength(0);
+  });
+
+  test("finds standalone ? even when preceded by astral whitespace-adjacent chars", () => {
+    // `𝟘 ? ` — the `?` is separated from the astral char by a space,
+    // so the prev char is space (whitespace), which is not an ident
+    // char, so the hole matches.
+    const positions = findGoalPositions("𝟘 ?\n");
+    expect(positions).toHaveLength(1);
+    expect(positions[0].markerText).toBe("?");
+  });
+
   test("finds multiple holes in order", () => {
     const source = [
       "module M where",
