@@ -60,6 +60,8 @@ export interface LoadResult {
   hasHoles: boolean;
   isComplete: boolean;
   classification: string;
+  /** Profiling output from Agda when --profile options are active. */
+  profiling: string | null;
   /**
    * Earliest source line mentioned by any diagnostic in the load
    * response, or null if none was parsed. When non-null and the load
@@ -173,4 +175,6 @@ export interface TypeCheckResult {
   hasHoles: boolean;
   isComplete: boolean;
   classification: string;
+  /** Profiling output from Agda when --profile options are active. */
+  profiling: string | null;
 }
