@@ -75,6 +75,10 @@ export interface ApplyEditResult {
 export interface BatchApplyResult {
   appliedCount: number;
   failedGoalIds: number[];
+  /** Goal IDs that appeared more than once in `replacements` — later
+   *  occurrences are kept and earlier ones discarded. See the
+   *  applyBatchHoleReplacements docstring for rationale. */
+  droppedDuplicateGoalIds: number[];
   message: string;
 }
 
@@ -84,8 +88,17 @@ export interface BatchApplyResult {
  * Replacements are applied back-to-front (reverse offset order) so that
  * earlier offsets remain valid after each substitution.
  *
- * Returns the count of applied replacements, a list of goal IDs that
- * could not be located, and a summary message.
+ * Duplicate `goalId`s in `replacements` are handled with a "last wins"
+ * rule: the most recently supplied replacement for a given goalId is
+ * the one applied, earlier ones are discarded. Agda's SolveAll/SolveOne
+ * never emits duplicates, so this branch is defensive — but "last
+ * wins" matches the intuition that successive calls should override,
+ * and we track the discard count in `droppedDuplicateGoalIds` so
+ * agents can notice when their caller-side bug is silently eating
+ * work.
+ *
+ * Returns applied count, goal IDs that couldn't be located, dropped
+ * duplicate goal IDs, and a human-readable summary.
  */
 export async function applyBatchHoleReplacements(
   filePath: string,
@@ -95,18 +108,31 @@ export async function applyBatchHoleReplacements(
   const source = await readFile(filePath, "utf-8");
   const allPositions = findGoalPositions(source);
 
+  // Build goalId → positional index map once (O(n)), so the loop
+  // below is O(m) instead of O(n*m).
+  const goalIdToIndex = new Map<number, number>();
+  for (let i = 0; i < goalIds.length; i++) {
+    goalIdToIndex.set(goalIds[i], i);
+  }
+
+  // Last-wins deduplication: walk replacements in order and record
+  // the final expression for each goalId. Earlier duplicates go into
+  // droppedDuplicateGoalIds so we can surface them in the message.
+  const lastByGoalId = new Map<number, string>();
+  const droppedDuplicateGoalIds: number[] = [];
+  for (const { goalId, expr } of replacements) {
+    if (lastByGoalId.has(goalId)) {
+      droppedDuplicateGoalIds.push(goalId);
+    }
+    lastByGoalId.set(goalId, expr);
+  }
+
   const edits: Array<{ start: number; end: number; expr: string; goalId: number }> = [];
   const failedGoalIds: number[] = [];
-  const seenGoalIds = new Set<number>();
 
-  for (const { goalId, expr } of replacements) {
-    // Deduplicate: if the same goalId appears more than once, keep
-    // only the first replacement to prevent corrupting file offsets.
-    if (seenGoalIds.has(goalId)) continue;
-    seenGoalIds.add(goalId);
-
-    const index = goalIds.indexOf(goalId);
-    if (index < 0 || index >= allPositions.length) {
+  for (const [goalId, expr] of lastByGoalId) {
+    const index = goalIdToIndex.get(goalId);
+    if (index === undefined || index >= allPositions.length) {
       failedGoalIds.push(goalId);
       continue;
     }
@@ -114,14 +140,20 @@ export async function applyBatchHoleReplacements(
     edits.push({ start: pos.startOffset, end: pos.endOffset, expr, goalId });
   }
 
+  const dupMsg =
+    droppedDuplicateGoalIds.length > 0
+      ? ` (dropped ${droppedDuplicateGoalIds.length} duplicate goalId entr${droppedDuplicateGoalIds.length === 1 ? "y" : "ies"}; last-wins)`
+      : "";
+
   if (edits.length === 0) {
     return {
       appliedCount: 0,
       failedGoalIds,
+      droppedDuplicateGoalIds,
       message:
         failedGoalIds.length > 0
-          ? `Could not locate goals ${failedGoalIds.map((id) => `?${id}`).join(", ")} in file — the file may have been modified since last load.`
-          : "No replacements to apply.",
+          ? `Could not locate goals ${failedGoalIds.map((id) => `?${id}`).join(", ")} in file — the file may have been modified since last load.${dupMsg}`
+          : `No replacements to apply.${dupMsg}`,
     };
   }
 
@@ -143,7 +175,8 @@ export async function applyBatchHoleReplacements(
   return {
     appliedCount: edits.length,
     failedGoalIds,
-    message: `Applied ${edits.length} solution(s) to file${failedMsg}.`,
+    droppedDuplicateGoalIds,
+    message: `Applied ${edits.length} solution(s) to file${failedMsg}${dupMsg}.`,
   };
 }
 

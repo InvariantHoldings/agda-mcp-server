@@ -115,7 +115,7 @@ describe("applyBatchHoleReplacements", () => {
     expect(await readFile(tempFile, "utf-8")).toBe("a = refl\nb = zero");
   });
 
-  test("deduplicates: first replacement wins when same goalId appears twice", async () => {
+  test("deduplicates: last replacement wins when same goalId appears twice", async () => {
     await writeFile(tempFile, "test = {!!}");
     const result = await applyBatchHoleReplacements(tempFile, [0], [
       { goalId: 0, expr: "first" },
@@ -124,6 +124,33 @@ describe("applyBatchHoleReplacements", () => {
 
     expect(result.appliedCount).toBe(1);
     expect(result.failedGoalIds).toEqual([]);
-    expect(await readFile(tempFile, "utf-8")).toBe("test = first");
+    expect(result.droppedDuplicateGoalIds).toEqual([0]);
+    expect(result.message).toContain("dropped 1 duplicate");
+    expect(await readFile(tempFile, "utf-8")).toBe("test = second");
+  });
+
+  test("deduplicates: reports all dropped duplicates when more than one", async () => {
+    await writeFile(tempFile, "a = {!!}\nb = {!!}");
+    const result = await applyBatchHoleReplacements(tempFile, [0, 1], [
+      { goalId: 0, expr: "first" },
+      { goalId: 0, expr: "second" },
+      { goalId: 0, expr: "final" },
+      { goalId: 1, expr: "other" },
+    ]);
+
+    expect(result.appliedCount).toBe(2);
+    expect(result.droppedDuplicateGoalIds).toEqual([0, 0]);
+    expect(result.message).toContain("dropped 2 duplicate");
+    expect(await readFile(tempFile, "utf-8")).toBe("a = final\nb = other");
+  });
+
+  test("droppedDuplicateGoalIds is empty when no duplicates", async () => {
+    await writeFile(tempFile, "a = {!!}\nb = {!!}");
+    const result = await applyBatchHoleReplacements(tempFile, [0, 1], [
+      { goalId: 0, expr: "one" },
+      { goalId: 1, expr: "two" },
+    ]);
+    expect(result.droppedDuplicateGoalIds).toEqual([]);
+    expect(result.message).not.toContain("duplicate");
   });
 });
