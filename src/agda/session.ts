@@ -419,7 +419,13 @@ export class AgdaSession {
     return this.currentFile;
   }
 
-  /** Get the classification from the most recent successful load, if any. */
+  /**
+   * Classification from the most recent load attempt, if any. Set by
+   * load() and loadNoMetas() for every attempt — success, failure, and
+   * type-error alike — so callers distinguishing "regression from
+   * ok-complete" from "still failing" both have a previous-state anchor.
+   * Reset on session destroy and on Agda process death.
+   */
   getLastClassification(): string | null {
     return this.lastClassification;
   }
