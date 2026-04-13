@@ -1,19 +1,18 @@
 import { test, expect } from "vitest";
 import { resolve } from "node:path";
-import { execSync } from "node:child_process";
 
 import { createMcpHarness } from "../../helpers/mcp-harness.js";
 import { TEST_SERVER_REPO_ROOT } from "../../helpers/repo-root.js";
+import {
+  detectAgdaVersion,
+  parseAgdaVersion,
+  versionAtLeast,
+} from "../../helpers/agda-version.js";
 
 const FIXTURES = resolve(import.meta.dirname, "../../fixtures/agda");
 
-let agdaAvailable = false;
-try {
-  execSync("agda --version", { stdio: "pipe" });
-  agdaAvailable = true;
-} catch {
-  // Agda not in PATH
-}
+const agdaVersion = detectAgdaVersion();
+const agdaAvailable = agdaVersion !== undefined;
 
 const it = agdaAvailable && process.env.RUN_AGDA_INTEGRATION === "1"
   ? test
@@ -24,6 +23,12 @@ const itBackend = agdaAvailable
   && process.env.RUN_AGDA_BACKEND_INTEGRATION === "1"
   ? test
   : test.skip;
+
+/** Skip test if installed Agda is older than the given version. */
+function itSince(minVersion: string) {
+  if (!agdaVersion) return test.skip;
+  return versionAtLeast(agdaVersion, parseAgdaVersion(minVersion)) ? it : test.skip;
+}
 
 async function withHarness(run: (harness: any) => Promise<void>, projectRoot = FIXTURES) {
   const harness = await createMcpHarness({
@@ -206,7 +211,10 @@ it("MCP end-to-end: agda_case_split returns generated clauses", async () => {
   });
 });
 
-it("MCP end-to-end: agda_auto solves a unique goal", async () => {
+// Cmd_autoOne returns a solution on 2.7.0.1 but does not commit it to
+// the meta — the unsolved meta count stays at 1. 2.8.0 auto-commits.
+// Gate the "metas count == 0 after agda_auto" assertion accordingly.
+itSince("2.8.0")("MCP end-to-end: agda_auto solves a unique goal", async () => {
   await withHarness(async (harness) => {
     const goalIds = await loadFixture(harness, "SolveActions.agda");
     expect(goalIds.length).toBe(1);
@@ -233,7 +241,8 @@ it("MCP end-to-end: agda_solve_one reports when no unique solution exists", asyn
   });
 });
 
-it("MCP end-to-end: agda_auto_all solves a unique goal set", async () => {
+// Same 2.8.0 auto-commit behavior change as agda_auto above.
+itSince("2.8.0")("MCP end-to-end: agda_auto_all solves a unique goal set", async () => {
   await withHarness(async (harness) => {
     await loadFixture(harness, "SolveActions.agda");
 

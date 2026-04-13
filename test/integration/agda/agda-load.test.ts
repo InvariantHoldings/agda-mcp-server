@@ -78,7 +78,7 @@ it("WithHoles.agda: success, >=1 goal with valid ID", async () => {
   expect(r.goals[0].goalId >= 0).toBeTruthy();
 });
 
-it("WithHoles.agda: agda_load succeeds but agda_load_no_metas fails", async () => {
+itSince("2.8.0")("WithHoles.agda: agda_load succeeds but agda_load_no_metas fails", async () => {
   const load = await loadFixture("WithHoles.agda");
   const strict = await loadFixtureNoMetas("WithHoles.agda");
 
@@ -235,7 +235,7 @@ it("WithAbstract.agda: detects invisible goals in abstract block", async () => {
   expect(typeof r.invisibleGoalCount).toBe("number");
 });
 
-it("WithAbstract.agda: invisible holes fail strict load", async () => {
+itSince("2.8.0")("WithAbstract.agda: invisible holes fail strict load", async () => {
   const load = await loadFixture("WithAbstract.agda");
   const strict = await loadFixtureNoMetas("WithAbstract.agda");
 
@@ -246,7 +246,7 @@ it("WithAbstract.agda: invisible holes fail strict load", async () => {
   ).toBeTruthy();
 });
 
-it("InferredMeta.agda: unresolved inferred-style metas fail strict load", async () => {
+itSince("2.8.0")("InferredMeta.agda: unresolved inferred-style metas fail strict load", async () => {
   const load = await loadFixture("InferredMeta.agda");
   const strict = await loadFixtureNoMetas("InferredMeta.agda");
 

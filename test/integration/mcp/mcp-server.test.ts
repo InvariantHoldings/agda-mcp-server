@@ -1,24 +1,29 @@
 import { test, expect } from "vitest";
 import { resolve } from "node:path";
-import { execSync } from "node:child_process";
 
 import { createMcpHarness } from "../../helpers/mcp-harness.js";
 import { TEST_SERVER_REPO_ROOT } from "../../helpers/repo-root.js";
 import { navigationQueryMatrix } from "../../fixtures/agda/navigation-query-matrix.js";
+import {
+  detectAgdaVersion,
+  parseAgdaVersion,
+  versionAtLeast,
+} from "../../helpers/agda-version.js";
 
 const FIXTURES = resolve(import.meta.dirname, "../../fixtures/agda");
 
-let agdaAvailable = false;
-try {
-  execSync("agda --version", { stdio: "pipe" });
-  agdaAvailable = true;
-} catch {
-  // Agda not in PATH
-}
+const agdaVersion = detectAgdaVersion();
+const agdaAvailable = agdaVersion !== undefined;
 
 const it = agdaAvailable && process.env.RUN_AGDA_INTEGRATION === "1"
   ? test
   : test.skip;
+
+/** Skip test if installed Agda is older than the given version. */
+function itSince(minVersion: string) {
+  if (!agdaVersion) return test.skip;
+  return versionAtLeast(agdaVersion, parseAgdaVersion(minVersion)) ? it : test.skip;
+}
 
 async function withHarness(run: (harness: any) => Promise<void>, projectRoot = FIXTURES) {
   const harness = await createMcpHarness({
@@ -262,7 +267,7 @@ it("MCP harness preserves goal access for imported-context holes", async () => {
   });
 });
 
-it("MCP harness reports strict-load failure for ordinary holes", async () => {
+itSince("2.8.0")("MCP harness reports strict-load failure for ordinary holes", async () => {
   await withHarness(async (harness) => {
     const result = await harness.callTool("agda_load_no_metas", { file: "WithHoles.agda" });
 
@@ -274,7 +279,7 @@ it("MCP harness reports strict-load failure for ordinary holes", async () => {
   });
 });
 
-it("MCP harness reports strict-load failure for invisible-hole fixtures", async () => {
+itSince("2.8.0")("MCP harness reports strict-load failure for invisible-hole fixtures", async () => {
   await withHarness(async (harness) => {
     const result = await harness.callTool("agda_load_no_metas", { file: "WithAbstract.agda" });
 
