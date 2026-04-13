@@ -83,6 +83,8 @@ export class AgdaSession {
   goalIds: number[] = [];
   exiting = false;
   private lastLoadedMtime: number | null = null;
+  private lastClassification: string | null = null;
+  private lastLoadedAt: number | null = null;
   private libraryRegistration: LibraryRegistration | null = null;
   private readonly transport = new AgdaTransport();
   private commandQueue: Promise<unknown> = Promise.resolve();
@@ -143,6 +145,9 @@ export class AgdaSession {
       this.proc = null;
       this.currentFile = null;
       this.goalIds = [];
+      this.lastLoadedMtime = null;
+      this.lastClassification = null;
+      this.lastLoadedAt = null;
       this.exiting = false;
       this.transport.handleProcessClose();
     });
@@ -308,6 +313,8 @@ export class AgdaSession {
       : "type-error";
 
     this.goalIds = goalIds;
+    this.lastClassification = classification;
+    this.lastLoadedAt = Date.now();
 
     logger.trace("load complete", {
       file: absPath,
@@ -348,6 +355,8 @@ export class AgdaSession {
     this.currentFile = absPath;
     this.goalIds = parsed.goalIds;
     this.lastLoadedMtime = statSync(absPath).mtimeMs;
+    this.lastClassification = parsed.classification;
+    this.lastLoadedAt = Date.now();
 
     return {
       success: parsed.success,
@@ -410,6 +419,16 @@ export class AgdaSession {
     return this.currentFile;
   }
 
+  /** Get the classification from the most recent successful load, if any. */
+  getLastClassification(): string | null {
+    return this.lastClassification;
+  }
+
+  /** Get the wall-clock time (epoch ms) of the most recent load, if any. */
+  getLastLoadedAt(): number | null {
+    return this.lastLoadedAt;
+  }
+
   /** Get the current high-level session phase. */
   getPhase(): SessionPhase {
     return deriveSessionPhase({
@@ -431,6 +450,8 @@ export class AgdaSession {
     this.currentFile = null;
     this.goalIds = [];
     this.lastLoadedMtime = null;
+    this.lastClassification = null;
+    this.lastLoadedAt = null;
     this.transport.destroy();
     this.commandQueue = Promise.resolve();
     this.exiting = false;

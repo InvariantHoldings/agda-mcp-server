@@ -19,6 +19,8 @@ export const loadDataSchema = z.object({
   warnings: z.array(z.string()),
   reloaded: z.boolean(),
   staleBeforeLoad: z.boolean(),
+  previousClassification: z.string().nullable().optional(),
+  previousLoadedAtMs: z.number().nullable().optional(),
 });
 
 export const sessionStatusDataSchema = z.object({

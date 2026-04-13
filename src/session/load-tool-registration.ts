@@ -166,6 +166,12 @@ export function registerSessionLoadTools(
         const previousFile = session.getLoadedFile();
         const isReload = previousFile === filePath;
         const wasStale = isReload && session.isFileStale();
+        const previousClassification = isReload
+          ? (session.getLastClassification?.() ?? null)
+          : null;
+        const previousLoadedAtMs = isReload
+          ? (session.getLastLoadedAt?.() ?? null)
+          : null;
         const result = await session.load(filePath);
         const relPath = relative(repoRoot, requestedFilePath);
         const diagnostics = [
@@ -178,6 +184,22 @@ export function registerSessionLoadTools(
             infoDiagnostic(
               `Detected ${result.goalCount} visible goals and ${result.invisibleGoalCount} invisible goals.`,
               "completeness",
+            ),
+          );
+        }
+
+        const previousWasSuccess = previousClassification === "ok-complete"
+          || previousClassification === "ok-with-holes";
+        if (isReload && previousWasSuccess && !result.success) {
+          const ageSeconds = previousLoadedAtMs !== null
+            ? Math.max(0, Math.round((Date.now() - previousLoadedAtMs) / 1000))
+            : null;
+          const ageSuffix = ageSeconds !== null ? ` ${ageSeconds}s ago` : "";
+          diagnostics.push(
+            infoDiagnostic(
+              `Regression: this file loaded as ${previousClassification}${ageSuffix}. `
+                + "It may have been modified since, or a dependency may have changed.",
+              "session-regression",
             ),
           );
         }
@@ -225,6 +247,8 @@ export function registerSessionLoadTools(
               warnings: result.warnings,
               reloaded: isReload,
               staleBeforeLoad: wasStale,
+              previousClassification,
+              previousLoadedAtMs,
             },
             diagnostics,
             stale: session.isFileStale() || undefined,
