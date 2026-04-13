@@ -14,7 +14,6 @@ import {
   registerTextTool,
   sessionErrorStateGate,
 } from "../../../src/tools/tool-helpers.js";
-import type { AgdaSession as AgdaSessionType } from "../../../src/agda-process.js";
 import { clearToolManifest } from "../../../src/tools/manifest.js";
 
 function createCapturingServer() {
@@ -288,13 +287,13 @@ test("registerGlobalProvenance rejects empty or non-string keys", () => {
 // §1.3 from the observations doc: query-style tools must not return a
 // happy-path payload when the session's last load failed. The gate
 // short-circuits the tool before it talks to Agda at all.
-function stubSession(lastClassification: string | null, loadedFile: string | null = null): AgdaSessionType {
+function stubSession(lastClassification: string | null, loadedFile: string | null = null): AgdaSession {
   return {
     getLastClassification: () => lastClassification,
     getLoadedFile: () => loadedFile,
     getGoalIds: () => [],
     isFileStale: () => false,
-  } as unknown as AgdaSessionType;
+  } as unknown as AgdaSession;
 }
 
 test("sessionErrorStateGate returns unavailable when lastClassification is type-error", () => {
@@ -350,7 +349,7 @@ test("sessionErrorStateGate tolerates sessions that lack the getLastClassificati
     getLoadedFile: () => null,
     getGoalIds: () => [],
     isFileStale: () => false,
-  } as unknown as AgdaSessionType;
+  } as unknown as AgdaSession;
   const result = sessionErrorStateGate(session, "agda_show_module", { moduleName: "", goalId: undefined, contents: "" });
   expect(result).toBeNull();
 });

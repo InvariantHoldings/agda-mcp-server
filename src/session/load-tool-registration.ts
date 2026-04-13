@@ -428,7 +428,7 @@ export function registerSessionLoadTools(
   registerStructuredTool({
     server,
     name: "agda_typecheck",
-    description: "Quick batch type-check of an Agda file (stateless — does not establish an interactive session). Use agda_load for interactive proof work.",
+    description: "Type-check an Agda file and return a compact classification-only response. This routes through the same singleton session as agda_load (since issue #39) — it updates the session's loaded file, goal IDs, and mtime, so subsequent tool calls operate on the typechecked file. The only difference from agda_load is the response shape: agda_typecheck omits the full goals-and-warnings text block for a smaller payload. If you want the interactive goals listing, call agda_load instead.",
     category: "session",
     protocolCommands: ["Cmd_load", "Cmd_metas"],
     inputSchema: {
