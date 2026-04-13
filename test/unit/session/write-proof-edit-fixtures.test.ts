@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import { findGoalPositions } from "../../../src/session/goal-positions.js";
-import { applyProofEdit } from "../../../src/session/apply-proof-edit.js";
+import { applyProofEdit, applyTextEdit } from "../../../src/session/apply-proof-edit.js";
 
 const fixturesDir = resolve(import.meta.dirname, "../../fixtures/agda");
 
@@ -144,6 +144,22 @@ describe("file edits produce expected output", () => {
 
     const result = await readFile(file, "utf-8");
     const expected = fixture("WriteGiveEquality.expected.agda");
+    expect(result).toBe(expected);
+  });
+
+  test("applyTextEdit adds an import line matching fixture expected", async () => {
+    const file = await copyFixture("WriteApplyEditImport.agda");
+
+    const editResult = await applyTextEdit(
+      file,
+      "module WriteApplyEditImport where\n",
+      "module WriteApplyEditImport where\n\nopen import Agda.Primitive\n",
+    );
+    expect(editResult.applied).toBe(true);
+    expect(editResult.line).toBe(1);
+
+    const result = await readFile(file, "utf-8");
+    const expected = fixture("WriteApplyEditImport.expected.agda");
     expect(result).toBe(expected);
   });
 });

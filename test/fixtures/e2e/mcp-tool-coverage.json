@@ -2,6 +2,7 @@
   { "tool": "agda_load", "suite": "test/integration/mcp/mcp-server.test.ts", "scenario": "load and goal access", "requiresLiveAgda": true },
   { "tool": "agda_load_no_metas", "suite": "test/integration/mcp/mcp-server.test.ts", "scenario": "strict load failure for holes", "requiresLiveAgda": true },
   { "tool": "agda_typecheck", "suite": "test/integration/mcp/mcp-remaining-tools-e2e.test.ts", "scenario": "typecheck classifications", "requiresLiveAgda": true },
+  { "tool": "agda_apply_edit", "suite": "test/unit/session/write-proof-edit-fixtures.test.ts", "scenario": "applyTextEdit adds an import line matching fixture expected", "requiresLiveAgda": false },
   { "tool": "agda_session_status", "suite": "test/integration/mcp/mcp-remaining-tools-e2e.test.ts", "scenario": "session status before and after load", "requiresLiveAgda": true },
   { "tool": "agda_show_version", "suite": "test/integration/mcp/mcp-server.test.ts", "scenario": "show version", "requiresLiveAgda": true },
   { "tool": "agda_abort", "suite": "test/integration/mcp/mcp-end-to-end-parity.test.ts", "scenario": "abort and exit process controls", "requiresLiveAgda": true },

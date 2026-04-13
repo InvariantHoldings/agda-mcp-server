@@ -118,6 +118,114 @@ export async function applyBatchHoleReplacements(
   };
 }
 
+// ── Free-form text edit ─────────────────────────────────────────────
+
+export interface TextEditResult {
+  /** Whether the edit was applied to the file. */
+  applied: boolean;
+  /** Number of occurrences of `oldText` found in the source. */
+  occurrences: number;
+  /** 1-based line number where the edit was applied, if any. */
+  line: number | null;
+  /** Human-readable description. */
+  message: string;
+}
+
+/**
+ * Apply a targeted text substitution to a file on disk.
+ *
+ * Used by the `agda_apply_edit` tool for edits that aren't goal
+ * actions — e.g. adding an import, renaming a symbol, fixing a
+ * typo. The caller is expected to reload the file afterwards to
+ * resync the Agda session with the new on-disk state.
+ *
+ * Contract:
+ * - By default, `oldText` must match exactly once (fails if 0 or >1).
+ * - Pass `occurrence: n` (1-based) to target a specific match when
+ *   there are duplicates.
+ * - The file is written atomically via fs/promises writeFile.
+ * - The file is NOT reloaded here — that's the caller's job.
+ */
+export async function applyTextEdit(
+  filePath: string,
+  oldText: string,
+  newText: string,
+  options: { occurrence?: number } = {},
+): Promise<TextEditResult> {
+  if (oldText.length === 0) {
+    return {
+      applied: false,
+      occurrences: 0,
+      line: null,
+      message: "oldText must not be empty.",
+    };
+  }
+
+  const source = await readFile(filePath, "utf-8");
+
+  // Count occurrences
+  const occurrences: number[] = [];
+  let searchFrom = 0;
+  while (true) {
+    const idx = source.indexOf(oldText, searchFrom);
+    if (idx === -1) break;
+    occurrences.push(idx);
+    searchFrom = idx + oldText.length;
+  }
+
+  if (occurrences.length === 0) {
+    return {
+      applied: false,
+      occurrences: 0,
+      line: null,
+      message: `oldText not found in file.`,
+    };
+  }
+
+  const { occurrence } = options;
+  let targetIndex: number;
+
+  if (occurrence !== undefined) {
+    if (occurrence < 1 || occurrence > occurrences.length) {
+      return {
+        applied: false,
+        occurrences: occurrences.length,
+        line: null,
+        message: `Occurrence ${occurrence} requested but only ${occurrences.length} match(es) exist.`,
+      };
+    }
+    targetIndex = occurrences[occurrence - 1];
+  } else {
+    if (occurrences.length > 1) {
+      return {
+        applied: false,
+        occurrences: occurrences.length,
+        line: null,
+        message: `oldText matches ${occurrences.length} locations; pass \`occurrence\` (1..${occurrences.length}) to disambiguate.`,
+      };
+    }
+    targetIndex = occurrences[0];
+  }
+
+  const newSource =
+    source.slice(0, targetIndex) + newText + source.slice(targetIndex + oldText.length);
+
+  await writeFile(filePath, newSource, "utf-8");
+
+  // Compute 1-based line number of the edit start
+  let line = 1;
+  for (let i = 0; i < targetIndex; i++) {
+    if (source[i] === "\n") line++;
+  }
+
+  return {
+    applied: true,
+    occurrences: occurrences.length,
+    line,
+    message: `Applied edit at line ${line}${occurrences.length > 1 ? ` (occurrence ${occurrence})` : ""}.`,
+  };
+}
+
 // ── Apply logic ──────────────────────────────────────────────────────
 
 /**
