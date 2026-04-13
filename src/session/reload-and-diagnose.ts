@@ -99,11 +99,33 @@ export async function reloadAndDiagnose(
   return output;
 }
 
+// ── Staleness guard ─────────────────────────────────────────────────
+
+/**
+ * Stale-file guard used before any proof edit. If the on-disk file
+ * has a different mtime than the one recorded at last load, the
+ * goal IDs captured before the proof action are stale relative to
+ * what is on disk, and applying an offset-based edit would silently
+ * clobber external changes. Fail loud and instruct the caller to
+ * reload.
+ *
+ * Returns a warning message if stale, or null if safe to proceed.
+ */
+function stalenessBlockMessage(session: AgdaSession): string | null {
+  if (!session.isFileStale()) return null;
+  return (
+    "\n**Warning:** The loaded file has been modified on disk since " +
+    "the last load. Not writing the edit to avoid clobbering external " +
+    "changes. Run `agda_load` to refresh, then retry the proof action.\n"
+  );
+}
+
 // ── Single proof edit + reload ──────────────────────────────────────
 
 /**
  * Apply a proof edit to the file, reload, and return output describing
  * what happened. Handles all failure modes:
+ * - File changed on disk (stale): refuses the edit and instructs reload
  * - FS exceptions (permissions, missing file): reloads unchanged file to resync
  * - Edit not applied (goal not found): reloads unchanged file to resync
  * - Reload failure after successful write: warns user to `agda_load` manually
@@ -115,6 +137,9 @@ export async function applyEditAndReload(
 ): Promise<string> {
   const filePath = session.currentFile;
   if (!filePath) return "";
+
+  const staleMsg = stalenessBlockMessage(session);
+  if (staleMsg) return staleMsg;
 
   let editResult: ApplyEditResult;
   try {
@@ -158,6 +183,9 @@ export async function applyBatchEditAndReload(
   filePath: string,
   rawSolutions: Array<{ goalId: number; expr: string }>,
 ): Promise<string> {
+  const staleMsg = stalenessBlockMessage(session);
+  if (staleMsg) return staleMsg;
+
   let batchResult: BatchApplyResult;
   try {
     batchResult = await applyBatchHoleReplacements(filePath, goalIdsBefore, rawSolutions);
