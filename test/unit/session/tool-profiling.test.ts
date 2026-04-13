@@ -1,7 +1,6 @@
 import { test, expect } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-import { PathSandboxError } from "../../../src/repo-root.js";
 import { registerSessionLoadTools } from "../../../src/session/load-tool-registration.js";
 import { clearToolManifest } from "../../../src/tools/manifest.js";
 

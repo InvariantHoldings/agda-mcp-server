@@ -44,7 +44,7 @@ import type {
 } from "./types.js";
 import { parseLoadResponses } from "./parse-load-responses.js";
 import { logger } from "./logger.js";
-import { command, quoted, stringList } from "../protocol/command-builder.js";
+import { command, quoted, profileOptionsList } from "../protocol/command-builder.js";
 import {
   validateProfileOptions,
   toProfileArgs,
@@ -301,7 +301,7 @@ export class AgdaSession {
         };
       }
       const profileArgs = toProfileArgs(validation.options);
-      optsList = stringList(profileArgs);
+      optsList = profileOptionsList(profileArgs);
     }
 
     // Use buildIotcm with absPath directly — don't set currentFile yet
