@@ -110,6 +110,46 @@ describe("applyTextEdit", () => {
     expect(await readFile(tempFile, "utf-8")).toBe("foo\r\nqux\r\nbaz\r\n");
   });
 
+  describe("line ending normalization", () => {
+    test("LF oldText matches CRLF file (multi-line)", async () => {
+      // LLMs generate \n-delimited oldText even for CRLF files.
+      // Without normalization, indexOf would return -1.
+      await writeFile(tempFile, "line1\r\nline2\r\nline3\r\n");
+      const result = await applyTextEdit(tempFile, "line1\nline2", "replaced");
+      expect(result.applied).toBe(true);
+      expect(await readFile(tempFile, "utf-8")).toBe("replaced\r\nline3\r\n");
+    });
+
+    test("LF newText is promoted to CRLF when file is CRLF", async () => {
+      // Multi-line newText from an LLM should not introduce mixed endings.
+      await writeFile(tempFile, "foo\r\nanchor\r\nbaz\r\n");
+      const result = await applyTextEdit(
+        tempFile,
+        "anchor",
+        "first\nsecond\nthird",
+      );
+      expect(result.applied).toBe(true);
+      const content = await readFile(tempFile, "utf-8");
+      expect(content).toBe("foo\r\nfirst\r\nsecond\r\nthird\r\nbaz\r\n");
+      expect(content).not.toMatch(/(?<!\r)\n/); // no bare LF anywhere
+    });
+
+    test("CRLF oldText still matches CRLF file (pre-normalized inputs pass through)", async () => {
+      // An agent that already happens to use \r\n should still work.
+      await writeFile(tempFile, "line1\r\nline2\r\nline3\r\n");
+      const result = await applyTextEdit(tempFile, "line1\r\nline2", "replaced");
+      expect(result.applied).toBe(true);
+      expect(await readFile(tempFile, "utf-8")).toBe("replaced\r\nline3\r\n");
+    });
+
+    test("LF file with LF oldText is untouched by normalization", async () => {
+      await writeFile(tempFile, "line1\nline2\nline3\n");
+      const result = await applyTextEdit(tempFile, "line2", "replaced");
+      expect(result.applied).toBe(true);
+      expect(await readFile(tempFile, "utf-8")).toBe("line1\nreplaced\nline3\n");
+    });
+  });
+
   test("leaves no temp file after a successful write (atomic rename)", async () => {
     await writeFile(tempFile, "foo bar baz");
     const result = await applyTextEdit(tempFile, "bar", "qux");

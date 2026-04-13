@@ -172,6 +172,13 @@ export interface TextEditResult {
  * - By default, `oldText` must match exactly once (fails if 0 or >1).
  * - Pass `occurrence: n` (1-based) to target a specific match when
  *   there are duplicates.
+ * - Line-ending normalization: LLMs generate `oldText` / `newText`
+ *   with `\n` line endings even when the file uses CRLF. Before
+ *   searching we detect the file's dominant EOL; if it is CRLF we
+ *   promote bare `\n` in both `oldText` and `newText` to `\r\n`
+ *   (but leave existing `\r\n` sequences untouched, so a caller
+ *   that already matches the file's style still works). This
+ *   keeps writes self-consistent with the file's EOL style.
  * - The file is written via `writeFileAtomic` (temp file + rename),
  *   so concurrent readers never observe a truncated or half-written
  *   state. The rename is atomic on POSIX and NTFS when both paths
@@ -196,14 +203,24 @@ export async function applyTextEdit(
 
   const source = await readFile(filePath, "utf-8");
 
+  // Normalize oldText/newText to match the file's dominant EOL style.
+  // If the file is CRLF, any bare \n (not already part of \r\n) in the
+  // caller-provided strings is promoted to \r\n. This makes LF-authored
+  // inputs match CRLF files without surprising the caller.
+  const fileUsesCrlf = source.includes("\r\n");
+  const normalizeEol = (s: string): string =>
+    fileUsesCrlf ? s.replace(/(?<!\r)\n/g, "\r\n") : s;
+  const searchText = normalizeEol(oldText);
+  const replacementText = normalizeEol(newText);
+
   // Count occurrences
   const occurrences: number[] = [];
   let searchFrom = 0;
   while (true) {
-    const idx = source.indexOf(oldText, searchFrom);
+    const idx = source.indexOf(searchText, searchFrom);
     if (idx === -1) break;
     occurrences.push(idx);
-    searchFrom = idx + oldText.length;
+    searchFrom = idx + searchText.length;
   }
 
   if (occurrences.length === 0) {
@@ -241,7 +258,7 @@ export async function applyTextEdit(
   }
 
   const newSource =
-    source.slice(0, targetIndex) + newText + source.slice(targetIndex + oldText.length);
+    source.slice(0, targetIndex) + replacementText + source.slice(targetIndex + searchText.length);
 
   await writeFileAtomic(filePath, newSource);
 
