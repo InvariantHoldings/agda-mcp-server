@@ -84,7 +84,8 @@ export class AgdaSession {
   goalIds: number[] = [];
   exiting = false;
   private detectedVersion: AgdaVersion | null = null;
-  private versionDetected = false;
+  private versionDetectionAttempts = 0;
+  private static readonly VERSION_DETECTION_MAX_ATTEMPTS = 3;
   private lastLoadedMtime: number | null = null;
   private libraryRegistration: LibraryRegistration | null = null;
   private readonly transport = new AgdaTransport();
@@ -147,6 +148,9 @@ export class AgdaSession {
       this.currentFile = null;
       this.goalIds = [];
       this.exiting = false;
+      // Reset version detection so the next process start re-detects cleanly.
+      this.detectedVersion = null;
+      this.versionDetectionAttempts = 0;
       this.transport.handleProcessClose();
     });
 
@@ -154,43 +158,7 @@ export class AgdaSession {
       this.transport.handleProcessError(err);
     });
 
-    // Kick off version detection asynchronously on first process start.
-    // We don't await here — the version becomes available before any
-    // real command completes because it goes through the same command queue.
-    if (!this.versionDetected) {
-      this.versionDetected = true;
-      this.detectVersion();
-    }
-
     return this.proc;
-  }
-
-  /**
-   * Detect the running Agda version via Cmd_show_version.
-   * Called once on first process start. Failures are non-fatal.
-   */
-  private detectVersion(): void {
-    const cmd = `IOTCM "" NonInteractive Direct (Cmd_show_version)`;
-    this.sendCommand(cmd, 15_000).then((responses) => {
-      for (const resp of responses) {
-        const info = (resp as any).info;
-        const raw: string | undefined =
-          info?.version ?? info?.message ?? info?.text;
-        if (raw) {
-          try {
-            this.detectedVersion = parseAgdaVersion(raw);
-            logger.trace("detected Agda version", {
-              version: this.detectedVersion,
-            });
-          } catch {
-            // Could not parse — leave as null
-          }
-          return;
-        }
-      }
-    }).catch(() => {
-      // Version detection is best-effort
-    });
   }
 
   private getLibraryRegistration(): LibraryRegistration {
@@ -206,13 +174,52 @@ export class AgdaSession {
    *
    * Commands are serialized via a promise queue so that concurrent MCP
    * tool calls never interleave on the single-process Agda stdin/stdout.
+   *
+   * Version detection runs inline before the first real command so that
+   * `getAgdaVersion()` is populated for every caller, including the one
+   * that triggers the first command.
    */
   sendCommand(
     command: string,
     timeoutMs = configuredCommandTimeoutMs(),
   ): Promise<AgdaResponse[]> {
-    const task = this.commandQueue.then(() => {
+    const task = this.commandQueue.then(async () => {
       const proc = this.ensureProcess();
+
+      // Detect Agda version inline before the user command so that
+      // getAgdaVersion() is populated for the current command's callers.
+      // Retry on transient failures up to VERSION_DETECTION_MAX_ATTEMPTS.
+      if (
+        this.detectedVersion === null &&
+        this.versionDetectionAttempts < AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS
+      ) {
+        this.versionDetectionAttempts++;
+        try {
+          const vCmd = `IOTCM "" NonInteractive Direct (Cmd_show_version)`;
+          const responses = await this.transport.sendCommand(proc, vCmd, 15_000);
+          for (const resp of responses) {
+            const info = (resp as any).info;
+            const raw: string | undefined =
+              info?.version ?? info?.message ?? info?.text;
+            if (raw) {
+              try {
+                this.detectedVersion = parseAgdaVersion(raw);
+                logger.trace("detected Agda version", {
+                  version: this.detectedVersion,
+                });
+              } catch {
+                // Could not parse version string; attempt slot consumed,
+                // retry will happen on the next command if under the limit.
+              }
+              break;
+            }
+          }
+        } catch {
+          // Best-effort — command error consumes an attempt slot; will retry
+          // on subsequent commands up to VERSION_DETECTION_MAX_ATTEMPTS.
+        }
+      }
+
       return this.transport.sendCommand(proc, command, timeoutMs);
     });
     // Chain onto the queue — swallow rejections so a failed command
@@ -441,8 +448,9 @@ export class AgdaSession {
 
   /**
    * Get the detected Agda version, or null if not yet detected.
-   * Available after the first command completes (version detection
-   * runs automatically on process start).
+   * Populated by the inline version detection that runs before each
+   * command (once per process lifecycle). Callers within a command
+   * handler can rely on this being set if detection succeeded.
    */
   getAgdaVersion(): AgdaVersion | null {
     return this.detectedVersion;
@@ -480,7 +488,7 @@ export class AgdaSession {
     this.goalIds = [];
     this.lastLoadedMtime = null;
     this.detectedVersion = null;
-    this.versionDetected = false;
+    this.versionDetectionAttempts = 0;
     this.transport.destroy();
     this.commandQueue = Promise.resolve();
     this.exiting = false;
