@@ -157,6 +157,11 @@ export function register(
     callback: async () => {
       const tools = listToolManifest();
       const serverVersion = getServerVersion();
+      // Trigger version detection if it hasn't run yet (e.g. when this tool
+      // is invoked before any other Agda command). tryGetAgdaVersion falls back
+      // to a live Cmd_show_version query so the catalog always includes Agda
+      // info rather than silently omitting it on first use.
+      await tryGetAgdaVersion(session);
       const { agdaVersion, supportedExtensions, supportedFeatureFlags, structuredGiveResult } = getAgdaCapabilities(session.getAgdaVersion());
 
       let output = "## Tool catalog\n\n";

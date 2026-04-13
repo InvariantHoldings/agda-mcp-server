@@ -213,7 +213,7 @@ export class AgdaSession {
       ) {
         this.versionDetectionAttempts++;
         try {
-          const vCmd = `IOTCM "" NonInteractive Direct (Cmd_show_version)`;
+          const vCmd = this.iotcm("Cmd_show_version");
           const responses = await this.transport.sendCommand(
             proc,
             vCmd,
