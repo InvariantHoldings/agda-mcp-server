@@ -183,6 +183,46 @@ This server is intentionally stateful.
 If you only want a quick compile check and do not need goals, use
 `agda_typecheck` instead of creating a session.
 
+### Write-back for proof actions
+
+The proof-action tools (`agda_give`, `agda_refine`, `agda_refine_exact`,
+`agda_intro`, `agda_auto`, `agda_case_split`, `agda_solve_one`, `agda_solve_all`)
+persist their result to the source file by default and auto-reload, so the
+session and disk stay in sync without a separate edit step. Pass
+`writeToFile: false` on any of those calls for session-only behavior (old
+default).
+
+`agda_apply_edit(file, oldText, newText, occurrence?)` is a sibling primitive
+for non-goal edits — adding imports, renaming symbols, fixing typos. It
+substitutes `oldText` with `newText` in the named file and reloads. `oldText`
+must match exactly once unless `occurrence` (1-based) is provided.
+
+Both paths share the same safety guarantees:
+
+- **Agda source files only.** `agda_apply_edit` refuses anything outside the
+  `.agda` / `.lagda[.md/.rst/.tex/.org/.typ]` allowlist — it cannot be used
+  to modify `.git/config`, `package.json`, shell scripts, or other
+  non-Agda files inside the project root.
+- **Path containment.** All edits resolve the target path through
+  `realpath` and verify it stays inside the project root; a symlink that
+  physically points outside the root is refused.
+- **Symlink race defense.** Source reads use `O_NOFOLLOW`; if a symlink is
+  planted at the canonical path after path resolution, the read fails with
+  `ELOOP` instead of silently following it.
+- **File size cap.** The edit pipeline refuses to read or write any Agda
+  source file larger than **512 KiB** (524288 bytes). This protects memory,
+  scanner cost, and blast radius — it is a deliberate soft cap, not a
+  protocol limit. If you have a legitimate Agda source file that trips
+  this, treat it as a sign that the file should be split rather than as a
+  bug to work around.
+- **Atomic writes.** Edits go through a temp-file-rename so readers never
+  observe a partially-written state. The temp filename mixes pid and
+  `randomUUID()` and is created with `O_EXCL` so it cannot be pre-planted
+  by a concurrent process.
+- **Staleness guard.** If the loaded file has been modified on disk since
+  the last `agda_load`, the edit is refused and the session is reloaded
+  to match disk — writes never clobber external changes.
+
 ## Tool reference
 
 ## Protocol coverage
@@ -221,16 +261,17 @@ At the current milestone, the server now exposes:
 
 ### Session management
 
-| Tool                  | Description                                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------------------- |
-| `agda_load`           | Load and type-check a file, establish the active interactive session, and return current goal IDs |
-| `agda_load_no_metas`  | Load and type-check a file, failing if any unsolved metavariables remain                          |
-| `agda_session_status` | Show the currently loaded file and available goal IDs                                             |
-| `agda_show_version`   | Show the version string reported by the running Agda process                                      |
-| `agda_abort`          | Send Agda's `Cmd_abort` to the running process                                                    |
-| `agda_exit`           | Send Agda's `Cmd_exit` to the running process                                                     |
-| `agda_typecheck`      | Run a stateless batch type-check without creating or updating the interactive session             |
-| `agda_tools_catalog`  | Return the manifest-derived catalog of tools, categories, and schema field names                  |
+| Tool                  | Description                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `agda_load`           | Load and type-check a file, establish the active interactive session, and return current goal IDs               |
+| `agda_load_no_metas`  | Load and type-check a file, failing if any unsolved metavariables remain                                        |
+| `agda_session_status` | Show the currently loaded file and available goal IDs                                                           |
+| `agda_show_version`   | Show the version string reported by the running Agda process                                                    |
+| `agda_abort`          | Send Agda's `Cmd_abort` to the running process                                                                  |
+| `agda_exit`           | Send Agda's `Cmd_exit` to the running process                                                                   |
+| `agda_typecheck`      | Run a stateless batch type-check without creating or updating the interactive session                           |
+| `agda_apply_edit`     | Apply a targeted text substitution to an Agda source file and reload (imports, renames, typos; Agda files only) |
+| `agda_tools_catalog`  | Return the manifest-derived catalog of tools, categories, and schema field names                                |
 
 ### Display and highlighting
 

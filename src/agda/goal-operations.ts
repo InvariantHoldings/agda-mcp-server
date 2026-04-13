@@ -18,6 +18,7 @@ import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.j
 import {
   decodeCaseSplitResponses,
   decodeGiveLikeResponse,
+  resolveGiveReplacementText,
 } from "../protocol/responses/proof-actions.js";
 import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
 import { decodeLoadDisplayResponses } from "../protocol/responses/load-display.js";
@@ -114,7 +115,10 @@ export async function give(
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);
-  return { result: decodeGiveLikeResponse(responses) };
+  return {
+    result: decodeGiveLikeResponse(responses),
+    replacementText: resolveGiveReplacementText(responses, expr),
+  };
 }
 
 /** Refine a goal — apply a function and create subgoals. */
@@ -129,7 +133,10 @@ export async function refine(
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);
-  return { result: decodeGiveLikeResponse(responses) };
+  return {
+    result: decodeGiveLikeResponse(responses),
+    replacementText: resolveGiveReplacementText(responses, expr),
+  };
 }
 
 /** Refine a goal using Agda's exact Cmd_refine command. */
@@ -144,7 +151,10 @@ export async function refineExact(
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);
-  return { result: decodeGiveLikeResponse(responses) };
+  return {
+    result: decodeGiveLikeResponse(responses),
+    replacementText: resolveGiveReplacementText(responses, expr),
+  };
 }
 
 /** Introduce a lambda or constructor using Agda's exact Cmd_intro command. */
@@ -159,7 +169,10 @@ export async function intro(
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);
-  return { result: decodeGiveLikeResponse(responses) };
+  return {
+    result: decodeGiveLikeResponse(responses),
+    replacementText: resolveGiveReplacementText(responses, expr),
+  };
 }
 
 /** Auto-solve a single goal. */

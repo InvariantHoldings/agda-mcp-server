@@ -19,6 +19,7 @@ import type { PathResolver } from "./load-tool-shared.js";
 import { registerAgdaLoad } from "./register-agda-load.js";
 import { registerAgdaLoadNoMetas } from "./register-agda-load-no-metas.js";
 import { registerAgdaTypecheck } from "./register-agda-typecheck.js";
+import { registerAgdaApplyEdit } from "./register-agda-apply-edit.js";
 
 export function registerSessionLoadTools(
   server: McpServer,
@@ -33,4 +34,5 @@ export function registerSessionLoadTools(
   registerAgdaLoad(server, session, repoRoot, resolveInputFile);
   registerAgdaLoadNoMetas(server, session, repoRoot, resolveInputFile);
   registerAgdaTypecheck(server, session, repoRoot, resolveInputFile);
+  registerAgdaApplyEdit(server, session, repoRoot);
 }

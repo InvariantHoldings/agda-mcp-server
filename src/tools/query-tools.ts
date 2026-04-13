@@ -17,6 +17,7 @@ import {
   registerTextTool,
   warningDiagnostic,
 } from "./tool-helpers.js";
+import { applyBatchEditAndReload } from "../session/reload-and-diagnose.js";
 
 export function register(
   server: McpServer,
@@ -180,18 +181,32 @@ export function register(
     server,
     session,
     name: "agda_solve_all",
-    description: "Attempt to solve all goals that have unique solutions.",
+    description: "Attempt to solve all goals that have unique solutions. By default, writes the solutions to the file and reloads. File writes are capped at 512 KiB of Agda source; larger files are refused.",
     category: "proof",
     protocolCommands: ["Cmd_solveAll"],
-    inputSchema: {},
-    callback: async () => {
+    inputSchema: {
+      writeToFile: z.boolean().optional().describe("Write solutions to the source file and reload (default: true)"),
+    },
+    callback: async ({ writeToFile }) => {
+      const shouldWrite = writeToFile !== false;
+      const goalIdsBefore = session.getGoalIds();
       const result = await session.query.solveAll();
       let output = `## Solve all\n\n`;
-      if (result.solutions.length > 0) {
-        for (const s of result.solutions) output += `- ${s}\n`;
-      } else {
+
+      if (result.solutions.length === 0) {
         output += `No goals with unique solutions found.\n`;
+        return output;
       }
+
+      output += `**Solutions:**\n`;
+      for (const s of result.solutions) output += `- ${s}\n`;
+
+      if (shouldWrite && session.currentFile && result.rawSolutions.length > 0) {
+        output += await applyBatchEditAndReload(
+          session, goalIdsBefore, session.currentFile, result.rawSolutions,
+        );
+      }
+
       return output;
     },
   });
@@ -200,18 +215,32 @@ export function register(
     server,
     session,
     name: "agda_solve_one",
-    description: "Attempt to solve one goal that has a unique solution using Agda's exact Cmd_solveOne command.",
+    description: "Attempt to solve one goal that has a unique solution using Agda's exact Cmd_solveOne command. By default, writes the solution to the file and reloads. File writes are capped at 512 KiB of Agda source; larger files are refused.",
     category: "proof",
     protocolCommands: ["Cmd_solveOne"],
-    inputSchema: { goalId: z.number().describe("The goal ID to solve if it has a unique solution") },
-    callback: async ({ goalId }) => {
+    inputSchema: {
+      goalId: z.number().describe("The goal ID to solve if it has a unique solution"),
+      writeToFile: z.boolean().optional().describe("Write the solution to the source file and reload (default: true)"),
+    },
+    callback: async ({ goalId, writeToFile }) => {
+      const shouldWrite = writeToFile !== false;
+      const goalIdsBefore = session.getGoalIds();
       const result = await session.query.solveOne(goalId);
       let output = `## Solve one ?${goalId}\n\n`;
-      if (result.solutions.length > 0) {
-        for (const solution of result.solutions) output += `- ${solution}\n`;
-      } else {
+
+      if (result.solutions.length === 0) {
         output += "No unique solution found for that goal.\n";
+        return output;
       }
+
+      for (const solution of result.solutions) output += `- ${solution}\n`;
+
+      if (shouldWrite && session.currentFile && result.rawSolutions.length > 0) {
+        output += await applyBatchEditAndReload(
+          session, goalIdsBefore, session.currentFile, result.rawSolutions,
+        );
+      }
+
       return output;
     },
   });

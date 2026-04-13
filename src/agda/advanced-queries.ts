@@ -17,7 +17,7 @@ import type {
   ShowVersionResult,
 } from "./types.js";
 import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.js";
-import { decodeGiveLikeResponse, decodeSolveResponses } from "../protocol/responses/proof-actions.js";
+import { decodeGiveLikeResponse, decodeSolveResponses, decodeSolveRawSolutions } from "../protocol/responses/proof-actions.js";
 import { decodeSearchAboutResponses } from "../protocol/responses/search-about.js";
 import { decodeGoalExpressionDisplayResponses } from "../protocol/responses/goal-expression-display.js";
 import { decodeDisplayTextResponses } from "../protocol/responses/text-display.js";
@@ -53,7 +53,7 @@ export async function solveAll(ctx: AgdaCommandContext): Promise<SolveResult> {
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);
-  return { solutions: decodeSolveResponses(responses) };
+  return { solutions: decodeSolveResponses(responses), rawSolutions: decodeSolveRawSolutions(responses) };
 }
 
 /** Solve one goal that has a unique solution. */
@@ -67,7 +67,7 @@ export async function solveOne(
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);
-  return { solutions: decodeSolveResponses(responses) };
+  return { solutions: decodeSolveResponses(responses), rawSolutions: decodeSolveRawSolutions(responses) };
 }
 
 /** Explain why a name is in scope at a given goal. */
