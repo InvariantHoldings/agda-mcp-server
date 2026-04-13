@@ -24,6 +24,7 @@ lerna-debug.log*
 tmp/
 temp/
 *.tgz
+.cache/
 
 # Environment and local config
 .env
