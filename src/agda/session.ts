@@ -24,8 +24,6 @@
 //     backend-operations.ts    — compile and backend payload commands
 
 import { spawn, ChildProcess } from "node:child_process";
-import { resolve } from "node:path";
-import { existsSync, statSync } from "node:fs";
 import { deriveSessionPhase, type SessionPhase } from "../session/session-state.js";
 import {
   configuredCommandTimeoutMs,
@@ -39,32 +37,13 @@ import {
 } from "./library-registration.js";
 import type {
   AgdaResponse,
-  AgdaGoal,
   LoadResult,
 } from "./types.js";
-import { parseLoadResponses } from "./parse-load-responses.js";
-import { logger } from "./logger.js";
-import { command, quoted, profileOptionsList } from "../protocol/command-builder.js";
-import {
-  validateProfileOptions,
-  toProfileArgs,
-} from "../protocol/profile-options.js";
+import { findAgdaBinary } from "./binary-discovery.js";
+import { runLoad, runLoadNoMetas } from "./session-load-impl.js";
+import { statSync } from "node:fs";
 
-// ── Binary discovery ──────────────────────────────────────────────────
-
-/**
- * Find the repo-pinned Agda binary.
- */
-export function findAgdaBinary(repoRoot: string): string {
-  if (process.env.AGDA_BIN) {
-    return process.env.AGDA_BIN;
-  }
-  const pinned = resolve(repoRoot, "tooling/scripts/run-pinned-agda.sh");
-  if (existsSync(pinned)) {
-    return pinned;
-  }
-  return "agda";
-}
+export { findAgdaBinary };
 
 // ── Agda Session ──────────────────────────────────────────────────────
 
@@ -86,7 +65,15 @@ export class AgdaSession {
   currentFile: string | null = null;
   goalIds: number[] = [];
   exiting = false;
-  private lastLoadedMtime: number | null = null;
+  // The three load-history fields below are exposed to the sibling
+  // session-load-impl.ts so the runLoad / runLoadNoMetas helpers can
+  // update session state after a Cmd_load completes. External
+  // consumers should read them via the getters (isFileStale,
+  // getLastClassification, getLastLoadedAt) rather than touching
+  // them directly.
+  lastLoadedMtime: number | null = null;
+  lastClassification: string | null = null;
+  lastLoadedAt: number | null = null;
   private libraryRegistration: LibraryRegistration | null = null;
   private readonly transport = new AgdaTransport();
   private commandQueue: Promise<unknown> = Promise.resolve();
@@ -147,6 +134,9 @@ export class AgdaSession {
       this.proc = null;
       this.currentFile = null;
       this.goalIds = [];
+      this.lastLoadedMtime = null;
+      this.lastClassification = null;
+      this.lastLoadedAt = null;
       this.exiting = false;
       this.transport.handleProcessClose();
     });
@@ -214,6 +204,17 @@ export class AgdaSession {
     return `IOTCM "${filePath}" NonInteractive Direct (${agdaCmd})`;
   }
 
+  /**
+   * Build an IOTCM command string for a specific file path, bypassing
+   * the session's currentFile. Used by the extracted load helpers
+   * (session-load-impl.ts) which need to construct the Cmd_load
+   * invocation before assigning currentFile — assigning earlier would
+   * race with ensureProcess()'s stale-state reset path.
+   */
+  iotcmFor(filePath: string, agdaCmd: string): string {
+    return this.buildIotcm(filePath, agdaCmd);
+  }
+
   private async runIndependentCommand(
     agdaCmd: string,
     timeoutMs = 120_000,
@@ -223,183 +224,28 @@ export class AgdaSession {
 
   // ── Public API ────────────────────────────────────────────────────
 
-  private static readonly NOT_FOUND_RESULT: LoadResult = Object.freeze({
-    success: false, errors: [], warnings: [], goals: [],
-    allGoalsText: "", invisibleGoalCount: 0,
-    goalCount: 0, hasHoles: false, isComplete: false,
-    classification: "type-error",
-    profiling: null,
-  });
-
-  private mergeGoals(
-    primaryGoals: AgdaGoal[],
-    secondaryGoals: AgdaGoal[],
-  ): AgdaGoal[] {
-    const merged = new Map<number, AgdaGoal>();
-
-    for (const goal of primaryGoals) {
-      merged.set(goal.goalId, { ...goal, context: [...goal.context] });
-    }
-
-    for (const goal of secondaryGoals) {
-      const existing = merged.get(goal.goalId);
-      if (!existing) {
-        merged.set(goal.goalId, { ...goal, context: [...goal.context] });
-        continue;
-      }
-
-      if (existing.type === "?" && goal.type !== "?") {
-        existing.type = goal.type;
-      }
-
-      if (existing.context.length === 0 && goal.context.length > 0) {
-        existing.context = [...goal.context];
-      }
-    }
-
-    return [...merged.values()].sort((left, right) => left.goalId - right.goalId);
-  }
-
   /**
    * Load (type-check) a file. This is always the first command — it
-   * establishes the interaction state and assigns goal IDs.
+   * establishes the interaction state and assigns goal IDs. The
+   * implementation lives in session-load-impl.ts so this file stays
+   * focused on the class and its lifecycle; both load() and
+   * loadNoMetas() are thin delegators here.
    *
    * @param filePath  Path to the Agda file (relative or absolute).
    * @param options   Optional settings for the load command.
-   * @param options.profileOptions  Agda profile options (e.g. ["modules", "sharing"]).
-   *   These are passed as `--profile=xxx` in the Cmd_load options list.
+   * @param options.profileOptions  Agda profile options (e.g.
+   *   ["modules", "sharing"]). These are passed as `--profile=xxx` in
+   *   the Cmd_load options list.
    */
   async load(
     filePath: string,
     options?: { profileOptions?: string[] },
   ): Promise<LoadResult> {
-    const absPath = resolve(this.repoRoot, filePath);
-    if (!existsSync(absPath)) {
-      return {
-        ...AgdaSession.NOT_FOUND_RESULT,
-        errors: [`File not found: ${absPath}`],
-      };
-    }
-
-    // Build the command-line options list for Cmd_load
-    let optsList = "[]";
-    if (options?.profileOptions && options.profileOptions.length > 0) {
-      const validation = validateProfileOptions(options.profileOptions);
-      if (!validation.valid) {
-        return {
-          success: false,
-          errors: validation.errors,
-          warnings: [],
-          goals: [],
-          allGoalsText: "",
-          invisibleGoalCount: 0,
-          goalCount: 0,
-          hasHoles: false,
-          isComplete: false,
-          classification: "invalid-profile-options",
-          profiling: null,
-        };
-      }
-      const profileArgs = toProfileArgs(validation.options);
-      optsList = profileOptionsList(profileArgs);
-    }
-
-    // Use buildIotcm with absPath directly — don't set currentFile yet
-    // because ensureProcess() (called inside sendCommand) resets it
-    const responses = await this.sendCommand(
-      this.buildIotcm(absPath, command("Cmd_load", quoted(absPath), optsList)),
-    );
-    const profilingEnabled = (options?.profileOptions?.length ?? 0) > 0;
-    const parsed = parseLoadResponses(responses, { profilingEnabled });
-
-    // Set session state before reconciling metas so follow-up queries can run
-    this.currentFile = absPath;
-    this.goalIds = parsed.goalIds;
-    this.lastLoadedMtime = statSync(absPath).mtimeMs;
-
-    let goals = parsed.goals;
-    let goalIds = parsed.goalIds;
-
-    if (parsed.success) {
-      try {
-        const metas = await this.goal.metas();
-        if (metas.goals.length > 0) {
-          goals = this.mergeGoals(parsed.goals, metas.goals);
-          goalIds = goals.map((goal) => goal.goalId);
-        }
-      } catch (err) {
-        logger.warn("post-load metas reconciliation failed", {
-          file: absPath,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-
-    const goalCount = goals.length;
-    const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0;
-    const isComplete = parsed.success && !hasHoles;
-    const classification = parsed.success
-      ? hasHoles
-        ? "ok-with-holes"
-        : "ok-complete"
-      : "type-error";
-
-    this.goalIds = goalIds;
-
-    logger.trace("load complete", {
-      file: absPath,
-      success: parsed.success,
-      goals: goals.length,
-      errors: parsed.errors.length,
-    });
-
-    return {
-      success: parsed.success,
-      errors: parsed.errors,
-      warnings: parsed.warnings,
-      goals,
-      allGoalsText: parsed.allGoalsText,
-      invisibleGoalCount: parsed.invisibleGoalCount,
-      goalCount,
-      hasHoles,
-      isComplete,
-      classification,
-      profiling: parsed.profiling,
-    };
+    return runLoad(this, filePath, options);
   }
 
   async loadNoMetas(filePath: string): Promise<LoadResult> {
-    const absPath = resolve(this.repoRoot, filePath);
-    if (!existsSync(absPath)) {
-      return {
-        ...AgdaSession.NOT_FOUND_RESULT,
-        errors: [`File not found: ${absPath}`],
-      };
-    }
-
-    const responses = await this.sendCommand(
-      this.buildIotcm(absPath, command("Cmd_load_no_metas", quoted(absPath))),
-    );
-    const parsed = parseLoadResponses(responses, { profilingEnabled: false });
-
-    // Set session state atomically AFTER command completes
-    this.currentFile = absPath;
-    this.goalIds = parsed.goalIds;
-    this.lastLoadedMtime = statSync(absPath).mtimeMs;
-
-    return {
-      success: parsed.success,
-      errors: parsed.errors,
-      warnings: parsed.warnings,
-      goals: parsed.goals,
-      allGoalsText: parsed.allGoalsText,
-      invisibleGoalCount: parsed.invisibleGoalCount,
-      goalCount: parsed.goalCount,
-      hasHoles: parsed.hasHoles,
-      isComplete: parsed.isComplete,
-      classification: parsed.classification,
-      profiling: parsed.profiling,
-    };
+    return runLoadNoMetas(this, filePath);
   }
 
   async compile(
@@ -449,6 +295,22 @@ export class AgdaSession {
     return this.currentFile;
   }
 
+  /**
+   * Classification from the most recent load attempt, if any. Set by
+   * load() and loadNoMetas() for every attempt — success, failure, and
+   * type-error alike — so callers distinguishing "regression from
+   * ok-complete" from "still failing" both have a previous-state anchor.
+   * Reset on session destroy and on Agda process death.
+   */
+  getLastClassification(): string | null {
+    return this.lastClassification;
+  }
+
+  /** Get the wall-clock time (epoch ms) of the most recent load, if any. */
+  getLastLoadedAt(): number | null {
+    return this.lastLoadedAt;
+  }
+
   /** Get the current high-level session phase. */
   getPhase(): SessionPhase {
     return deriveSessionPhase({
@@ -470,6 +332,8 @@ export class AgdaSession {
     this.currentFile = null;
     this.goalIds = [];
     this.lastLoadedMtime = null;
+    this.lastClassification = null;
+    this.lastLoadedAt = null;
     this.transport.destroy();
     this.commandQueue = Promise.resolve();
     this.exiting = false;

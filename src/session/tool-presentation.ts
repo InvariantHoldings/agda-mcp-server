@@ -20,6 +20,9 @@ export const loadDataSchema = z.object({
   reloaded: z.boolean(),
   staleBeforeLoad: z.boolean(),
   profiling: z.string().nullable().describe("Profiling output from Agda when --profile options are active"),
+  previousClassification: z.string().nullable().optional(),
+  previousLoadedAtMs: z.number().nullable().optional(),
+  lastCheckedLine: z.number().int().positive().nullable().optional(),
 });
 
 export const sessionStatusDataSchema = z.object({

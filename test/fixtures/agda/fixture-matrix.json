@@ -401,7 +401,7 @@
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
     "expectedStrictClassification": "type-error",
-    "minAgdaVersion": "2.7.0"
+    "minAgdaVersion": "2.8.0"
   },
   {
     "name": "LiterateTypst.lagda.typ",
