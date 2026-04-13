@@ -6,73 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
 import { registerGoalTextTool } from "./tool-helpers.js";
-import { applyProofEdit, type ProofEdit, type ApplyEditResult } from "../session/apply-proof-edit.js";
-import type { LoadResult } from "../agda/types.js";
-
-/**
- * Apply a proof edit to the file, reload, and return output describing
- * what happened. Handles both success and failure:
- * - On success: writes the edit, reloads, surfaces any reload errors/warnings.
- * - On edit failure: reloads the unchanged file to resync the Agda session
- *   (which has already mutated its internal state).
- */
-async function applyEditAndReload(
-  session: AgdaSession,
-  goalIdsBefore: number[],
-  edit: ProofEdit,
-): Promise<string> {
-  const filePath = session.currentFile;
-  if (!filePath) return "";
-
-  let editResult: ApplyEditResult;
-  try {
-    editResult = await applyProofEdit(filePath, goalIdsBefore, edit);
-  } catch (err) {
-    // FS error (permissions, missing file, etc.) — the file is unchanged
-    // but the Agda session has already mutated. Reload to resync.
-    const msg = err instanceof Error ? err.message : String(err);
-    let output = `\n**Warning:** File edit failed: ${msg}\n`;
-    try {
-      const loadResult = await session.load(filePath);
-      output += `Reloaded unchanged file to resync session: ${loadResult.goalCount} goal(s).\n`;
-    } catch (reloadErr) {
-      const reloadMsg = reloadErr instanceof Error ? reloadErr.message : String(reloadErr);
-      output += `**Warning:** Failed to resync session (${reloadMsg}). Run \`agda_load\` manually.\n`;
-    }
-    output += `Apply the edit manually, then call \`agda_load\` to reload.\n`;
-    return output;
-  }
-
-  if (editResult.applied) {
-    const loadResult: LoadResult = await session.load(filePath);
-    let output = `\n${editResult.message}\n`;
-    if (loadResult.success) {
-      output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
-    } else {
-      output += `Reloaded with errors: ${loadResult.goalCount} goal(s) remaining.\n`;
-      if (loadResult.errors.length > 0) {
-        output += `**Errors:** ${loadResult.errors.join("; ")}\n`;
-      }
-    }
-    if (loadResult.warnings.length > 0) {
-      output += `**Warnings:** ${loadResult.warnings.join("; ")}\n`;
-    }
-    return output;
-  }
-
-  // Edit failed — session state is out of sync with the file on disk.
-  // Reload the unchanged file to resync.
-  let output = `\n**Warning:** ${editResult.message}\n`;
-  try {
-    const loadResult = await session.load(filePath);
-    output += `Reloaded unchanged file to resync session: ${loadResult.goalCount} goal(s).\n`;
-    output += `Apply the edit manually, then call \`agda_load\` to reload.\n`;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    output += `**Warning:** Failed to resync session after edit failure (${msg}). Run \`agda_load\` manually.\n`;
-  }
-  return output;
-}
+import { applyEditAndReload } from "../session/reload-and-diagnose.js";
 
 export function register(
   server: McpServer,
@@ -185,9 +119,13 @@ export function register(
       output += result.result ? `**Result:** \`${result.result}\`\n` : `Expression accepted.\n`;
 
       if (shouldWrite && session.currentFile) {
-        output += await applyEditAndReload(session, goalIdsBefore, {
-          kind: "replace-hole", goalId, expr: result.replacementText ?? exprStr,
-        });
+        if (result.replacementText != null) {
+          output += await applyEditAndReload(session, goalIdsBefore, {
+            kind: "replace-hole", goalId, expr: result.replacementText,
+          });
+        } else {
+          output += `\nAgda did not return a confirmed replacement. Apply the expression manually if appropriate, then call \`agda_load\`.\n`;
+        }
       }
       return output;
     },
@@ -216,9 +154,13 @@ export function register(
         : `Refinement applied. Call \`agda_metas\` to see new goals.\n`;
 
       if (shouldWrite && session.currentFile) {
-        output += await applyEditAndReload(session, goalIdsBefore, {
-          kind: "replace-hole", goalId, expr: result.replacementText ?? exprStr,
-        });
+        if (typeof result.replacementText === "string" && result.replacementText.length > 0) {
+          output += await applyEditAndReload(session, goalIdsBefore, {
+            kind: "replace-hole", goalId, expr: result.replacementText,
+          });
+        } else {
+          output += `\nNo concrete replacement text was returned, so the file was not modified.\n`;
+        }
       }
       return output;
     },
@@ -247,9 +189,13 @@ export function register(
         : "Refinement applied. Call `agda_metas` to inspect resulting goals.\n";
 
       if (shouldWrite && session.currentFile) {
-        output += await applyEditAndReload(session, goalIdsBefore, {
-          kind: "replace-hole", goalId, expr: result.replacementText ?? exprStr,
-        });
+        if (result.replacementText != null) {
+          output += await applyEditAndReload(session, goalIdsBefore, {
+            kind: "replace-hole", goalId, expr: result.replacementText,
+          });
+        } else {
+          output += `\nNo confirmed replacement text was returned by Agda, so the file was left unchanged. Apply the refinement manually if needed.\n`;
+        }
       }
       return output;
     },

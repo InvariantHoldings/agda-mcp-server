@@ -6,8 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
 import { registerGoalTextTool, registerTextTool } from "./tool-helpers.js";
-import { applyBatchHoleReplacements } from "../session/apply-proof-edit.js";
-import type { LoadResult } from "../agda/types.js";
+import { applyBatchEditAndReload } from "../session/reload-and-diagnose.js";
 
 export function register(
   server: McpServer,
@@ -73,33 +72,9 @@ export function register(
       for (const s of result.solutions) output += `- ${s}\n`;
 
       if (shouldWrite && session.currentFile && result.rawSolutions.length > 0) {
-        const filePath = session.currentFile;
-        const batchResult = await applyBatchHoleReplacements(filePath, goalIdsBefore, result.rawSolutions);
-        if (batchResult.appliedCount > 0) {
-          const loadResult: LoadResult = await session.load(filePath);
-          output += `\n${batchResult.message}\n`;
-          if (loadResult.success) {
-            output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
-          } else {
-            output += `Reloaded with errors: ${loadResult.goalCount} goal(s) remaining.\n`;
-            if (loadResult.errors.length > 0) {
-              output += `**Errors:** ${loadResult.errors.join("; ")}\n`;
-            }
-          }
-          if (loadResult.warnings.length > 0) {
-            output += `**Warnings:** ${loadResult.warnings.join("; ")}\n`;
-          }
-        } else {
-          output += `\n**Warning:** ${batchResult.message}\n`;
-          try {
-            const loadResult = await session.load(filePath);
-            output += `Reloaded unchanged file to resync session: ${loadResult.goalCount} goal(s).\n`;
-            output += `Apply the edits manually, then call \`agda_load\` to reload.\n`;
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            output += `**Warning:** Failed to resync session after edit failure (${msg}). Run \`agda_load\` manually.\n`;
-          }
-        }
+        output += await applyBatchEditAndReload(
+          session, goalIdsBefore, session.currentFile, result.rawSolutions,
+        );
       }
 
       return output;
@@ -131,33 +106,9 @@ export function register(
       for (const solution of result.solutions) output += `- ${solution}\n`;
 
       if (shouldWrite && session.currentFile && result.rawSolutions.length > 0) {
-        const filePath = session.currentFile;
-        const batchResult = await applyBatchHoleReplacements(filePath, goalIdsBefore, result.rawSolutions);
-        if (batchResult.appliedCount > 0) {
-          const loadResult: LoadResult = await session.load(filePath);
-          output += `\n${batchResult.message}\n`;
-          if (loadResult.success) {
-            output += `Reloaded: ${loadResult.goalCount} goal(s) remaining.\n`;
-          } else {
-            output += `Reloaded with errors: ${loadResult.goalCount} goal(s) remaining.\n`;
-            if (loadResult.errors.length > 0) {
-              output += `**Errors:** ${loadResult.errors.join("; ")}\n`;
-            }
-          }
-          if (loadResult.warnings.length > 0) {
-            output += `**Warnings:** ${loadResult.warnings.join("; ")}\n`;
-          }
-        } else {
-          output += `\n**Warning:** ${batchResult.message}\n`;
-          try {
-            const loadResult = await session.load(filePath);
-            output += `Reloaded unchanged file to resync session: ${loadResult.goalCount} goal(s).\n`;
-            output += `Apply the edit manually, then call \`agda_load\` to reload.\n`;
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            output += `**Warning:** Failed to resync session after edit failure (${msg}). Run \`agda_load\` manually.\n`;
-          }
-        }
+        output += await applyBatchEditAndReload(
+          session, goalIdsBefore, session.currentFile, result.rawSolutions,
+        );
       }
 
       return output;

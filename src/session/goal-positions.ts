@@ -80,6 +80,21 @@ export function findGoalPositions(source: string): GoalPosition[] {
       continue;
     }
 
+    // Skip character literals (e.g. 'a', '\n', '?')
+    // Agda char literals: single quote, one char or escape sequence, single quote
+    if (source[i] === "'" && i + 2 < source.length) {
+      if (source[i + 1] === "\\" && i + 3 < source.length && source[i + 3] === "'") {
+        // Escaped char literal like '\n', '\t', '\\'
+        i += 4;
+        continue;
+      }
+      if (source[i + 1] !== "'" && source[i + 2] === "'") {
+        // Simple char literal like 'a', '?', '0'
+        i += 3;
+        continue;
+      }
+    }
+
     // Match {! ... !} interaction holes
     if (source[i] === "{" && source[i + 1] === "!") {
       const start = i;

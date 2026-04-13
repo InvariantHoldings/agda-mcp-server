@@ -131,6 +131,21 @@ describe("findGoalPositions", () => {
     expect(positions).toHaveLength(0);
   });
 
+  test("skips ? inside character literal", () => {
+    // '?' is a char literal, not a goal marker
+    const source = "test = '?'";
+    const positions = findGoalPositions(source);
+    expect(positions).toHaveLength(0);
+  });
+
+  test("skips escaped char literal and finds real hole", () => {
+    // '\n' char literal followed by a real hole
+    const source = "test = '\\n'\ngoal = {!!}";
+    const positions = findGoalPositions(source);
+    expect(positions).toHaveLength(1);
+    expect(positions[0].markerText).toBe("{!!}");
+  });
+
   test("handles !} inside string literal within hole", () => {
     const source = 'test = {! "!}" !}';
     const positions = findGoalPositions(source);
