@@ -100,6 +100,8 @@ export function findGoalPositions(source: string): GoalPosition[] {
       const start = i;
       const col = i - lineStart;
       const startLine = line;
+      const startLineStart = lineStart;
+      const lineBefore = line;
       i += 2; // skip {!
 
       // Find matching !}, skipping strings and comments inside hole contents
@@ -146,6 +148,20 @@ export function findGoalPositions(source: string): GoalPosition[] {
           }
           i++;
         }
+      }
+
+      // Unterminated hole safety: if we ran to EOF with depth > 0
+      // the source is malformed (agent mid-edit, corrupt file). We
+      // MUST NOT record a "hole" that stretches to EOF — a follow-up
+      // applyProofEdit would then replace everything from `{!` to
+      // EOF, catastrophically. Rewind our line tracker and skip
+      // past the `{!` instead, so the rest of the file is scanned
+      // normally but this position is not counted as a hole.
+      if (depth > 0) {
+        line = lineBefore;
+        lineStart = startLineStart;
+        i = start + 2; // skip the stray `{!` and keep scanning
+        continue;
       }
 
       positions.push({

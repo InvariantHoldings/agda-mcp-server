@@ -167,6 +167,46 @@ describe("findGoalPositions", () => {
     expect(positions[0].markerText).toBe("{! {- !} -} real !}");
   });
 
+  describe("unterminated hole safety", () => {
+    test("discards {! that runs to EOF without closing", () => {
+      // The source is corrupt (agent mid-edit). We MUST NOT record a
+      // position running to EOF — a follow-up edit would then clobber
+      // everything from `{!` onwards.
+      const source = "test = {! unclosed";
+      const positions = findGoalPositions(source);
+      expect(positions).toEqual([]);
+    });
+
+    test("finds subsequent valid hole after an unterminated one", () => {
+      // The scanner should recover past the stray `{!` and still
+      // locate the next legitimate hole further down the file.
+      const source = "a = {! broken\nb = {!!}";
+      const positions = findGoalPositions(source);
+      expect(positions).toHaveLength(1);
+      expect(positions[0].markerText).toBe("{!!}");
+      // The recovered hole should be on the second line (1) — verifies
+      // the line-tracker rewind on EOF.
+      expect(positions[0].line).toBe(1);
+    });
+
+    test("line tracker recovers correctly past an unterminated hole", () => {
+      const source = [
+        "a = {!!}",
+        "junk = {! unclosed",  // line 1 starts the broken hole
+        "b = {!!}",
+      ].join("\n");
+      const positions = findGoalPositions(source);
+      // The "unterminated" scanner runs to EOF, sees depth > 0, rewinds.
+      // After rewind, scanning resumes just past `{!` on line 1. From
+      // there it finds the third line's `{!!}` as a second hole.
+      expect(positions).toHaveLength(2);
+      expect(positions[0].line).toBe(0);
+      expect(positions[0].markerText).toBe("{!!}");
+      expect(positions[1].line).toBe(2);
+      expect(positions[1].markerText).toBe("{!!}");
+    });
+  });
+
   test("handles nested {! {! !} !} holes", () => {
     const source = "test = {! {! inner !} !}";
     const positions = findGoalPositions(source);
