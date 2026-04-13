@@ -11,6 +11,7 @@ import {
   makeToolResult,
   okEnvelope,
   registerStructuredTool,
+  sessionErrorStateGate,
   validateGoalId,
 } from "./tool-helpers.js";
 
@@ -39,6 +40,12 @@ export function register(
         const invalid = validateGoalId(session, goalId, "agda_why_in_scope");
         if (invalid) return invalid;
       }
+      const unavailable = sessionErrorStateGate(
+        session,
+        "agda_why_in_scope",
+        { name, goalId, explanation: "" },
+      );
+      if (unavailable) return unavailable;
       try {
         const result = goalId !== undefined
           ? await session.query.whyInScope(goalId, name)
@@ -94,6 +101,12 @@ export function register(
         const invalid = validateGoalId(session, goalId, "agda_show_module");
         if (invalid) return invalid;
       }
+      const unavailable = sessionErrorStateGate(
+        session,
+        "agda_show_module",
+        { moduleName, goalId, contents: "" },
+      );
+      if (unavailable) return unavailable;
       try {
         const result = goalId !== undefined
           ? await session.query.showModuleContents(goalId, moduleName)
@@ -145,6 +158,12 @@ export function register(
       text: z.string(),
     }),
     callback: async ({ query }: { query: string }) => {
+      const unavailable = sessionErrorStateGate(
+        session,
+        "agda_search_about",
+        { query, results: [], text: "" },
+      );
+      if (unavailable) return unavailable;
       try {
         const result = await session.query.searchAbout(query);
         const rendered = result.text

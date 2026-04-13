@@ -62,6 +62,14 @@ export interface LoadResult {
   classification: string;
   /** Profiling output from Agda when --profile options are active. */
   profiling: string | null;
+  /**
+   * Earliest source line mentioned by any diagnostic in the load
+   * response, or null if none was parsed. When non-null and the load
+   * reports apparently-clean (`success: true`, `hasHoles: false`), the
+   * load may have aborted at this line before reaching all of the
+   * file's holes — see §1.4 in the agent UX observations doc.
+   */
+  lastCheckedLine?: number | null;
 }
 
 export interface GoalInfo {

@@ -1,7 +1,8 @@
 import { test, expect } from "vitest";
 import { execSync } from "node:child_process";
 
-import { AgdaSession, typeCheckBatch } from "../../../src/agda-process.js";
+import { AgdaSession } from "../../../src/agda-process.js";
+import { typeCheckDisposable } from "../../helpers/typecheck-disposable.js";
 import { libraryRegistrationMatrix } from "../../fixtures/agda/library-registration-matrix.js";
 import { materializeLibraryRegistrationScenario } from "../../helpers/library-registration-fixture.js";
 
@@ -34,7 +35,7 @@ for (const scenario of libraryRegistrationMatrix.filter((entry) => entry.integra
         session.destroy();
       }
 
-      const batch = await typeCheckBatch(scenario.integration!.loadFile, materialized.repoRoot);
+      const batch = await typeCheckDisposable(scenario.integration!.loadFile, materialized.repoRoot);
       expect(batch.success).toBe(true);
       expect(batch.errors).toEqual([]);
     } finally {

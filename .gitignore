@@ -24,6 +24,7 @@ lerna-debug.log*
 tmp/
 temp/
 *.tgz
+.cache/
 
 # Environment and local config
 .env
@@ -43,3 +44,10 @@ Thumbs.db
 # AI assistants
 .claude/
 .codex/
+
+# local only
+local-only/
+
+# compiled things
+*.o
+*.agdai

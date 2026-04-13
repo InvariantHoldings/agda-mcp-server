@@ -24,6 +24,49 @@ export interface ParsedLoadResult extends LoadResult {
   goalIds: number[];
 }
 
+// Matches Agda's typical error-location formats:
+//
+//   /abs/path/to/File.agda:123:5            (column-suffixed)
+//   /abs/path/to/File.agda:123,5-16         (column-range)
+//   File.lagda.md:45,7-12                   (literate variant)
+//
+// The pattern is intentionally loose on the filename (any run of
+// non-whitespace non-colon characters ending in `.agda`, `.lagda`, or
+// `.lagda.md`) and strict on the line number (one or more digits right
+// after the first colon). Column info is not captured because we only
+// need line-level resolution for the lastCheckedLine signal.
+const ERROR_LOCATION_PATTERN = /(?:\.lagda\.md|\.lagda|\.agda):(\d+)(?:[,:]\d+)?/u;
+
+/**
+ * Extract the earliest source line mentioned by any error message.
+ *
+ * Agda type-checks top-to-bottom and typically aborts at the first
+ * error. If an agent sees `ok-complete` / `hasHoles: false` but the
+ * response actually contains an error-location hint at line N, then
+ * everything beyond line N may not have been scope-checked — including
+ * holes that would have shown up in the reported hasHoles/goalCount.
+ * This is the "silent abort" case documented as §1.4 in the
+ * observations doc. Surfacing the earliest error line gives agents an
+ * escape hatch: they can compare it against the total line count and
+ * decide whether to trust a nominally-clean load.
+ *
+ * Returns null when no error message carries a parseable location.
+ */
+export function extractEarliestErrorLine(messages: string[]): number | null {
+  let earliest: number | null = null;
+  for (const message of messages) {
+    if (typeof message !== "string") continue;
+    const match = ERROR_LOCATION_PATTERN.exec(message);
+    if (!match) continue;
+    const line = Number.parseInt(match[1], 10);
+    if (!Number.isFinite(line) || line <= 0) continue;
+    if (earliest === null || line < earliest) {
+      earliest = line;
+    }
+  }
+  return earliest;
+}
+
 /**
  * Parse a normalized Cmd_load response sequence.
  *
@@ -73,11 +116,9 @@ export function parseLoadResponses(
     }
   }
 
-  for (const text of stderrTexts) {
-    if (/\berror\b/i.test(text)) {
-      errors.push(text);
-      success = false;
-    }
+  if (stderrTexts.length > 0) {
+    errors.push(...stderrTexts);
+    success = false;
   }
 
   if (loadDisplay.errors.length > 0) {
@@ -111,6 +152,13 @@ export function parseLoadResponses(
     invisibleGoalCount,
   });
 
+  // See §1.4 in docs/bug-reports/agent-ux-observations.md. We scan both
+  // errors and warnings because Agda can emit a diagnostic with a
+  // file:line location without flipping `success` to false (observed
+  // case: a postulate check failure logged as a non-fatal diagnostic,
+  // letting `success` stay true while the file's actual holes past the
+  // failure point were never registered as metas).
+  const lastCheckedLine = extractEarliestErrorLine([...errors, ...warnings]);
   const profiling = extractProfilingOutput(responses, options);
 
   return {
@@ -126,6 +174,7 @@ export function parseLoadResponses(
     isComplete: completeness.isComplete,
     classification: completeness.classification,
     profiling,
+    lastCheckedLine,
   };
 }
 

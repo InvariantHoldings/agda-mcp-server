@@ -11,6 +11,7 @@ import {
   errorEnvelope,
   registerGoalTextTool,
   registerStructuredTool,
+  sessionErrorStateGate,
   validateGoalId,
 } from "./tool-helpers.js";
 
@@ -39,6 +40,12 @@ export function register(
         const invalid = validateGoalId(session, goalId, "agda_compute");
         if (invalid) return invalid;
       }
+      const unavailable = sessionErrorStateGate(
+        session,
+        "agda_compute",
+        { expr, goalId, normalForm: "" },
+      );
+      if (unavailable) return unavailable;
       try {
         const result = goalId !== undefined
           ? await session.expr.compute(goalId, expr)
@@ -87,6 +94,12 @@ export function register(
         const invalid = validateGoalId(session, goalId, "agda_infer");
         if (invalid) return invalid;
       }
+      const unavailable = sessionErrorStateGate(
+        session,
+        "agda_infer",
+        { expr, goalId, inferredType: "" },
+      );
+      if (unavailable) return unavailable;
       try {
         const result = goalId !== undefined
           ? await session.expr.infer(goalId, expr)

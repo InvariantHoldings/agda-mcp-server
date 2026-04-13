@@ -2,7 +2,8 @@ import { test, expect } from "vitest";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 
-import { AgdaSession, typeCheckBatch } from "../../../src/agda-process.js";
+import { AgdaSession } from "../../../src/agda-process.js";
+import { typeCheckDisposable } from "../../helpers/typecheck-disposable.js";
 import { fixtureMatrix } from "../../fixtures/agda/fixture-matrix.js";
 import {
   detectAgdaVersion,
@@ -80,6 +81,16 @@ test("fixture matrix entries reference existing files", () => {
 
 const phases = selectedPhases();
 
+// Cmd_load_no_metas (the "strict" phase) only rejects files with
+// unsolved metas starting in Agda 2.8. On 2.7.0.1 and earlier the
+// command simply doesn't exist — the protocol parser emits "cannot
+// read: IOTCM ..." which now surfaces as a thrown tool error. Skip
+// the strict phase on older Agda rather than asserting Agda-version-
+// dependent behavior.
+const STRICT_MIN_AGDA = parseAgdaVersion("2.8.0");
+const strictSupported =
+  agdaVersion === undefined || versionAtLeast(agdaVersion, STRICT_MIN_AGDA);
+
 for (const fixture of selectedFixtures()) {
   const fixtureRequiresVersion = fixture.minAgdaVersion
     ? parseAgdaVersion(fixture.minAgdaVersion)
@@ -110,7 +121,7 @@ for (const fixture of selectedFixtures()) {
       }
 
       if (phases.has("batch")) {
-        const batch = await timedStep(ctx, "batch", () => typeCheckBatch(fixture.name, FIXTURES));
+        const batch = await timedStep(ctx, "batch", () => typeCheckDisposable(fixture.name, FIXTURES));
         expect(batch.success).toBe(fixture.expectedSuccess);
         expect(batch.classification).toBe(fixture.expectedClassification);
         expect(
@@ -121,7 +132,7 @@ for (const fixture of selectedFixtures()) {
         ).toBeTruthy();
       }
 
-      if (phases.has("strict")) {
+      if (phases.has("strict") && strictSupported) {
         const strict = await timedStep(ctx, "strict", () => session.loadNoMetas(fixture.name));
         expect(strict.success).toBe(fixture.expectedStrictSuccess);
         expect(strict.classification).toBe(fixture.expectedStrictClassification);
