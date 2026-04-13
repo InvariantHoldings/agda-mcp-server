@@ -84,6 +84,24 @@ export function decodeGiveLikeResponse(responses: AgdaResponse[]): string {
   return result || displayMessages.at(-1) || "";
 }
 
+/** Extract structured solutions from SolveAll responses. */
+export function decodeSolveRawSolutions(
+  responses: AgdaResponse[],
+): Array<{ goalId: number; expr: string }> {
+  const results: Array<{ goalId: number; expr: string }> = [];
+  for (const resp of responses) {
+    const solveAll = parseResponseWithSchema(solveAllResponseSchema, resp);
+    if (solveAll) {
+      for (const solution of solveAll.solutions ?? []) {
+        if (solution.expression) {
+          results.push({ goalId: solution.interactionPoint, expr: solution.expression });
+        }
+      }
+    }
+  }
+  return results;
+}
+
 export function decodeSolveResponses(responses: AgdaResponse[]): string[] {
   const solutions: string[] = [];
 

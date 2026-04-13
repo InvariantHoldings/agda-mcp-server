@@ -102,6 +102,8 @@ export interface AutoResult {
 
 export interface SolveResult {
   solutions: string[];
+  /** Structured solutions for applying to file (goalId → expression). */
+  rawSolutions: Array<{ goalId: number; expr: string }>;
 }
 
 export interface WhyInScopeResult {

@@ -8,7 +8,7 @@
 // that for MCP clients that have no editor buffer.
 
 import { readFile, writeFile } from "node:fs/promises";
-import { findGoalPosition } from "./goal-positions.js";
+import { findGoalPosition, findGoalPositions } from "./goal-positions.js";
 
 // ── Edit types ───────────────────────────────────────────────────────
 
@@ -39,6 +39,76 @@ export interface ApplyEditResult {
   filePath: string;
   /** Human-readable description of what happened. */
   message: string;
+}
+
+// ── Batch result ─────────────────────────────────────────────────────
+
+export interface BatchApplyResult {
+  appliedCount: number;
+  failedGoalIds: number[];
+  message: string;
+}
+
+/**
+ * Apply multiple hole replacements to an Agda source file in one pass.
+ *
+ * Replacements are applied back-to-front (reverse offset order) so that
+ * earlier offsets remain valid after each substitution.
+ *
+ * Returns the count of applied replacements, a list of goal IDs that
+ * could not be located, and a summary message.
+ */
+export async function applyBatchHoleReplacements(
+  filePath: string,
+  goalIds: number[],
+  replacements: Array<{ goalId: number; expr: string }>,
+): Promise<BatchApplyResult> {
+  const source = await readFile(filePath, "utf-8");
+  const allPositions = findGoalPositions(source);
+
+  const edits: Array<{ start: number; end: number; expr: string; goalId: number }> = [];
+  const failedGoalIds: number[] = [];
+
+  for (const { goalId, expr } of replacements) {
+    const index = goalIds.indexOf(goalId);
+    if (index < 0 || index >= allPositions.length) {
+      failedGoalIds.push(goalId);
+      continue;
+    }
+    const pos = allPositions[index];
+    edits.push({ start: pos.startOffset, end: pos.endOffset, expr, goalId });
+  }
+
+  if (edits.length === 0) {
+    return {
+      appliedCount: 0,
+      failedGoalIds,
+      message:
+        failedGoalIds.length > 0
+          ? `Could not locate goals ${failedGoalIds.map((id) => `?${id}`).join(", ")} in file — the file may have been modified since last load.`
+          : "No replacements to apply.",
+    };
+  }
+
+  // Sort by start offset in descending order so earlier positions aren't invalidated
+  edits.sort((a, b) => b.start - a.start);
+
+  let newSource = source;
+  for (const edit of edits) {
+    newSource = newSource.slice(0, edit.start) + edit.expr + newSource.slice(edit.end);
+  }
+
+  await writeFile(filePath, newSource, "utf-8");
+
+  const failedMsg =
+    failedGoalIds.length > 0
+      ? ` (could not locate ${failedGoalIds.map((id) => `?${id}`).join(", ")})`
+      : "";
+  return {
+    appliedCount: edits.length,
+    failedGoalIds,
+    message: `Applied ${edits.length} solution(s) to file${failedMsg}.`,
+  };
 }
 
 // ── Apply logic ──────────────────────────────────────────────────────
