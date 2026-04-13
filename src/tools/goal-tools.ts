@@ -224,11 +224,12 @@ export function register(
         : "Introduction applied. Call `agda_metas` to inspect resulting goals.\n";
 
       if (shouldWrite && session.currentFile) {
-        const replacementExpr = result.replacementText ?? (exprStr || null);
-        if (replacementExpr != null) {
+        if (result.replacementText != null) {
           output += await applyEditAndReload(session, goalIdsBefore, {
-            kind: "replace-hole", goalId, expr: replacementExpr,
+            kind: "replace-hole", goalId, expr: result.replacementText,
           });
+        } else {
+          output += `\nAgda did not return a confirmed replacement, so the file was left unchanged.\n`;
         }
       }
       return output;
