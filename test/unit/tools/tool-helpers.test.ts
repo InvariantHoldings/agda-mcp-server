@@ -11,7 +11,9 @@ import {
   registerGlobalProvenance,
   registerGoalTextTool,
   registerTextTool,
+  sessionErrorStateGate,
 } from "../../../src/tools/tool-helpers.js";
+import type { AgdaSession as AgdaSessionType } from "../../../src/agda-process.js";
 import { clearToolManifest } from "../../../src/tools/manifest.js";
 
 function createCapturingServer() {
@@ -280,4 +282,82 @@ test("registerGlobalProvenance rejects empty or non-string keys", () => {
   expect(envelope.provenance).toEqual({ kept: "kept" });
 
   clearGlobalProvenance();
+});
+
+// §1.3 from the observations doc: query-style tools must not return a
+// happy-path payload when the session's last load failed. The gate
+// short-circuits the tool before it talks to Agda at all.
+function stubSession(lastClassification: string | null, loadedFile: string | null = null): AgdaSessionType {
+  return {
+    getLastClassification: () => lastClassification,
+    getLoadedFile: () => loadedFile,
+    getGoalIds: () => [],
+    isFileStale: () => false,
+  } as unknown as AgdaSessionType;
+}
+
+test("sessionErrorStateGate returns unavailable when lastClassification is type-error", () => {
+  const session = stubSession("type-error", "/repo/src/File.agda");
+
+  const result = sessionErrorStateGate(session, "agda_why_in_scope", {
+    name: "_+_",
+    goalId: undefined,
+    explanation: "",
+  });
+
+  expect(result).not.toBeNull();
+  expect(result!.isError).toBe(true);
+  expect(result!.structuredContent.ok).toBe(false);
+  expect(result!.structuredContent.classification).toBe("unavailable");
+  expect(result!.structuredContent.summary).toContain("type-error");
+  expect(result!.structuredContent.summary).toContain("/repo/src/File.agda");
+
+  const diag = result!.structuredContent.diagnostics[0];
+  expect(diag.severity).toBe("error");
+  expect(diag.code).toBe("session-unavailable");
+
+  // The empty data shape is preserved so the client can destructure without undefined.
+  expect(result!.structuredContent.data).toEqual({
+    name: "_+_",
+    goalId: undefined,
+    explanation: "",
+  });
+});
+
+test("sessionErrorStateGate returns null when last load was ok-complete", () => {
+  const session = stubSession("ok-complete", "/repo/src/File.agda");
+  const result = sessionErrorStateGate(session, "agda_infer", { expr: "", goalId: undefined, inferredType: "" });
+  expect(result).toBeNull();
+});
+
+test("sessionErrorStateGate returns null when last load was ok-with-holes", () => {
+  const session = stubSession("ok-with-holes", "/repo/src/File.agda");
+  const result = sessionErrorStateGate(session, "agda_compute", { expr: "", goalId: undefined, normalForm: "" });
+  expect(result).toBeNull();
+});
+
+test("sessionErrorStateGate returns null when no load has occurred yet", () => {
+  const session = stubSession(null, null);
+  const result = sessionErrorStateGate(session, "agda_search_about", { query: "", results: [], text: "" });
+  expect(result).toBeNull();
+});
+
+test("sessionErrorStateGate tolerates sessions that lack the getLastClassification getter", () => {
+  // Sessions that don't implement the getter (e.g. older stubs, pre-#39
+  // integrations) must not crash — the gate short-circuits to null.
+  const session = {
+    getLoadedFile: () => null,
+    getGoalIds: () => [],
+    isFileStale: () => false,
+  } as unknown as AgdaSessionType;
+  const result = sessionErrorStateGate(session, "agda_show_module", { moduleName: "", goalId: undefined, contents: "" });
+  expect(result).toBeNull();
+});
+
+test("sessionErrorStateGate summary omits file hint when no file is loaded", () => {
+  const session = stubSession("type-error", null);
+  const result = sessionErrorStateGate(session, "agda_infer", { expr: "", goalId: undefined, inferredType: "" });
+  expect(result).not.toBeNull();
+  expect(result!.structuredContent.summary).not.toContain("(loaded file:");
+  expect(result!.structuredContent.summary).toContain("type-error");
 });

@@ -233,6 +233,50 @@ export function stalenessWarning(session: AgdaSession): string {
   return "";
 }
 
+/**
+ * Session-error gate for query-style tools.
+ *
+ * When the session's most recent load returned a "type-error"
+ * classification, query tools like agda_why_in_scope / agda_infer /
+ * agda_compute / agda_search_about / agda_show_module cannot produce
+ * a meaningful answer — Agda's interactive process will echo the
+ * previous load error as the "result" of the query, which gets
+ * embedded in a happy-path payload and silently mislead the caller
+ * (observations doc §1.3). Query-tool callbacks should call this gate
+ * before invoking Agda: if it returns non-null, return the value
+ * immediately; otherwise proceed.
+ *
+ * The gate is conservative: it only triggers on `lastClassification ===
+ * "type-error"`. `ok-with-holes` loads, `ok-complete` loads, and the
+ * no-load-yet state all let the query run as before.
+ */
+export function sessionErrorStateGate<T extends Record<string, unknown>>(
+  session: AgdaSession,
+  tool: string,
+  emptyData: T,
+): ToolResult<T> | null {
+  const lastClassification = session.getLastClassification?.() ?? null;
+  if (lastClassification !== "type-error") {
+    return null;
+  }
+  const loadedFile = session.getLoadedFile?.() ?? null;
+  const fileHint = loadedFile ? ` (loaded file: ${loadedFile})` : "";
+  const summary =
+    `${tool} is unavailable: the session's most recent load failed `
+    + `with classification 'type-error'${fileHint}. `
+    + `Fix the load errors first, then re-run agda_load before issuing queries.`;
+  return makeToolResult(
+    errorEnvelope({
+      tool,
+      summary,
+      classification: "unavailable",
+      data: emptyData,
+      diagnostics: [errorDiagnostic(summary, "session-unavailable")],
+    }),
+    summary,
+  );
+}
+
 /** MCP text content helper. */
 export function text(t: string): ToolResult<{ text: string }> {
   return makeToolResult(
