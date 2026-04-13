@@ -25,7 +25,7 @@ jobs:
       - name: Set up Agda
         uses: wenkokke/setup-agda@13475d93b4fdb4a49c1c22f680be2f2e6b279daf # v2
         with:
-          agda-version: "latest"
+          agda-version: "2.6.4.3"
           agda-stdlib-version: "recommended"
 
       - name: Verify Agda is available
