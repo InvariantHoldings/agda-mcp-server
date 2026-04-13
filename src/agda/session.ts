@@ -44,9 +44,13 @@ import type {
 } from "./types.js";
 import { parseLoadResponses } from "./parse-load-responses.js";
 import { logger } from "./logger.js";
-import { command, quoted } from "../protocol/command-builder.js";
 import { type AgdaVersion, parseAgdaVersion } from "./agda-version.js";
 import { decodeDisplayTextResponses } from "../protocol/responses/text-display.js";
+import { command, quoted, profileOptionsList } from "../protocol/command-builder.js";
+import {
+  validateProfileOptions,
+  toProfileArgs,
+} from "../protocol/profile-options.js";
 
 // ── Binary discovery ──────────────────────────────────────────────────
 
@@ -241,7 +245,7 @@ export class AgdaSession {
     });
     // Chain onto the queue — swallow rejections so a failed command
     // doesn't block subsequent commands from executing.
-    this.commandQueue = task.then(() => {}, () => {});
+    this.commandQueue = task.then(() => { }, () => { });
     return task;
   }
 
@@ -287,6 +291,7 @@ export class AgdaSession {
     allGoalsText: "", invisibleGoalCount: 0,
     goalCount: 0, hasHoles: false, isComplete: false,
     classification: "type-error",
+    profiling: null,
   });
 
   private mergeGoals(
@@ -321,8 +326,16 @@ export class AgdaSession {
   /**
    * Load (type-check) a file. This is always the first command — it
    * establishes the interaction state and assigns goal IDs.
+   *
+   * @param filePath  Path to the Agda file (relative or absolute).
+   * @param options   Optional settings for the load command.
+   * @param options.profileOptions  Agda profile options (e.g. ["modules", "sharing"]).
+   *   These are passed as `--profile=xxx` in the Cmd_load options list.
    */
-  async load(filePath: string): Promise<LoadResult> {
+  async load(
+    filePath: string,
+    options?: { profileOptions?: string[] },
+  ): Promise<LoadResult> {
     const absPath = resolve(this.repoRoot, filePath);
     if (!existsSync(absPath)) {
       return {
@@ -331,12 +344,36 @@ export class AgdaSession {
       };
     }
 
+    // Build the command-line options list for Cmd_load
+    let optsList = "[]";
+    if (options?.profileOptions && options.profileOptions.length > 0) {
+      const validation = validateProfileOptions(options.profileOptions);
+      if (!validation.valid) {
+        return {
+          success: false,
+          errors: validation.errors,
+          warnings: [],
+          goals: [],
+          allGoalsText: "",
+          invisibleGoalCount: 0,
+          goalCount: 0,
+          hasHoles: false,
+          isComplete: false,
+          classification: "invalid-profile-options",
+          profiling: null,
+        };
+      }
+      const profileArgs = toProfileArgs(validation.options);
+      optsList = profileOptionsList(profileArgs);
+    }
+
     // Use buildIotcm with absPath directly — don't set currentFile yet
     // because ensureProcess() (called inside sendCommand) resets it
     const responses = await this.sendCommand(
-      this.buildIotcm(absPath, command("Cmd_load", quoted(absPath), "[]")),
+      this.buildIotcm(absPath, command("Cmd_load", quoted(absPath), optsList)),
     );
-    const parsed = parseLoadResponses(responses);
+    const profilingEnabled = (options?.profileOptions?.length ?? 0) > 0;
+    const parsed = parseLoadResponses(responses, { profilingEnabled });
 
     // Set session state before reconciling metas so follow-up queries can run
     this.currentFile = absPath;
@@ -390,6 +427,7 @@ export class AgdaSession {
       hasHoles,
       isComplete,
       classification,
+      profiling: parsed.profiling,
     };
   }
 
@@ -405,7 +443,7 @@ export class AgdaSession {
     const responses = await this.sendCommand(
       this.buildIotcm(absPath, command("Cmd_load_no_metas", quoted(absPath))),
     );
-    const parsed = parseLoadResponses(responses);
+    const parsed = parseLoadResponses(responses, { profilingEnabled: false });
 
     // Set session state atomically AFTER command completes
     this.currentFile = absPath;
@@ -423,6 +461,7 @@ export class AgdaSession {
       hasHoles: parsed.hasHoles,
       isComplete: parsed.isComplete,
       classification: parsed.classification,
+      profiling: parsed.profiling,
     };
   }
 

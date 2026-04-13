@@ -78,3 +78,13 @@ export function rewriteGoalCommand(
 ): string {
   return command(name, rewrite, goalId, "noRange", ...parts);
 }
+
+/**
+ * Build the options list for Cmd_load.
+ *
+ * Cmd_load takes `FilePath [String]` where the list is command-line
+ * options such as `["--profile=modules", "--profile=sharing"]`.
+ */
+export function profileOptionsList(profileArgs: string[]): string {
+  return stringList(profileArgs);
+}

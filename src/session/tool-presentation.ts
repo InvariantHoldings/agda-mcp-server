@@ -19,6 +19,7 @@ export const loadDataSchema = z.object({
   warnings: z.array(z.string()),
   reloaded: z.boolean(),
   staleBeforeLoad: z.boolean(),
+  profiling: z.string().nullable().describe("Profiling output from Agda when --profile options are active"),
 });
 
 export const sessionStatusDataSchema = z.object({
@@ -58,6 +59,7 @@ export const typecheckDataSchema = z.object({
   classification: z.string(),
   errors: z.array(z.string()),
   warnings: z.array(z.string()),
+  profiling: z.string().nullable().describe("Profiling output from Agda when --profile options are active"),
 });
 
 export function renderDiagnosticsSection(title: string, items: string[]): string {
@@ -85,6 +87,8 @@ export function renderLoadLikeText(args: {
   reloaded?: boolean;
   staleBeforeLoad?: boolean;
   extraLead?: string;
+  profiling?: string | null;
+  elapsedMs?: number;
 }): string {
   let output = "";
 
@@ -105,10 +109,17 @@ export function renderLoadLikeText(args: {
   if (args.staleBeforeLoad !== undefined) {
     output += `**Stale before load:** ${args.staleBeforeLoad ? "yes" : "no"}\n`;
   }
+  if (args.elapsedMs !== undefined) {
+    output += `**Elapsed:** ${args.elapsedMs}ms\n`;
+  }
   output += "\n";
 
   output += renderDiagnosticsSection("Errors", args.errors);
   output += renderDiagnosticsSection("Warnings", args.warnings);
+
+  if (args.profiling) {
+    output += `### Profiling\n\`\`\`\n${args.profiling}\n\`\`\`\n`;
+  }
 
   if (args.goalIds.length > 0) {
     output += "### Goal IDs\n";
