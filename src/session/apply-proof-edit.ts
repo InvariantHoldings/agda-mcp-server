@@ -8,6 +8,7 @@
 // that for MCP clients that have no editor buffer.
 
 import { readFile, writeFile, rename, unlink } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { findGoalPosition, findGoalPositions } from "./goal-positions.js";
 
 /**
@@ -19,13 +20,20 @@ import { findGoalPosition, findGoalPositions } from "./goal-positions.js";
  * and `rename()` it over the target, which is atomic on POSIX and
  * NTFS when both paths are on the same filesystem.
  *
+ * The temp path mixes pid with `randomUUID()` so two overlapping
+ * calls — e.g. two tool invocations landing in the same
+ * millisecond on the same file — can't produce the same temp
+ * name. (pid alone collides across fork+exec; Date.now() alone
+ * collides within a millisecond; the UUID adds 122 bits of
+ * entropy on top.)
+ *
  * On failure we attempt to unlink the temp file so we don't leak
  * `.agda-mcp-tmp-*` turds next to user sources. Unlink errors are
  * swallowed because the primary write error is more interesting.
  */
 async function writeFileAtomic(filePath: string, content: string): Promise<void> {
   // Same-directory temp file so rename() stays on one filesystem.
-  const tmpPath = `${filePath}.agda-mcp-tmp-${process.pid}-${Date.now()}`;
+  const tmpPath = `${filePath}.agda-mcp-tmp-${process.pid}-${randomUUID()}`;
   try {
     await writeFile(tmpPath, content, "utf-8");
     await rename(tmpPath, filePath);
@@ -207,11 +215,15 @@ export interface TextEditResult {
  *   there are duplicates.
  * - Line-ending normalization: LLMs generate `oldText` / `newText`
  *   with `\n` line endings even when the file uses CRLF. Before
- *   searching we detect the file's dominant EOL; if it is CRLF we
- *   promote bare `\n` in both `oldText` and `newText` to `\r\n`
- *   (but leave existing `\r\n` sequences untouched, so a caller
- *   that already matches the file's style still works). This
- *   keeps writes self-consistent with the file's EOL style.
+ *   searching we check whether the file contains ANY `\r\n`
+ *   sequence (a simple `source.includes("\r\n")` test, not a true
+ *   LF-vs-CRLF majority vote); if so, bare `\n` in both `oldText`
+ *   and `newText` is promoted to `\r\n` (existing `\r\n` sequences
+ *   pass through untouched, so a caller that already matches the
+ *   file's style still works). This is deliberately coarse: a
+ *   mixed-ending file will be treated as CRLF, because the only
+ *   alternative is to introduce fresh bare-LFs into a file that
+ *   mostly uses CRLF, which agents rarely want.
  * - The file is written via `writeFileAtomic` (temp file + rename),
  *   so concurrent readers never observe a truncated or half-written
  *   state. The rename is atomic on POSIX and NTFS when both paths
@@ -253,10 +265,13 @@ export async function applyTextEdit(
     };
   }
 
-  // Normalize oldText/newText to match the file's dominant EOL style.
-  // If the file is CRLF, any bare \n (not already part of \r\n) in the
-  // caller-provided strings is promoted to \r\n. This makes LF-authored
-  // inputs match CRLF files without surprising the caller.
+  // Normalize oldText/newText to the file's EOL style. "Style" here
+  // is simply "does the file contain any \r\n at all?" — if so we
+  // treat the whole file as CRLF and promote bare \n in the
+  // caller-provided strings to \r\n. This is coarse but matches the
+  // contract in the docstring above, and makes LF-authored agent
+  // inputs line up with CRLF files without introducing fresh bare
+  // LFs into a mostly-CRLF file.
   const fileUsesCrlf = source.includes("\r\n");
   const normalizeEol = (s: string): string =>
     fileUsesCrlf ? s.replace(/(?<!\r)\n/g, "\r\n") : s;

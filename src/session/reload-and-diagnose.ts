@@ -125,7 +125,10 @@ function stalenessBlockMessage(session: AgdaSession): string | null {
 /**
  * Apply a proof edit to the file, reload, and return output describing
  * what happened. Handles all failure modes:
- * - File changed on disk (stale): refuses the edit and instructs reload
+ * - File changed on disk (stale): refuses the edit AND reloads the
+ *   stale file to resync the session (the proof action already ran
+ *   against stale state, so we need to bring the session back to
+ *   match disk).
  * - FS exceptions (permissions, missing file): reloads unchanged file to resync
  * - Edit not applied (goal not found): reloads unchanged file to resync
  * - Reload failure after successful write: warns user to `agda_load` manually
@@ -150,7 +153,17 @@ export async function applyEditAndReload(
   }
 
   const staleMsg = stalenessBlockMessage(session);
-  if (staleMsg) return staleMsg;
+  if (staleMsg) {
+    // The proof-action command has already mutated Agda's session
+    // state (goal IDs, metas, etc.) by the time we check staleness,
+    // because goal-tools calls session.goal.give() before
+    // applyEditAndReload(). Returning only the warning would leave
+    // the session in a post-action state while the on-disk file is
+    // still the pre-action version — exactly the desync the tool
+    // is supposed to prevent. Reload the stale file to resync the
+    // session back to on-disk truth.
+    return reloadAndDiagnose(session, filePath, staleMsg);
+  }
 
   let editResult: ApplyEditResult;
   try {
@@ -202,7 +215,14 @@ export async function applyBatchEditAndReload(
   // disk" when in fact we're editing a different file entirely).
   const staleMsg =
     filePath === session.currentFile ? stalenessBlockMessage(session) : null;
-  if (staleMsg) return staleMsg;
+  if (staleMsg) {
+    // Same rationale as applyEditAndReload: the batch proof action
+    // (SolveAll / SolveOne) already ran against stale session state
+    // before we got here, so returning only the warning would leave
+    // the session desynced from disk. Reload the stale file to
+    // resync.
+    return reloadAndDiagnose(session, filePath, staleMsg);
+  }
 
   let batchResult: BatchApplyResult;
   try {

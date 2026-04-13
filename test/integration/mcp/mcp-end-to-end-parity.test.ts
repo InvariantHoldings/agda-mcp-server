@@ -74,16 +74,29 @@ async function withHarness(run: (harness: any) => Promise<void>, projectRoot?: s
     projectRoot: effectiveRoot,
   });
 
+  // Two-level cleanup: if `harness.close()` throws (e.g. the Agda
+  // subprocess exited badly), we still need to `rmSync` the temp
+  // fixture dir or it leaks to the OS tmp. Capture any close error
+  // and re-throw after cleanup so the caller still sees it.
   try {
     return await run(harness);
   } finally {
-    await harness.close();
-    if (ownsTempRoot) {
-      try {
-        rmSync(effectiveRoot, { recursive: true, force: true });
-      } catch {
-        // Non-fatal: the temp dir will be cleaned up by the OS.
+    let closeError: unknown;
+    try {
+      await harness.close();
+    } catch (err) {
+      closeError = err;
+    } finally {
+      if (ownsTempRoot) {
+        try {
+          rmSync(effectiveRoot, { recursive: true, force: true });
+        } catch {
+          // Non-fatal: the temp dir will be cleaned up by the OS.
+        }
       }
+    }
+    if (closeError !== undefined) {
+      throw closeError;
     }
   }
 }

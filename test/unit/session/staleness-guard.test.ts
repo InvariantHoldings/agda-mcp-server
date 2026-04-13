@@ -12,19 +12,40 @@ import type { AgdaSession } from "../../../src/agda-process.js";
 // Minimal stub session that exercises the staleness guard without
 // spawning a real Agda process. We implement the exact surface used
 // by applyEditAndReload / applyBatchEditAndReload.
+//
+// `loadBehavior` lets the test pick between a stub load that throws
+// (to prove load() was never called) and one that succeeds with a
+// canned LoadResult (to exercise the resync-on-stale path where
+// reloadAndDiagnose DOES call load()).
 function stubSession(opts: {
   currentFile: string;
   stale: boolean;
   goalIds?: number[];
+  loadBehavior?: "throw" | "success";
+  postReloadGoalIds?: number[];
 }): AgdaSession {
   const goalIds = opts.goalIds ?? [];
+  const postReloadGoalIds = opts.postReloadGoalIds ?? goalIds;
   return {
     currentFile: opts.currentFile,
-    getGoalIds: () => [...goalIds],
+    getGoalIds: () => [...postReloadGoalIds],
     isFileStale: () => opts.stale,
-    // Minimal load() that should NOT be called when staleness guard trips.
     load: async (_file: string) => {
-      throw new Error("load() should not be called when the staleness guard blocks the edit");
+      if ((opts.loadBehavior ?? "throw") === "throw") {
+        throw new Error("load() should not be called in this scenario");
+      }
+      return {
+        success: true,
+        errors: [],
+        warnings: [],
+        goals: [],
+        allGoalsText: "",
+        invisibleGoalCount: 0,
+        goalCount: postReloadGoalIds.length,
+        hasHoles: postReloadGoalIds.length > 0,
+        isComplete: postReloadGoalIds.length === 0,
+        classification: "ok-complete" as const,
+      };
     },
   } as unknown as AgdaSession;
 }
@@ -43,11 +64,18 @@ describe("staleness guard in applyEditAndReload", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  test("refuses the edit when session reports stale file", async () => {
+  test("refuses the edit AND resyncs session when stale", async () => {
+    // The proof action has already mutated the session by the time
+    // applyEditAndReload checks staleness. A stale check that only
+    // returned a warning would leave the session in a post-action
+    // state while disk is still pre-action. Instead the guard
+    // reloads the stale file via session.load() so the session's
+    // view matches on-disk truth.
     const session = stubSession({
       currentFile: tempFile,
       stale: true,
       goalIds: [0],
+      loadBehavior: "success",
     });
 
     const output = await applyEditAndReload(session, [0], {
@@ -58,15 +86,19 @@ describe("staleness guard in applyEditAndReload", () => {
 
     expect(output).toContain("modified on disk");
     expect(output).toContain("agda_load");
+    // Staleness resync: output contains the reload diagnostic,
+    // proving load() was actually called on the stale-path.
+    expect(output).toContain("Reloaded: 1 goal(s) remaining");
     // File must not have been touched.
     expect(await readFile(tempFile, "utf-8")).toBe("test = {!!}");
   });
 
-  test("refuses the batch edit when session reports stale file", async () => {
+  test("refuses the batch edit AND resyncs session when stale", async () => {
     const session = stubSession({
       currentFile: tempFile,
       stale: true,
       goalIds: [0],
+      loadBehavior: "success",
     });
 
     const output = await applyBatchEditAndReload(
@@ -76,6 +108,29 @@ describe("staleness guard in applyEditAndReload", () => {
 
     expect(output).toContain("modified on disk");
     expect(output).toContain("agda_load");
+    expect(output).toContain("Reloaded: 1 goal(s) remaining");
+    expect(await readFile(tempFile, "utf-8")).toBe("test = {!!}");
+  });
+
+  test("stale-path reload failure still surfaces a warning", async () => {
+    // If the staleness-resync reload itself throws (e.g. Agda
+    // process died), reloadAndDiagnose's try/catch must keep the
+    // tool response usable.
+    const session = stubSession({
+      currentFile: tempFile,
+      stale: true,
+      goalIds: [0],
+      loadBehavior: "throw",
+    });
+
+    const output = await applyEditAndReload(session, [0], {
+      kind: "replace-hole",
+      goalId: 0,
+      expr: "refl",
+    });
+
+    expect(output).toContain("modified on disk");
+    expect(output).toContain("Failed to reload");
     expect(await readFile(tempFile, "utf-8")).toBe("test = {!!}");
   });
 
