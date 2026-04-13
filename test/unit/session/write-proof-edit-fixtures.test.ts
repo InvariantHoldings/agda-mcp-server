@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
-import { readFile, writeFile, mkdtemp, rm, copyFile } from "node:fs/promises";
+import { readFile, mkdtemp, rm, copyFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 

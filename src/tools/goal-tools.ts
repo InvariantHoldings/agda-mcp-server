@@ -161,14 +161,15 @@ export function register(
     },
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
+      const exprStr = expr as string;
       const goalIdsBefore = session.getGoalIds();
-      const result = await session.goal.give(goalId, expr as string);
-      let output = `## Give \`${expr}\` to ?${goalId}\n\n`;
+      const result = await session.goal.give(goalId, exprStr);
+      let output = `## Give \`${exprStr}\` to ?${goalId}\n\n`;
       output += result.result ? `**Result:** \`${result.result}\`\n` : `Expression accepted.\n`;
 
-      if (shouldWrite && session.currentFile && result.replacementText) {
+      if (shouldWrite && session.currentFile) {
         output += await applyEditAndReload(session, goalIdsBefore, {
-          kind: "replace-hole", goalId, expr: result.replacementText,
+          kind: "replace-hole", goalId, expr: result.replacementText ?? exprStr,
         });
       }
       return output;
@@ -189,16 +190,17 @@ export function register(
     },
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
+      const exprStr = expr as string;
       const goalIdsBefore = session.getGoalIds();
-      const result = await session.goal.refine(goalId, expr as string);
-      let output = `## Refine ?${goalId} with \`${expr || "(auto)"}\`\n\n`;
+      const result = await session.goal.refine(goalId, exprStr);
+      let output = `## Refine ?${goalId} with \`${exprStr || "(auto)"}\`\n\n`;
       output += result.result
         ? `**Result:** \`${result.result}\`\n`
         : `Refinement applied. Call \`agda_metas\` to see new goals.\n`;
 
-      if (shouldWrite && session.currentFile && result.replacementText) {
+      if (shouldWrite && session.currentFile) {
         output += await applyEditAndReload(session, goalIdsBefore, {
-          kind: "replace-hole", goalId, expr: result.replacementText,
+          kind: "replace-hole", goalId, expr: result.replacementText ?? exprStr,
         });
       }
       return output;
@@ -219,16 +221,17 @@ export function register(
     },
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
+      const exprStr = expr as string;
       const goalIdsBefore = session.getGoalIds();
-      const result = await session.goal.refineExact(goalId, expr as string);
-      let output = `## Exact refine ?${goalId} with \`${expr}\`\n\n`;
+      const result = await session.goal.refineExact(goalId, exprStr);
+      let output = `## Exact refine ?${goalId} with \`${exprStr}\`\n\n`;
       output += result.result
         ? `**Result:** \`${result.result}\`\n`
         : "Refinement applied. Call `agda_metas` to inspect resulting goals.\n";
 
-      if (shouldWrite && session.currentFile && result.replacementText) {
+      if (shouldWrite && session.currentFile) {
         output += await applyEditAndReload(session, goalIdsBefore, {
-          kind: "replace-hole", goalId, expr: result.replacementText,
+          kind: "replace-hole", goalId, expr: result.replacementText ?? exprStr,
         });
       }
       return output;
@@ -249,17 +252,21 @@ export function register(
     },
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
+      const exprStr = (expr as string | undefined) ?? "";
       const goalIdsBefore = session.getGoalIds();
-      const result = await session.goal.intro(goalId, (expr as string) ?? "");
+      const result = await session.goal.intro(goalId, exprStr);
       let output = `## Intro ?${goalId}\n\n`;
       output += result.result
         ? `**Result:** \`${result.result}\`\n`
         : "Introduction applied. Call `agda_metas` to inspect resulting goals.\n";
 
-      if (shouldWrite && session.currentFile && result.replacementText) {
-        output += await applyEditAndReload(session, goalIdsBefore, {
-          kind: "replace-hole", goalId, expr: result.replacementText,
-        });
+      if (shouldWrite && session.currentFile) {
+        const replacementExpr = result.replacementText ?? (exprStr || null);
+        if (replacementExpr != null) {
+          output += await applyEditAndReload(session, goalIdsBefore, {
+            kind: "replace-hole", goalId, expr: replacementExpr,
+          });
+        }
       }
       return output;
     },
