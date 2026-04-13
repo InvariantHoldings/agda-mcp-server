@@ -161,8 +161,17 @@ export function register(
       // is invoked before any other Agda command). tryGetAgdaVersion falls back
       // to a live Cmd_show_version query so the catalog always includes Agda
       // info rather than silently omitting it on first use.
-      await tryGetAgdaVersion(session);
-      const { agdaVersion, supportedExtensions, supportedFeatureFlags, structuredGiveResult } = getAgdaCapabilities(session.getAgdaVersion());
+      const detectedAgdaVersion = await tryGetAgdaVersion(session);
+      const {
+        agdaVersion: capabilityAgdaVersion,
+        supportedExtensions,
+        supportedFeatureFlags,
+        structuredGiveResult,
+      } = getAgdaCapabilities(session.getAgdaVersion());
+      // Prefer the structured capability version (parsed AgdaVersion → formatted
+      // string); fall back to the raw string from tryGetAgdaVersion in case the
+      // session's parse failed but showVersion succeeded.
+      const agdaVersion = capabilityAgdaVersion ?? detectedAgdaVersion;
 
       let output = "## Tool catalog\n\n";
       output += `**Server version:** ${serverVersion}\n`;

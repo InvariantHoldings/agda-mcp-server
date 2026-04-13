@@ -198,4 +198,55 @@ test("process close event resets detection state for the next process", async ()
   session.destroy();
 });
 
+// ── Piggyback: no double round-trip when user command IS Cmd_show_version ──
 
+test("no pre-flight when user command is Cmd_show_version — version piggybacked instead", async () => {
+  const session = new AgdaSession(process.cwd());
+  let cmdCount = 0;
+  session["transport"].sendCommand = async function (_proc: unknown, command: string) {
+    cmdCount++;
+    if (command.includes("Cmd_show_version")) {
+      return [{ kind: "DisplayInfo", info: { kind: "Version", version: "Agda version 2.9.0" } }];
+    }
+    return [{ kind: "Status" }];
+  } as any;
+  session.ensureProcess = () => fakeProc;
+
+  // User's first command IS Cmd_show_version
+  const vCmd = session["iotcm"]("Cmd_show_version");
+  await session.sendCommand(vCmd);
+
+  // Exactly ONE transport call should have been made (no extra pre-flight)
+  expect(cmdCount).toBe(1);
+
+  // Version should be populated from the piggybacked response
+  expect(session.getAgdaVersion()).not.toBeNull();
+  expect(session.getAgdaVersion()!.parts).toEqual([2, 9, 0]);
+
+  session.destroy();
+});
+
+test("subsequent non-version commands don't re-run detection after successful piggyback", async () => {
+  const session = new AgdaSession(process.cwd());
+  let cmdCount = 0;
+  session["transport"].sendCommand = async function (_proc: unknown, command: string) {
+    cmdCount++;
+    if (command.includes("Cmd_show_version")) {
+      return [{ kind: "DisplayInfo", info: { kind: "Version", version: "Agda version 2.9.0" } }];
+    }
+    return [{ kind: "Status" }];
+  } as any;
+  session.ensureProcess = () => fakeProc;
+
+  // First command: piggyback detects version
+  const vCmd = session["iotcm"]("Cmd_show_version");
+  await session.sendCommand(vCmd);
+  expect(cmdCount).toBe(1);
+
+  // Second command: detection is already done; no extra Cmd_show_version
+  await session.sendCommand("IOTCM cmd2");
+  // Only the user command itself — no pre-flight
+  expect(cmdCount).toBe(2);
+
+  session.destroy();
+});

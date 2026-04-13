@@ -211,10 +211,16 @@ export class AgdaSession {
       // Detect Agda version inline before the user command so that
       // getAgdaVersion() is populated for the current command's callers.
       // Retry on transient failures up to VERSION_DETECTION_MAX_ATTEMPTS.
-      if (
+      //
+      // Special case: if the user command itself is Cmd_show_version, skip
+      // the pre-flight round-trip and instead extract the version from the
+      // actual command's responses (one round-trip instead of two).
+      const needsDetection =
         this.detectedVersion === null &&
-        this.versionDetectionAttempts < AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS
-      ) {
+        this.versionDetectionAttempts < AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
+      const commandIsVersionQuery = command.includes("Cmd_show_version");
+
+      if (needsDetection && !commandIsVersionQuery) {
         this.versionDetectionAttempts++;
         try {
           const vCmd = this.iotcm("Cmd_show_version");
@@ -241,7 +247,28 @@ export class AgdaSession {
         }
       }
 
-      return this.transport.sendCommand(proc, command, timeoutMs);
+      const responses = await this.transport.sendCommand(proc, command, timeoutMs);
+
+      // Piggyback: when the user command was Cmd_show_version and detection
+      // was still pending, extract the version from those responses so we avoid
+      // an extra round-trip on the first agda_show_version invocation.
+      if (needsDetection && commandIsVersionQuery) {
+        this.versionDetectionAttempts++;
+        try {
+          const raw = AgdaSession.extractRawVersionString(responses);
+          if (raw) {
+            this.detectedVersion = parseAgdaVersion(raw);
+            logger.trace("detected Agda version (piggybacked)", {
+              version: this.detectedVersion,
+            });
+          }
+        } catch (err) {
+          // Attempt slot consumed; retry on next command if under the limit.
+          logger.trace("version detection piggyback failed", { err });
+        }
+      }
+
+      return responses;
     });
     // Chain onto the queue — swallow rejections so a failed command
     // doesn't block subsequent commands from executing.

@@ -9,6 +9,7 @@ import { resolve, relative, join } from "node:path";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import type { AgdaSession } from "../agda-process.js";
 import { isAgdaSourceFile, filePathDescription } from "../agda/version-support.js";
+import { logger } from "../agda/logger.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import { missingPathToolError, ToolInvocationError, registerTextTool } from "./tool-helpers.js";
 
@@ -83,6 +84,14 @@ export function register(
         });
       }
       const tierDir = resolveExistingPathWithinRoot(repoRoot, requestedTierDir);
+      // Ensure version detection has run so isAgdaSourceFile() filters by the
+      // actually-installed Agda's supported extensions rather than being
+      // permissive (all extensions) when this tool is invoked first.
+      if (!session.getAgdaVersion()) {
+        try { await session.query.showVersion(); } catch (err) {
+          logger.trace("agda_list_modules: version detection best-effort failed", { err });
+        }
+      }
       const modules: string[] = [];
       function walk(dir: string, requestedDir: string, displayPrefix: string): void {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -159,6 +168,14 @@ export function register(
         throw missingPathToolError("directory", requestedSearchRoot);
       }
       const searchRoot = resolveExistingPathWithinRoot(repoRoot, requestedSearchRoot);
+      // Ensure version detection has run so isAgdaSourceFile() filters by the
+      // actually-installed Agda's supported extensions rather than being
+      // permissive (all extensions) when this tool is invoked first.
+      if (!session.getAgdaVersion()) {
+        try { await session.query.showVersion(); } catch (err) {
+          logger.trace("agda_search_definitions: version detection best-effort failed", { err });
+        }
+      }
       const matches: Array<{ file: string; line: number; text: string }> = [];
       function searchDir(dir: string, requestedDir: string, displayPrefix: string): void {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
