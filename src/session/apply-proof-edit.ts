@@ -234,7 +234,24 @@ export async function applyTextEdit(
     };
   }
 
-  const source = await readFile(filePath, "utf-8");
+  let source: string;
+  try {
+    source = await readFile(filePath, "utf-8");
+  } catch (err) {
+    // Covers ENOENT (file deleted between caller's existence check
+    // and our read), EISDIR (caller passed a directory path), EACCES
+    // (permissions), and other I/O errors. Returning a structured
+    // failure instead of throwing means the tool layer gets a usable
+    // message for the agent, not an unhandled promise rejection.
+    const code = (err as NodeJS.ErrnoException).code ?? "EIO";
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      applied: false,
+      occurrences: 0,
+      line: null,
+      message: `Could not read file (${code}): ${msg}`,
+    };
+  }
 
   // Normalize oldText/newText to match the file's dominant EOL style.
   // If the file is CRLF, any bare \n (not already part of \r\n) in the

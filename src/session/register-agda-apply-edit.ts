@@ -12,7 +12,6 @@
 // and any missed Edit silently desynchronized the server state from disk.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { existsSync } from "node:fs";
 import { z } from "zod";
 
 import { AgdaSession } from "../agda-process.js";
@@ -50,9 +49,12 @@ export function registerAgdaApplyEdit(
     },
     callback: async ({ file, oldText, newText, occurrence }) => {
       const resolvedPath = resolveFileWithinRoot(repoRoot, file as string);
-      if (!existsSync(resolvedPath)) {
-        return `## agda_apply_edit\n\n**Error:** File not found: ${file}\n`;
-      }
+
+      // Do NOT probe existence here with existsSync: that would be a
+      // classic TOCTOU race (file deleted between the check and the
+      // read). applyTextEdit now catches readFile errors itself and
+      // returns a structured {applied: false, message} with the
+      // underlying errno, so we get a better message and no race.
 
       // Capture goal IDs before the edit so the reload can report a
       // {solved, new} diff. Only meaningful when the edited file is the

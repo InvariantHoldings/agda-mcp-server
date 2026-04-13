@@ -150,6 +150,29 @@ describe("applyTextEdit", () => {
     });
   });
 
+  describe("file I/O error handling (no exceptions)", () => {
+    test("returns structured failure when file does not exist", async () => {
+      // Path that definitely doesn't exist. applyTextEdit should not
+      // throw — it should return {applied: false} with an ENOENT
+      // message so the agent gets a usable response.
+      const missing = join(tempDir, "DoesNotExist.agda");
+      const result = await applyTextEdit(missing, "foo", "bar");
+      expect(result.applied).toBe(false);
+      expect(result.occurrences).toBe(0);
+      expect(result.line).toBeNull();
+      expect(result.message).toContain("ENOENT");
+    });
+
+    test("returns structured failure when path is a directory", async () => {
+      // Caller passes a directory — readFile rejects with EISDIR.
+      // We should surface that cleanly, not throw.
+      const result = await applyTextEdit(tempDir, "foo", "bar");
+      expect(result.applied).toBe(false);
+      expect(result.occurrences).toBe(0);
+      expect(result.message).toContain("EISDIR");
+    });
+  });
+
   test("leaves no temp file after a successful write (atomic rename)", async () => {
     await writeFile(tempFile, "foo bar baz");
     const result = await applyTextEdit(tempFile, "bar", "qux");
