@@ -176,11 +176,19 @@ test("DisplayInfo Time is always captured regardless of profilingEnabled flag", 
 // ── profilingEnabled strictly controls RunningInfo inclusion ──────────
 
 test("profilingEnabled=true includes both RunningInfo and Time; false only Time", async () => {
+  // Use uniquely-tagged messages to avoid substring collisions between
+  // RunningInfo and Time content (e.g. "X" appearing inside "X Y").
+  const taggedPair = nonBlankString.chain((base) =>
+    fc.tuple(
+      fc.constant(`[RUNNING] ${base}`),
+      fc.constant(`[TIME] ${base}`),
+    ),
+  );
+
   await fc.assert(
     fc.property(
-      nonBlankString,
-      nonBlankString,
-      (runningMsg, timeMsg) => {
+      taggedPair,
+      ([runningMsg, timeMsg]) => {
         const responses: AgdaResponse[] = [
           { kind: "RunningInfo", message: runningMsg },
           { kind: "DisplayInfo", info: { kind: "Time", message: timeMsg } },
@@ -191,7 +199,7 @@ test("profilingEnabled=true includes both RunningInfo and Time; false only Time"
         expect(withProfiling).toContain(runningMsg);
         expect(withProfiling).toContain(timeMsg);
 
-        // Without profiling: only Time should appear
+        // Without profiling: only Time should appear, not RunningInfo
         const withoutProfiling = extractProfilingOutput(responses, { profilingEnabled: false });
         expect(withoutProfiling).not.toContain(runningMsg);
         expect(withoutProfiling).toContain(timeMsg);

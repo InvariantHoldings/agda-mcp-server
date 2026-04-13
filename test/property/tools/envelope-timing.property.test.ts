@@ -155,3 +155,95 @@ test("makeToolResult always preserves all data keys from envelope", async () => 
     ),
   );
 });
+
+// ── Property: elapsedMs schema rejects invalid values ───────────────
+
+test("envelopeBaseSchema rejects negative elapsedMs", async () => {
+  const { toolEnvelopeSchema } = await import("../../../src/tools/tool-helpers.js");
+  const { z } = await import("zod");
+  const schema = toolEnvelopeSchema(z.object({ text: z.string() }));
+
+  await fc.assert(
+    fc.property(
+      fc.integer({ min: -1_000_000, max: -1 }),
+      (negativeMs) => {
+        const result = schema.safeParse({
+          tool: "test",
+          ok: true,
+          classification: "ok",
+          summary: "ok",
+          data: { text: "hello" },
+          diagnostics: [],
+          elapsedMs: negativeMs,
+        });
+        expect(result.success).toBe(false);
+      },
+    ),
+  );
+});
+
+test("envelopeBaseSchema rejects non-integer elapsedMs", async () => {
+  const { toolEnvelopeSchema } = await import("../../../src/tools/tool-helpers.js");
+  const { z } = await import("zod");
+  const schema = toolEnvelopeSchema(z.object({ text: z.string() }));
+
+  await fc.assert(
+    fc.property(
+      fc.double({ min: 0.001, max: 1_000_000, noNaN: true }),
+      (floatMs) => {
+        // Only test non-integers
+        if (Number.isInteger(floatMs)) return;
+        const result = schema.safeParse({
+          tool: "test",
+          ok: true,
+          classification: "ok",
+          summary: "ok",
+          data: { text: "hello" },
+          diagnostics: [],
+          elapsedMs: floatMs,
+        });
+        expect(result.success).toBe(false);
+      },
+    ),
+  );
+});
+
+test("envelopeBaseSchema accepts non-negative integer elapsedMs", async () => {
+  const { toolEnvelopeSchema } = await import("../../../src/tools/tool-helpers.js");
+  const { z } = await import("zod");
+  const schema = toolEnvelopeSchema(z.object({ text: z.string() }));
+
+  await fc.assert(
+    fc.property(
+      fc.nat({ max: 10_000_000 }),
+      (ms) => {
+        const result = schema.safeParse({
+          tool: "test",
+          ok: true,
+          classification: "ok",
+          summary: "ok",
+          data: { text: "hello" },
+          diagnostics: [],
+          elapsedMs: ms,
+        });
+        expect(result.success).toBe(true);
+      },
+    ),
+  );
+});
+
+test("envelopeBaseSchema accepts missing elapsedMs", async () => {
+  const { toolEnvelopeSchema } = await import("../../../src/tools/tool-helpers.js");
+  const { z } = await import("zod");
+  const schema = toolEnvelopeSchema(z.object({ text: z.string() }));
+
+  const result = schema.safeParse({
+    tool: "test",
+    ok: true,
+    classification: "ok",
+    summary: "ok",
+    data: { text: "hello" },
+    diagnostics: [],
+  });
+  expect(result.success).toBe(true);
+});

@@ -259,7 +259,7 @@ export function registerSessionLoadTools(
         return makeToolResult(
           okEnvelope({
             tool: "agda_load",
-            summary: `Loaded ${relPath} with classification ${result.classification}.`,
+            summary: `Loaded ${relPath} with classification ${result.classification} (${elapsedMs}ms).`,
             classification: result.classification,
             data: {
               file: relPath,
@@ -279,6 +279,7 @@ export function registerSessionLoadTools(
             diagnostics,
             stale: session.isFileStale() || undefined,
             provenance: { file: filePath, protocolCommands: ["Cmd_load", "Cmd_metas"] },
+            elapsedMs,
           }),
           renderedText,
         );
@@ -342,7 +343,7 @@ export function registerSessionLoadTools(
         return makeToolResult(
           okEnvelope({
             tool: "agda_load_no_metas",
-            summary: `Strictly loaded ${relPath} with classification ${result.classification}.`,
+            summary: `Strictly loaded ${relPath} with classification ${result.classification} (${elapsedMs}ms).`,
             classification: result.classification,
             data: {
               file: relPath,
@@ -365,6 +366,7 @@ export function registerSessionLoadTools(
             ],
             stale: session.isFileStale() || undefined,
             provenance: { file: filePath, protocolCommands: ["Cmd_load_no_metas"] },
+            elapsedMs,
           }),
           text,
         );
@@ -461,7 +463,7 @@ export function registerSessionLoadTools(
         return makeToolResult(
           okEnvelope({
             tool: "agda_typecheck",
-            summary: `Type-checked ${relPath} with classification ${result.classification}.`,
+            summary: `Type-checked ${relPath} with classification ${result.classification} (${elapsedMs}ms).`,
             classification: result.classification,
             data: {
               file: relPath,
@@ -481,6 +483,7 @@ export function registerSessionLoadTools(
               ...result.warnings.map((message) => warningDiagnostic(message, "agda-warning")),
             ],
             provenance: { file: filePath, protocolCommands: ["Cmd_load", "Cmd_metas"] },
+            elapsedMs,
           }),
           text,
         );

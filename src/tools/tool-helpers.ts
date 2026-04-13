@@ -73,7 +73,7 @@ const envelopeBaseSchema = z.object({
   diagnostics: z.array(diagnosticSchema),
   stale: z.boolean().optional(),
   provenance: z.record(z.string(), z.unknown()).optional(),
-  elapsedMs: z.number().optional(),
+  elapsedMs: z.int().nonnegative().optional(),
 });
 
 export function toolEnvelopeSchema(
