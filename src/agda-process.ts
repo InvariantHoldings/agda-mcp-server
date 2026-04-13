@@ -58,4 +58,6 @@ export {
   supportedFeatureFlags,
   hasStructuredGiveResult,
   filePathDescription,
+  getAgdaCapabilities,
+  type AgdaCapabilities,
 } from "./agda/version-support.js";

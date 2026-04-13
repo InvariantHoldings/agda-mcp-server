@@ -25,7 +25,7 @@ test("AgdaSession serializes concurrent sendCommand calls (Bug 3)", async () => 
     const session = new AgdaSession(process.cwd());
 
     // Bypass version detection so the mock only sees user commands
-    session["versionDetectionAttempts"] = (AgdaSession as any)["VERSION_DETECTION_MAX_ATTEMPTS"];
+    session["versionDetectionAttempts"] = AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
 
     // Track the order commands arrive at the transport
     const commandOrder: Array<{ idx: number; event: string; command: string }> = [];
@@ -80,7 +80,7 @@ test("AgdaSession command queue does not block after a rejected command (Bug 3)"
   const session = new AgdaSession(process.cwd());
 
   // Bypass version detection so the mock only sees user commands
-  session["versionDetectionAttempts"] = (AgdaSession as any)["VERSION_DETECTION_MAX_ATTEMPTS"];
+  session["versionDetectionAttempts"] = AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
 
   let callCount = 0;
   session["transport"].sendCommand = async function (_proc, command, _timeoutMs) {

@@ -36,6 +36,10 @@ export const sessionStatusDataSchema = z.object({
 
 export const versionDataSchema = z.object({
   version: z.string(),
+  agdaVersion: z.string().optional(),
+  supportedExtensions: z.array(z.string()).optional(),
+  supportedFeatureFlags: z.array(z.string()).optional(),
+  structuredGiveResult: z.boolean().optional(),
 });
 
 export const processCommandDataSchema = z.object({

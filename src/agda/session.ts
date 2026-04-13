@@ -85,7 +85,8 @@ export class AgdaSession {
   exiting = false;
   private detectedVersion: AgdaVersion | null = null;
   private versionDetectionAttempts = 0;
-  private static readonly VERSION_DETECTION_MAX_ATTEMPTS = 3;
+  static readonly VERSION_DETECTION_MAX_ATTEMPTS = 3;
+  private static readonly VERSION_DETECTION_TIMEOUT_MS = 15_000;
   private lastLoadedMtime: number | null = null;
   private libraryRegistration: LibraryRegistration | null = null;
   private readonly transport = new AgdaTransport();
@@ -169,6 +170,22 @@ export class AgdaSession {
   }
 
   /**
+   * Scan responses from Cmd_show_version and return the first raw version
+   * string found, or undefined if none is present.
+   *
+   * Agda may surface the version in `info.version`, `info.message`, or
+   * `info.text` depending on the protocol version.
+   */
+  private static extractRawVersionString(responses: AgdaResponse[]): string | undefined {
+    for (const resp of responses) {
+      const info = (resp as any).info;
+      const raw: string | undefined = info?.version ?? info?.message ?? info?.text;
+      if (raw) return raw;
+    }
+    return undefined;
+  }
+
+  /**
    * Send an IOTCM command and collect responses until completion.
    * Returns all JSON responses received during this command.
    *
@@ -196,22 +213,21 @@ export class AgdaSession {
         this.versionDetectionAttempts++;
         try {
           const vCmd = `IOTCM "" NonInteractive Direct (Cmd_show_version)`;
-          const responses = await this.transport.sendCommand(proc, vCmd, 15_000);
-          for (const resp of responses) {
-            const info = (resp as any).info;
-            const raw: string | undefined =
-              info?.version ?? info?.message ?? info?.text;
-            if (raw) {
-              try {
-                this.detectedVersion = parseAgdaVersion(raw);
-                logger.trace("detected Agda version", {
-                  version: this.detectedVersion,
-                });
-              } catch {
-                // Could not parse version string; attempt slot consumed,
-                // retry will happen on the next command if under the limit.
-              }
-              break;
+          const responses = await this.transport.sendCommand(
+            proc,
+            vCmd,
+            AgdaSession.VERSION_DETECTION_TIMEOUT_MS,
+          );
+          const raw = AgdaSession.extractRawVersionString(responses);
+          if (raw) {
+            try {
+              this.detectedVersion = parseAgdaVersion(raw);
+              logger.trace("detected Agda version", {
+                version: this.detectedVersion,
+              });
+            } catch {
+              // Could not parse version string; attempt slot consumed,
+              // retry will happen on the next command if under the limit.
             }
           }
         } catch {

@@ -5,7 +5,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { AgdaSession } from "../agda-process.js";
+import {
+  AgdaSession,
+  formatVersion,
+  getAgdaCapabilities,
+} from "../agda-process.js";
 import {
   getKnownProtocolGaps,
   getProtocolParitySummary,
@@ -32,6 +36,10 @@ const manifestEntrySchema = z.object({
 
 const toolsCatalogDataSchema = z.object({
   serverVersion: z.string(),
+  agdaVersion: z.string().optional(),
+  supportedExtensions: z.array(z.string()).optional(),
+  supportedFeatureFlags: z.array(z.string()).optional(),
+  structuredGiveResult: z.boolean().optional(),
   tools: z.array(manifestEntrySchema),
 });
 
@@ -87,6 +95,13 @@ const bugBundleSchema = z.object({
 });
 
 async function tryGetAgdaVersion(session: AgdaSession): Promise<string | undefined> {
+  // Prefer the cached version set during inline detection (no extra round-trip).
+  const cached = session.getAgdaVersion();
+  if (cached) {
+    return formatVersion(cached);
+  }
+  // Fall back to a live query in case detection hasn't run yet
+  // (e.g. called before any sendCommand has been issued).
   try {
     const result = await session.query.showVersion();
     return result.version || undefined;
@@ -136,14 +151,29 @@ export function register(
   registerStructuredTool({
     server,
     name: "agda_tools_catalog",
-    description: "Return the generated manifest view of exposed MCP tools, categories, protocol mappings, and schema field names.",
+    description: "Return the generated manifest view of exposed MCP tools, categories, protocol mappings, and schema field names. Also reports the detected Agda version and which extensions, feature flags, and protocol features are available.",
     category: "reporting",
     outputDataSchema: toolsCatalogDataSchema,
     callback: async () => {
       const tools = listToolManifest();
       const serverVersion = getServerVersion();
+      const { agdaVersion, supportedExtensions, supportedFeatureFlags, structuredGiveResult } = getAgdaCapabilities(session.getAgdaVersion());
+
       let output = "## Tool catalog\n\n";
-      output += `**Server version:** ${serverVersion}\n\n`;
+      output += `**Server version:** ${serverVersion}\n`;
+      if (agdaVersion) {
+        output += `**Agda version:** ${agdaVersion}\n`;
+      }
+      if (supportedExtensions) {
+        output += `**Supported source extensions:** ${supportedExtensions.join(", ")}\n`;
+      }
+      if (supportedFeatureFlags && supportedFeatureFlags.length > 0) {
+        output += `**Supported feature flags:** ${supportedFeatureFlags.join(", ")}\n`;
+      }
+      if (structuredGiveResult !== undefined) {
+        output += `**Structured give result (2.9.0+):** ${structuredGiveResult ? "yes" : "no"}\n`;
+      }
+      output += "\n";
       for (const tool of tools) {
         const commands = tool.protocolCommands.length > 0
           ? tool.protocolCommands.join(", ")
@@ -154,9 +184,13 @@ export function register(
       return makeToolResult(
         okEnvelope({
           tool: "agda_tools_catalog",
-          summary: `Catalogued ${tools.length} tools.`,
+          summary: `Catalogued ${tools.length} tools.${agdaVersion ? ` Agda ${agdaVersion}.` : ""}`,
           data: {
             serverVersion,
+            agdaVersion,
+            supportedExtensions,
+            supportedFeatureFlags,
+            structuredGiveResult,
             tools,
           },
         }),

@@ -52,7 +52,7 @@ test("command queue preserves FIFO order under concurrent dispatch (Bug 3)", asy
         const session = new AgdaSession(process.cwd());
 
         // Bypass version detection so only user commands appear in executionOrder
-        session["versionDetectionAttempts"] = (AgdaSession as any)["VERSION_DETECTION_MAX_ATTEMPTS"];
+        session["versionDetectionAttempts"] = AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
 
         const executionOrder: string[] = [];
 

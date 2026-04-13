@@ -10,6 +10,7 @@ import {
   type AgdaVersion,
   parseAgdaVersion,
   versionAtLeast,
+  formatVersion,
 } from "./agda-version.js";
 
 // ── Literate format support ─────────────────────────────────────────
@@ -114,4 +115,44 @@ export function filePathDescription(agdaVersion?: AgdaVersion): string {
     return "Path to the .agda file (relative to repo root or absolute)";
   }
   return `Path to an Agda source file (${exts.join(", ")}) — relative to repo root or absolute`;
+}
+
+// ── Capability summary ──────────────────────────────────────────────
+
+/**
+ * A flat record of version-gated capabilities computed from a detected
+ * Agda version.  All fields are undefined when no version is known.
+ */
+export interface AgdaCapabilities {
+  /** Formatted version string, e.g. "2.9.0". */
+  agdaVersion: string | undefined;
+  /** Source file extensions supported by this version. */
+  supportedExtensions: string[] | undefined;
+  /** Feature flags supported by this version. */
+  supportedFeatureFlags: string[] | undefined;
+  /** Whether Agda returns structured {"paren": bool} give results (2.9.0+). */
+  structuredGiveResult: boolean | undefined;
+}
+
+/**
+ * Compute all version-gated capabilities from a detected Agda version.
+ * Returns all-undefined when `agdaVer` is null (version not yet detected).
+ *
+ * Use this instead of computing each field independently to avoid duplication.
+ */
+export function getAgdaCapabilities(agdaVer: AgdaVersion | null): AgdaCapabilities {
+  if (!agdaVer) {
+    return {
+      agdaVersion: undefined,
+      supportedExtensions: undefined,
+      supportedFeatureFlags: undefined,
+      structuredGiveResult: undefined,
+    };
+  }
+  return {
+    agdaVersion: formatVersion(agdaVer),
+    supportedExtensions: supportedSourceExtensions(agdaVer),
+    supportedFeatureFlags: supportedFeatureFlags(agdaVer),
+    structuredGiveResult: hasStructuredGiveResult(agdaVer),
+  };
 }
