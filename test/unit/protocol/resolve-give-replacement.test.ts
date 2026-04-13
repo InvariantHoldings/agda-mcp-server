@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { afterEach, describe, test, expect } from "vitest";
 
 import {
   hasReplacementText,
@@ -72,5 +72,49 @@ describe("resolveGiveReplacementText", () => {
       { kind: "GiveAction", result: '{"paren":false}' },
     ];
     expect(resolveGiveReplacementText(responses, "refl")).toBe("refl");
+  });
+
+  describe("prototype pollution safety", () => {
+    // Object.hasOwn is used in the "paren" check instead of the `in`
+    // operator. These tests verify the distinction matters: a
+    // polluted Object.prototype.paren must NOT be mistaken for a
+    // legitimate GiveResult envelope.
+
+    const pollutionKey = "paren";
+
+    afterEach(() => {
+      // Always clean up, even if an assertion failed.
+      delete (Object.prototype as Record<string, unknown>)[pollutionKey];
+    });
+
+    test("Give_String containing a plain object without 'paren' is returned verbatim, even under Object.prototype.paren pollution", () => {
+      (Object.prototype as Record<string, unknown>)[pollutionKey] = true;
+
+      // `{}` — a legal JSON-parse result that does NOT own `paren`.
+      // With the old `"paren" in parsed` check, this would match the
+      // polluted prototype and be interpreted as `Give_NoParen`,
+      // discarding the actual string payload.
+      const responses = [
+        { kind: "GiveAction", giveResult: "{}" },
+      ];
+      const result = resolveGiveReplacementText(responses, "inputExpr");
+      // Under the hasOwnKey guard, `{}` does not own `paren`, so we
+      // fall through to the Give_String branch and return the
+      // original string verbatim.
+      expect(result).toBe("{}");
+    });
+
+    test("Give_Paren/Give_NoParen still work when prototype is polluted", () => {
+      (Object.prototype as Record<string, unknown>)[pollutionKey] = "not-a-real-value";
+
+      // Genuine `{"paren":false}` owns the key, so hasOwnKey returns
+      // true and the normal path runs.
+      expect(
+        resolveGiveReplacementText([{ kind: "GiveAction", giveResult: '{"paren":false}' }], "refl"),
+      ).toBe("refl");
+      expect(
+        resolveGiveReplacementText([{ kind: "GiveAction", giveResult: '{"paren":true}' }], "suc zero"),
+      ).toBe("(suc zero)");
+    });
   });
 });

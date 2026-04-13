@@ -22,6 +22,37 @@ import { applyTextEdit } from "./apply-proof-edit.js";
 import { reloadAndDiagnose } from "./reload-and-diagnose.js";
 
 /**
+ * Extensions that Agda recognizes as source files. `agda_apply_edit`
+ * is scoped to these — an agent with the tool can modify Agda code
+ * inside the project root, but cannot use the same primitive to
+ * rewrite `.git/config`, `package.json`, `Makefile`, shell scripts,
+ * or anything else it happens to find lexically under the repo.
+ * This is the blast-radius half of the sandbox; path containment
+ * (via `resolveExistingPathWithinRoot`) is the other half.
+ *
+ * Covers the literate variants agda-mode currently supports. If
+ * Agda adds another literate backend, add it here (and to
+ * parse-load-responses.ts's error-location regex for consistency).
+ */
+export const AGDA_SOURCE_EXTENSIONS = [
+  ".agda",
+  ".lagda",
+  ".lagda.md",
+  ".lagda.rst",
+  ".lagda.tex",
+  ".lagda.org",
+  ".lagda.typ",
+] as const;
+
+export function hasAgdaSourceExtension(path: string): boolean {
+  // Compare against the lowercase filename so `Foo.AGDA` is
+  // accepted on case-insensitive filesystems; the containment
+  // check uses the real on-disk path anyway.
+  const lower = path.toLowerCase();
+  return AGDA_SOURCE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+/**
  * Canonicalize `session.currentFile` for identity comparison. The
  * session's path is set by `agda_load`, which does not realpath —
  * so a direct `===` against a just-realpathed target would miss
@@ -86,6 +117,22 @@ export function registerAgdaApplyEdit(
         // structured failure rather than throwing.
         const msg = err instanceof Error ? err.message : String(err);
         return `## agda_apply_edit\n\n**Error:** Could not resolve file path: ${msg}\n`;
+      }
+
+      // Extension allowlist: agda_apply_edit is meant for Agda
+      // source files only. Without this check, an agent with the
+      // tool could rewrite .git/config, package.json, Makefile,
+      // shell scripts, or anything else lexically inside the repo.
+      // Checking the canonical (post-realpath) path prevents a
+      // ".agda" suffix trick like `shell.sh/..%2f/foo.agda` from
+      // bypassing the check.
+      if (!hasAgdaSourceExtension(canonicalPath)) {
+        return (
+          `## agda_apply_edit\n\n` +
+          `**Error:** Refusing to edit \`${file}\`: agda_apply_edit is ` +
+          `restricted to Agda source files (${AGDA_SOURCE_EXTENSIONS.join(", ")}). ` +
+          `Use a general-purpose file-editing tool for non-Agda files.\n`
+        );
       }
 
       // Capture goal IDs before the edit so the reload can report a

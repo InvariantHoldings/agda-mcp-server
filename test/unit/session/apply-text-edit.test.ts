@@ -183,4 +183,32 @@ describe("applyTextEdit", () => {
     const leaked = entries.filter((name) => name.includes("agda-mcp-tmp-"));
     expect(leaked).toEqual([]);
   });
+
+  describe("security hardening", () => {
+    test("rejects NUL byte in oldText", async () => {
+      await writeFile(tempFile, "foo bar baz");
+      const result = await applyTextEdit(tempFile, "foo\u0000", "bar");
+      expect(result.applied).toBe(false);
+      expect(result.message).toContain("NUL");
+      // File must not have been touched.
+      expect(await readFile(tempFile, "utf-8")).toBe("foo bar baz");
+    });
+
+    test("rejects NUL byte in newText", async () => {
+      await writeFile(tempFile, "foo bar baz");
+      const result = await applyTextEdit(tempFile, "foo", "bar\u0000baz");
+      expect(result.applied).toBe(false);
+      expect(result.message).toContain("NUL");
+      expect(await readFile(tempFile, "utf-8")).toBe("foo bar baz");
+    });
+
+    test("accepts normal UTF-8 that happens to look suspicious", async () => {
+      // Unicode chars like U+00A0 NBSP or astral mathematical symbols
+      // are legal Agda identifier/source content and must pass.
+      await writeFile(tempFile, "foo 𝟘 baz");
+      const result = await applyTextEdit(tempFile, "𝟘", "zero");
+      expect(result.applied).toBe(true);
+      expect(await readFile(tempFile, "utf-8")).toBe("foo zero baz");
+    });
+  });
 });

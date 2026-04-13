@@ -20,12 +20,24 @@ import { findGoalPosition, findGoalPositions } from "./goal-positions.js";
  * and `rename()` it over the target, which is atomic on POSIX and
  * NTFS when both paths are on the same filesystem.
  *
- * The temp path mixes pid with `randomUUID()` so two overlapping
- * calls — e.g. two tool invocations landing in the same
- * millisecond on the same file — can't produce the same temp
- * name. (pid alone collides across fork+exec; Date.now() alone
- * collides within a millisecond; the UUID adds 122 bits of
- * entropy on top.)
+ * Security properties:
+ * - The temp path mixes pid with `randomUUID()` so two overlapping
+ *   calls — e.g. two tool invocations landing in the same
+ *   millisecond on the same file — can't produce the same temp
+ *   name. The UUID adds 122 bits of entropy so there is no
+ *   practical risk of predicting the path.
+ * - The temp file is created with `flag: "wx"` (O_CREAT | O_EXCL),
+ *   which fails if anything already exists at that path. Even if
+ *   an attacker could somehow predict the UUID and pre-plant a
+ *   symlink there, the open would fail rather than following the
+ *   symlink to an arbitrary target. (Concrete threat model: a
+ *   co-located process racing to plant a symlink before we create
+ *   the tmp file. Unlikely with 122 bits of entropy, but the
+ *   check is free.)
+ * - `rename()` on POSIX does NOT follow destination symlinks; if
+ *   the target happens to be a symlink at rename time, it is
+ *   replaced in place, not followed. So the atomic swap stays
+ *   inside whatever directory `filePath` names.
  *
  * On failure we attempt to unlink the temp file so we don't leak
  * `.agda-mcp-tmp-*` turds next to user sources. Unlink errors are
@@ -35,7 +47,9 @@ async function writeFileAtomic(filePath: string, content: string): Promise<void>
   // Same-directory temp file so rename() stays on one filesystem.
   const tmpPath = `${filePath}.agda-mcp-tmp-${process.pid}-${randomUUID()}`;
   try {
-    await writeFile(tmpPath, content, "utf-8");
+    // flag: "wx" → O_CREAT | O_EXCL, refuses to open if the path
+    // already exists (e.g. a racing attacker planted a symlink).
+    await writeFile(tmpPath, content, { encoding: "utf-8", flag: "wx" });
     await rename(tmpPath, filePath);
   } catch (err) {
     try {
@@ -243,6 +257,21 @@ export async function applyTextEdit(
       occurrences: 0,
       line: null,
       message: "oldText must not be empty.",
+    };
+  }
+
+  // Agda source files are UTF-8 text; a NUL byte in either the
+  // anchor or the replacement almost certainly means the caller
+  // is either confused or trying to smuggle binary content into
+  // what should be plain source. Reject rather than write — a NUL
+  // inside a legit Agda file would break most editors, diff tools,
+  // and Agda's own lexer at the first byte. Cheap sanity check.
+  if (oldText.includes("\u0000") || newText.includes("\u0000")) {
+    return {
+      applied: false,
+      occurrences: 0,
+      line: null,
+      message: "oldText and newText must not contain NUL bytes.",
     };
   }
 

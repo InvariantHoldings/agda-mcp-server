@@ -9,6 +9,22 @@ import {
 import { decodeDisplayInfoEvents } from "./display-info.js";
 
 /**
+ * True iff `obj` is a non-null object that owns the named property
+ * directly (i.e. not inherited from the prototype chain). Used in
+ * place of `"key" in obj` when we're testing an untrusted parse
+ * result — the `in` operator walks the prototype chain, so a
+ * process-wide pollution of `Object.prototype.paren` would fool the
+ * original check. `Object.hasOwn` never looks past the object
+ * itself.
+ */
+function hasOwnKey<K extends string>(
+  obj: unknown,
+  key: K,
+): obj is Record<K, unknown> {
+  return typeof obj === "object" && obj !== null && Object.hasOwn(obj, key);
+}
+
+/**
  * Render a GiveResult value as human-readable text.
  *
  * Agda 2.9.0 serializes GiveResult as `{"paren":true}` or `{"paren":false}`.
@@ -18,7 +34,7 @@ import { decodeDisplayInfoEvents } from "./display-info.js";
 function renderGiveResult(val: string): string {
   try {
     const parsed = JSON.parse(val);
-    if (parsed && typeof parsed === "object" && "paren" in parsed) {
+    if (hasOwnKey(parsed, "paren")) {
       return "Term accepted";
     }
   } catch {
@@ -66,7 +82,7 @@ export function resolveGiveReplacementText(
 
     try {
       const parsed = JSON.parse(val);
-      if (parsed && typeof parsed === "object" && "paren" in parsed) {
+      if (hasOwnKey(parsed, "paren")) {
         return parsed.paren ? `(${inputExpr})` : inputExpr;
       }
     } catch {
