@@ -152,6 +152,84 @@ it("MCP end-to-end: agda_typecheck updates singleton session state", async () =>
   });
 });
 
+function createIsolatedProbeProject() {
+  const root = mkdtempSync(resolve(tmpdir(), "agda-mcp-probe-"));
+  writeFileSync(
+    resolve(root, "probe.agda-lib"),
+    "name: probe\ninclude: .\n",
+    "utf8",
+  );
+  mkdirSync(resolve(root, "Probe"), { recursive: true });
+  writeFileSync(
+    resolve(root, "Probe/Core.agda"),
+    `module Probe.Core where
+
+data Nat : Set where
+  zero : Nat
+  suc  : Nat \u2192 Nat
+
+plus : Nat \u2192 Nat \u2192 Nat
+plus zero    m = m
+plus (suc n) m = suc (plus n m)
+`,
+    "utf8",
+  );
+  writeFileSync(
+    resolve(root, "Probe/Extra.agda"),
+    `module Probe.Extra where
+
+open import Probe.Core
+
+one : Nat
+one = suc zero
+
+two : Nat
+two = plus one one
+`,
+    "utf8",
+  );
+  writeFileSync(
+    resolve(root, "Probe/Root.agda"),
+    `module Probe.Root where
+
+open import Probe.Core
+open import Probe.Extra
+
+three : Nat
+three = plus two one
+`,
+    "utf8",
+  );
+  return root;
+}
+
+it("MCP end-to-end: typecheck then load on fresh multi-module project stays in sync", async () => {
+  const projectRoot = createIsolatedProbeProject();
+  try {
+    await withHarness(async (harness) => {
+      const typecheck = await callToolStep(
+        harness,
+        "typecheck Probe.Root on fresh project",
+        "agda_typecheck",
+        { file: "Probe/Root.agda" },
+      );
+      expect(typecheck.isError).toBe(false);
+      expect(typecheck.structuredContent.data.classification).toBe("ok-complete");
+
+      const load = await callToolStep(
+        harness,
+        "load Probe.Root immediately after typecheck",
+        "agda_load",
+        { file: "Probe/Root.agda" },
+      );
+      expect(load.isError).toBe(false);
+      expect(load.structuredContent.data.classification).toBe("ok-complete");
+    }, projectRoot);
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test("MCP end-to-end: file navigation tools", async () => {
   const projectRoot = createFileToolProject();
 
