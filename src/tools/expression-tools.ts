@@ -9,6 +9,7 @@ import {
   makeToolResult,
   okEnvelope,
   errorEnvelope,
+  errorDiagnostic,
   registerGoalTextTool,
   registerStructuredTool,
   sessionErrorStateGate,
@@ -67,6 +68,7 @@ export function register(
             tool: "agda_compute",
             summary: message,
             data: { expr, goalId, normalForm: "" },
+            diagnostics: [errorDiagnostic(message, "compute-error")],
           }),
           message,
         );
@@ -121,6 +123,7 @@ export function register(
             tool: "agda_infer",
             summary: message,
             data: { expr, goalId, inferredType: "" },
+            diagnostics: [errorDiagnostic(message, "infer-error")],
           }),
           message,
         );

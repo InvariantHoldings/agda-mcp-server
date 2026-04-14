@@ -141,3 +141,37 @@ test("envelope always preserves tool and summary fields", async () => {
     }),
   );
 });
+
+test("diagnostic nextAction is preserved when provided", async () => {
+  await fc.assert(
+    fc.property(
+      fc.string({ minLength: 1, maxLength: 50 }),
+      fc.string({ minLength: 1, maxLength: 20 }),
+      fc.string({ minLength: 1, maxLength: 30 }),
+      (message, code, nextAction) => {
+        const diag = errorDiagnostic(message, code, nextAction);
+        expect(diag.nextAction).toBe(nextAction);
+        expect(diag.code).toBe(code);
+        expect(diag.severity).toBe("error");
+
+        const info = infoDiagnostic(message, code, nextAction);
+        expect(info.nextAction).toBe(nextAction);
+        expect(info.severity).toBe("info");
+
+        const warn = warningDiagnostic(message, code, nextAction);
+        expect(warn.nextAction).toBe(nextAction);
+        expect(warn.severity).toBe("warning");
+      },
+    ),
+  );
+});
+
+test("diagnostics without nextAction leave it undefined", async () => {
+  await fc.assert(
+    fc.property(fc.string({ minLength: 1, maxLength: 50 }), (message) => {
+      expect(errorDiagnostic(message).nextAction).toBeUndefined();
+      expect(infoDiagnostic(message).nextAction).toBeUndefined();
+      expect(warningDiagnostic(message).nextAction).toBeUndefined();
+    }),
+  );
+});

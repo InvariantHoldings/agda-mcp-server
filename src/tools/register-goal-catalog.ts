@@ -11,7 +11,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import type { AgdaSession } from "../agda-process.js";
 import { buildGoalCatalog, renderGoalCatalogText } from "../session/goal-catalog.js";
-import { makeToolResult, okEnvelope, errorEnvelope, registerStructuredTool } from "./tool-helpers.js";
+import { makeToolResult, okEnvelope, errorEnvelope, errorDiagnostic, registerStructuredTool } from "./tool-helpers.js";
 
 const contextEntrySchema = z.object({
   name: z.string(),
@@ -61,12 +61,20 @@ export function registerGoalCatalog(
           errorEnvelope({
             tool: "agda_goal_catalog",
             summary: "No file loaded. Call agda_load first.",
+            classification: "no-loaded-file",
             data: {
               goalCount: 0,
               invisibleGoalCount: 0,
               hasHoles: false,
               goals: [],
             },
+            diagnostics: [
+              errorDiagnostic(
+                "No file loaded. Call agda_load first.",
+                "no-loaded-file",
+                "agda_load",
+              ),
+            ],
           }),
           "No file loaded. Call agda_load first.",
         );

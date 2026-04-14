@@ -315,6 +315,13 @@ test("sessionErrorStateGate returns unavailable when lastClassification is type-
   const diag = result!.structuredContent.diagnostics[0];
   expect(diag.severity).toBe("error");
   expect(diag.code).toBe("session-unavailable");
+  expect(diag.nextAction).toBe("agda_load");
+
+  // Recovery hint diagnostic
+  const hint = result!.structuredContent.diagnostics[1];
+  expect(hint.severity).toBe("info");
+  expect(hint.code).toBe("recovery-hint");
+  expect(hint.nextAction).toBe("agda_load");
 
   // The empty data shape is preserved so the client can destructure without undefined.
   expect(result!.structuredContent.data).toEqual({
