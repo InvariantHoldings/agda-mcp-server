@@ -14,8 +14,8 @@ test("hasConstraintsRewriteMode is false on 2.8.0", () => {
   expect(hasConstraintsRewriteMode(parseAgdaVersion("2.8.0"))).toBe(false);
 });
 
-test("hasConstraintsRewriteMode is false on 2.8.0_1", () => {
-  expect(hasConstraintsRewriteMode(parseAgdaVersion("2.8.0"))).toBe(false);
+test("hasConstraintsRewriteMode is false on 2.8.1", () => {
+  expect(hasConstraintsRewriteMode(parseAgdaVersion("2.8.1"))).toBe(false);
 });
 
 test("hasConstraintsRewriteMode is true on 2.9.0", () => {

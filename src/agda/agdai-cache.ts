@@ -29,7 +29,7 @@
 // which is exactly the failure mode this whole feature is designed
 // to backstop against.
 
-import { existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync, statSync, unlinkSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 /** The two layouts Agda's `toIFile` produces. See the module header. */
@@ -75,21 +75,40 @@ export interface AgdaiArtifact {
  * ancestor that contains an `.agda-lib` file, and return that
  * directory. Mirrors `findProjectRoot` in
  * `Agda.Interaction.Library`. Returns `null` when no such ancestor
- * exists, in which case Agda falls back to the local-interface layout.
+ * exists (Agda falls back to the local-interface layout in that case).
  *
- * The search is bounded at the filesystem root, but is **not**
- * bounded at `repoRoot`: if a project's `.agda-lib` lives one
- * directory above the configured MCP repo root (a legitimate
- * configuration), we still want to find it, because that's where
- * Agda will actually look.
+ * **Sandbox boundary:** the walk is bounded at `repoRoot`. If the
+ * closest `.agda-lib` lives *above* `repoRoot`, we refuse to return
+ * it — the MCP server treats `repoRoot` as the blast-radius ceiling
+ * for every file operation, so it would be wrong for `bustAgdaiCache`
+ * to silently reach across that boundary and delete `.agdai` files
+ * belonging to a parent project. Users who want Agda's true project
+ * root outside the sandbox should launch the server with a wider
+ * `PROJECT_ROOT`.
  */
 export function findAgdaProjectRoot(
   sourceFile: string,
   repoRoot: string,
 ): string | null {
-  const sourceAbs = isAbsolute(sourceFile) ? sourceFile : resolve(repoRoot, sourceFile);
+  // Canonicalize *both* sides before the containment check. The
+  // caller may pass a realpathed source (e.g. `cache-tools.ts` routes
+  // through `resolveExistingPathWithinRoot`) against a symlinked
+  // repoRoot, which on macOS means `source` is `/private/var/...`
+  // while `repoRoot` is `/var/...`. Without realpathing repoRoot
+  // too, every walk step would look like it escaped the sandbox and
+  // the function would refuse to return anything.
+  const sourceAbs = canonicalizeOrFallback(
+    isAbsolute(sourceFile) ? sourceFile : resolve(repoRoot, sourceFile),
+  );
+  const repoAbs = canonicalizeOrFallback(resolve(repoRoot));
   let current = dirname(sourceAbs);
   while (true) {
+    if (!isWithinOrEqual(current, repoAbs)) {
+      // Walked above the sandbox root. Whatever .agda-lib lives up
+      // there is not our business even if Agda itself would pick it
+      // up — the MCP sandbox takes precedence.
+      return null;
+    }
     if (directoryHasAgdaLib(current)) {
       return current;
     }
@@ -99,6 +118,26 @@ export function findAgdaProjectRoot(
     }
     current = parent;
   }
+}
+
+/**
+ * `realpathSync` but fail-open: if the path can't be resolved (most
+ * commonly because it doesn't exist yet), fall back to the input so
+ * callers still get a reasonable answer. We never let a canonicaliser
+ * failure turn a legitimate call into a thrown exception.
+ */
+function canonicalizeOrFallback(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+/** True iff `child` is `parent` itself or lives beneath it. */
+function isWithinOrEqual(child: string, parent: string): boolean {
+  const rel = relative(parent, child);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 function directoryHasAgdaLib(dir: string): boolean {
@@ -134,7 +173,15 @@ export function findAgdaiArtifacts(
   sourceFile: string,
   repoRoot: string,
 ): AgdaiArtifact[] {
-  const sourceAbs = isAbsolute(sourceFile) ? sourceFile : resolve(repoRoot, sourceFile);
+  // Canonicalize the source before any path math so that the
+  // relative() against a (separately canonicalized) project root
+  // doesn't blow up with spurious `..` segments on macOS, where
+  // `/var` is a symlink to `/private/var`. `findAgdaProjectRoot`
+  // canonicalizes internally too — the redundant call here is
+  // cheap and keeps the two path computations consistent.
+  const sourceAbs = canonicalizeOrFallback(
+    isAbsolute(sourceFile) ? sourceFile : resolve(repoRoot, sourceFile),
+  );
   const sourceMtimeMs = readMtimeOrNull(sourceAbs);
   const artifacts: AgdaiArtifact[] = [];
 
@@ -182,30 +229,56 @@ export function findAgdaiArtifacts(
   return artifacts;
 }
 
+/** Outcome of a single cache-bust attempt. */
+export interface CacheBustFailure {
+  path: string;
+  reason: string;
+}
+
+/** Outcome of `bustAgdaiCache`. `removed` and `failed` are disjoint. */
+export interface CacheBustResult {
+  removed: string[];
+  failed: CacheBustFailure[];
+}
+
 /**
  * Delete every `.agdai` artifact for `sourceFile` (separated and
- * local). Returns the list of paths that were actually removed
- * (empty when the cache was already cold). Failures to delete a
- * single artifact are swallowed so a partial bust doesn't fail the
- * surrounding `agda_load` — the subsequent recompile will produce a
- * fresh artifact regardless.
+ * local). Returns a structured result listing both successful
+ * deletions and failures — failures are surfaced to the caller (see
+ * `register-agda-load.ts`) via the tool response diagnostic so an
+ * agent can tell the difference between "nothing to bust" and
+ * "partial bust hit a permission error".
+ *
+ * Failures *do not* throw: the surrounding `agda_load` still has
+ * value even when one artifact couldn't be removed (the subsequent
+ * recompile will produce a fresh one where it can), and an
+ * exception here would mask the load result the caller actually
+ * asked for.
  */
 export function bustAgdaiCache(
   sourceFile: string,
   repoRoot: string,
-): string[] {
+): CacheBustResult {
   const removed: string[] = [];
+  const failed: CacheBustFailure[] = [];
   for (const artifact of findAgdaiArtifacts(sourceFile, repoRoot)) {
     try {
       unlinkSync(artifact.path);
       removed.push(artifact.path);
-    } catch {
-      // Best-effort: a missing or permission-denied file is
-      // acceptable because the recompile will produce a fresh one
-      // anyway.
+    } catch (err) {
+      // A missing file is a no-op (another process beat us here),
+      // not a failure worth reporting. Everything else — permission
+      // denied, read-only filesystem, EBUSY on Windows — goes into
+      // `failed` so the caller can render it.
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      if (code === "ENOENT") continue;
+      failed.push({
+        path: artifact.path,
+        reason: err instanceof Error ? err.message : String(err),
+      });
     }
   }
-  return removed;
+  return { removed, failed };
 }
 
 /**

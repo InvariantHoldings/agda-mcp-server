@@ -1,5 +1,6 @@
+import type { TestContext } from "vitest";
 import { test, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, utimesSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -129,6 +130,41 @@ test("agda_cache_info reports a local-interface artifact when there is no .agda-
   expect(data.artifactCount).toBe(1);
   expect(data.artifacts[0].kind).toBe("local");
   expect(result.content[0].text).toContain("local (next to source)");
+});
+
+test("agda_cache_info keeps display paths stable when repoRoot is a symlink", async (ctx: TestContext) => {
+  // Regression for PR #44 review comment: when `repoRoot` is a
+  // symlink but `filePath` comes back realpath'd from
+  // `resolveExistingPathWithinRoot`, naive `relative(repoRoot, filePath)`
+  // yields `../private/var/...` garbage. The fix is to compute the
+  // display relative against a canonicalized root. This test pins
+  // that convention end-to-end by calling the tool through a
+  // symlinked repo root and asserting the rendered relative path.
+  const realRoot = resolve(sandbox, "real-root");
+  const linkedRoot = resolve(sandbox, "linked-root");
+  mkdirSync(realRoot, { recursive: true });
+  writeFileSync(resolve(realRoot, "proj.agda-lib"), "name: proj\ninclude: .\n");
+  writeFileSync(resolve(realRoot, "Mod.agda"), "module Mod where\n");
+
+  try {
+    symlinkSync(realRoot, linkedRoot, "dir");
+  } catch (err) {
+    if (err && typeof err === "object" && "code" in err && ((err as NodeJS.ErrnoException).code === "EPERM" || (err as NodeJS.ErrnoException).code === "EACCES")) {
+      ctx.skip();
+      return;
+    }
+    throw err;
+  }
+
+  const server = createCapturingServer();
+  registerCacheTools(server as unknown as McpServer, stubSession, linkedRoot);
+
+  const result = await server.get("agda_cache_info")!.callback({ file: "Mod.agda" });
+
+  expect(result.isError).toBe(false);
+  expect(result.structuredContent.data.file).toBe("Mod.agda");
+  expect(result.content[0].text).toContain("## Cache info: Mod.agda");
+  expect(result.content[0].text).not.toContain("../");
 });
 
 test("agda_cache_info refuses paths that escape the repo root", async () => {

@@ -25,6 +25,10 @@ export const loadDataSchema = z.object({
   lastCheckedLine: z.number().int().positive().nullable().optional(),
   forceRecompile: z.boolean().optional().describe("True iff the caller asked us to bust the .agdai cache before loading."),
   bustedAgdaiPaths: z.array(z.string()).optional().describe("Absolute paths of `.agdai` artifacts deleted before this load. Empty when forceRecompile was false or the cache was already cold."),
+  bustedAgdaiFailures: z.array(z.object({
+    path: z.string(),
+    reason: z.string(),
+  })).optional().describe("Artifacts the server tried to delete but couldn't (e.g. permission denied, read-only filesystem). Each entry's `path` may still be live on the next load if Agda falls back to the stale cache."),
 });
 
 export const sessionStatusDataSchema = z.object({

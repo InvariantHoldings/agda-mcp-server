@@ -69,8 +69,9 @@ it("forceRecompile busts the .agdai cache and Agda rebuilds it on reload", async
     expect(existsSync(separated!.path)).toBe(true);
 
     // ── 2. busting deletes it ─────────────────────────────────────
-    const busted = bustAgdaiCache(resolve(root, "Probe.agda"), root);
-    expect(busted).toContain(separated!.path);
+    const bust = bustAgdaiCache(resolve(root, "Probe.agda"), root);
+    expect(bust.removed).toContain(separated!.path);
+    expect(bust.failed).toEqual([]);
     expect(existsSync(separated!.path)).toBe(false);
 
     // ── 3. reload recompiles and the cache reappears ──────────────

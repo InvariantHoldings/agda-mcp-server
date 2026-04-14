@@ -319,8 +319,10 @@ export function computeImpact(
 
 /**
  * Walk every node reachable from `start` along `edges`, excluding
- * `start` itself. BFS so the cost is linear in the number of nodes
- * and edges visited regardless of how deep the chain goes.
+ * `start` itself. BFS with an index cursor instead of `Array.shift`
+ * so the traversal stays truly O(n+e) for large graphs — `shift()`
+ * on a JS array reindexes every remaining element each call, which
+ * degrades the walk to O(n²) on a many-hundred-module project.
  */
 function collectReachable(
   edges: Map<string, string[]>,
@@ -334,8 +336,11 @@ function collectReachable(
       queue.push(next);
     }
   }
-  while (queue.length > 0) {
-    const current = queue.shift()!;
+  // Linear-time BFS: advance a read cursor through `queue` instead
+  // of shifting the head off. `seen` is the dedupe filter so each
+  // node is enqueued at most once, bounding total work at O(n+e).
+  for (let head = 0; head < queue.length; head++) {
+    const current = queue[head];
     for (const next of edges.get(current) ?? []) {
       if (next === start || seen.has(next)) continue;
       seen.add(next);

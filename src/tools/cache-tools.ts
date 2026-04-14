@@ -12,7 +12,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { relative } from "node:path";
 
 import type { AgdaSession } from "../agda-process.js";
@@ -95,7 +95,14 @@ export function register(
 
       const freshCount = artifacts.filter((a) => a.fresh === true).length;
       const staleCount = artifacts.filter((a) => a.fresh === false).length;
-      const relPath = relative(repoRoot, filePath);
+      // Canonicalize the repoRoot against the already-canonicalized
+      // filePath so the displayed relative path stays stable on
+      // symlinked repo roots. On macOS /var → /private/var this is
+      // what keeps the output showing `Mod.agda` instead of
+      // `../private/var/.../Mod.agda`. `agda_list_modules` has the
+      // same convention, guarded by its symlink regression test.
+      const canonicalRepoRoot = canonicalizeOrFallback(repoRoot);
+      const relPath = relative(canonicalRepoRoot, filePath);
 
       const data = {
         file: relPath,
@@ -159,6 +166,14 @@ export function register(
       );
     },
   });
+}
+
+function canonicalizeOrFallback(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
 }
 
 function emptyCacheInfo(file: string) {

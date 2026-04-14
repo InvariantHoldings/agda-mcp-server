@@ -1,5 +1,6 @@
+import type { TestContext } from "vitest";
 import { test, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -96,6 +97,45 @@ test("agda_impact returns not-in-graph for a non-Agda file under the root", asyn
 
   expect(result.isError).toBe(true);
   expect(result.structuredContent.classification).toBe("not-in-graph");
+});
+
+test("agda_impact keeps display paths stable when repoRoot is a symlink", async (ctx: TestContext) => {
+  // Regression for PR #44 review comment: the not-in-graph error
+  // fallback and the "graph size" rendering both used to compute
+  // relative paths against the non-canonicalized `repoRoot`. When
+  // `repoRoot` is a symlink and `filePath` is realpath'd, that
+  // produced `../private/var/...` garbage on macOS. The happy path
+  // is also validated here: the structured `data.file` and the
+  // rendered heading must both be the short relative name.
+  const realRoot = resolve(sandbox, "real-root");
+  const linkedRoot = resolve(sandbox, "linked-root");
+  mkdirSync(realRoot, { recursive: true });
+  writeFileSync(resolve(realRoot, "Leaf.agda"), "module Leaf where\n");
+  writeFileSync(resolve(realRoot, "Mid.agda"), "module Mid where\nopen import Leaf\n");
+
+  try {
+    symlinkSync(realRoot, linkedRoot, "dir");
+  } catch (err) {
+    if (err && typeof err === "object" && "code" in err && ((err as NodeJS.ErrnoException).code === "EPERM" || (err as NodeJS.ErrnoException).code === "EACCES")) {
+      ctx.skip();
+      return;
+    }
+    throw err;
+  }
+
+  const server = createCapturingServer();
+  registerImpactTool(server as unknown as McpServer, stubSession, linkedRoot);
+
+  const result = await server.get("agda_impact")!.callback({ file: "Leaf.agda" });
+
+  expect(result.isError).toBe(false);
+  expect(result.structuredContent.data.file).toBe("Leaf.agda");
+  expect(result.structuredContent.data.directDependents).toEqual(["Mid.agda"]);
+  const text: string = result.content[0].text;
+  expect(text).toContain("## Impact: Leaf.agda");
+  expect(text).not.toContain("../");
+  // §3: graph-size line must print a real root, not a stale `.`.
+  expect(text).toMatch(/\*\*Graph size:\*\* 2 module\(s\) scanned under `[^`]+real-root`/);
 });
 
 test("agda_impact rejects paths that escape the repo root", async () => {

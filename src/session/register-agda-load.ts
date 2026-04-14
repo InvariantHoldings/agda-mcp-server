@@ -103,10 +103,14 @@ export function registerAgdaLoad(
         // Bust the cache before Cmd_load so Agda can't return a stale
         // cached interface and pretend it's fresh. Best-effort: a
         // failure to delete one artifact (e.g. permission denied) is
-        // logged via the diagnostic but doesn't fail the load.
-        const bustedAgdaiPaths = forceRecompile
+        // surfaced via the `force-recompile` info diagnostic but
+        // never aborts the load itself — the recompile is still
+        // worth trying on whatever artifacts we *could* clear.
+        const bustResult = forceRecompile
           ? bustAgdaiCache(filePath, repoRoot)
-          : [];
+          : { removed: [], failed: [] as Array<{ path: string; reason: string }> };
+        const bustedAgdaiPaths = bustResult.removed;
+        const bustFailures = bustResult.failed;
 
         const result = await session.load(filePath, { profileOptions });
         const relPath = relative(repoRoot, requestedFilePath);
@@ -129,6 +133,14 @@ export function registerAgdaLoad(
             ? "forceRecompile requested; no `.agdai` artifacts were present to bust."
             : `forceRecompile requested; busted ${bustedAgdaiPaths.length} \`.agdai\` artifact(s) before reload: ${bustedAgdaiPaths.join(", ")}`;
           diagnostics.push(infoDiagnostic(bustedSummary, "force-recompile"));
+          for (const failure of bustFailures) {
+            diagnostics.push(
+              warningDiagnostic(
+                `forceRecompile: could not delete ${failure.path} — ${failure.reason}. The file may still be read by Agda as a stale cache on the next load.`,
+                "force-recompile-failed",
+              ),
+            );
+          }
         }
 
         const previousWasSuccess = previousClassification === "ok-complete"
@@ -216,6 +228,7 @@ export function registerAgdaLoad(
               lastCheckedLine,
               forceRecompile: forceRecompile ?? false,
               bustedAgdaiPaths,
+              bustedAgdaiFailures: bustFailures,
             },
             diagnostics,
             stale: session.isFileStale() || undefined,

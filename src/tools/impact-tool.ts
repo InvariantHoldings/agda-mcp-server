@@ -105,15 +105,24 @@ export function register(
         // it lives outside an Agda source extension or was filtered
         // out (e.g. inside _build). Report it as not-in-graph rather
         // than masking the situation.
+        //
+        // IMPORTANT: display paths are computed against the
+        // canonicalized root (not `repoRoot`) because `filePath` is
+        // realpath'd via `resolveExistingPathWithinRoot`. Mixing a
+        // symlinked `repoRoot` with a realpath'd `filePath` in
+        // `relative()` yields garbage `../private/...` output on
+        // macOS — `agda_list_modules` has the same convention and a
+        // symlink regression test guarding it.
+        const notInGraphRel = relative(canonicalRepoRoot, filePath);
         return makeToolResult(
           errorEnvelope({
             tool: "agda_impact",
-            summary: `File is not part of the Agda import graph: ${relative(repoRoot, filePath)}`,
+            summary: `File is not part of the Agda import graph: ${notInGraphRel}`,
             classification: "not-in-graph",
-            data: emptyImpactData(relative(repoRoot, filePath)),
+            data: emptyImpactData(notInGraphRel),
             diagnostics: [{
               severity: "error",
-              message: `File exists but no module declaration was parsed for ${relative(repoRoot, filePath)}.`,
+              message: `File exists but no module declaration was parsed for ${notInGraphRel}.`,
               code: "not-in-graph",
             }],
           }),
@@ -140,7 +149,7 @@ export function register(
       lines.push(`## Impact: ${impact.file}`);
       lines.push("");
       lines.push(`**Module:** ${impact.moduleName ?? "_(no `module ... where` declaration parsed)_"}`);
-      lines.push(`**Graph size:** ${graph.modules.size} module(s) scanned under \`${relative(repoRoot, repoRoot) || "."}\`.`);
+      lines.push(`**Graph size:** ${graph.modules.size} module(s) scanned under \`${canonicalRepoRoot}\`.`);
       lines.push("");
       lines.push(`**Direct dependents:** ${impact.directDependents.length}`);
       lines.push(`**Transitive dependents:** ${impact.transitiveDependents.length}`);
