@@ -30,12 +30,27 @@ test("hasConstraintsRewriteMode is true on 3.0", () => {
   expect(hasConstraintsRewriteMode(parseAgdaVersion("3.0"))).toBe(true);
 });
 
-// 2.9.0-rc1 is a prerelease that sorts strictly below 2.9.0 — it's
-// the boundary case where empirically the protocol shape changed.
-// We treat it as 'not yet on the new shape' because the parser change
-// landed for the GA release, not the rc.
-test("hasConstraintsRewriteMode is false on 2.9.0-rc1 (prerelease sorts below 2.9.0)", () => {
-  expect(hasConstraintsRewriteMode(parseAgdaVersion("2.9.0-rc1"))).toBe(false);
+// Prerelease tags don't move the protocol shape: a 2.9.0-rc build
+// is produced from the same codebase as the 2.9.0 release and
+// therefore has the same IOTCM parser. The gate is a parser-identity
+// question ("is this parser the new one?"), not a release-ordering
+// question ("has the stable version shipped?"), so the prerelease
+// must report `true` — sending the bare form to an rc would be
+// rejected with the same `cannot read:` error as on the stable
+// 2.9.0 release.
+test("hasConstraintsRewriteMode is true on 2.9.0-rc1 (prerelease shares the 2.9 parser)", () => {
+  expect(hasConstraintsRewriteMode(parseAgdaVersion("2.9.0-rc1"))).toBe(true);
+});
+
+test("hasConstraintsRewriteMode is true on 2.9.0-alpha", () => {
+  expect(hasConstraintsRewriteMode(parseAgdaVersion("2.9.0-alpha"))).toBe(true);
+});
+
+// Symmetric case: a prerelease of 2.8 still has the OLD parser.
+// The gate must NOT be fooled by the prerelease flag into treating
+// 2.8.99-something as the new shape.
+test("hasConstraintsRewriteMode is false on 2.8.99-nightly (prerelease of the old line)", () => {
+  expect(hasConstraintsRewriteMode(parseAgdaVersion("2.8.99-nightly"))).toBe(false);
 });
 
 // ── command builder ────────────────────────────────────────────────

@@ -7,6 +7,7 @@
 // rather than failing opaquely when an unsupported feature is used.
 
 import {
+  atLeastMajorMinor,
   type AgdaVersion,
   parseAgdaVersion,
   versionAtLeast,
@@ -101,21 +102,32 @@ export function supportedFeatureFlags(agdaVersion: AgdaVersion): string[] {
 }
 
 // ── Protocol changes ────────────────────────────────────────────────
+//
+// These helpers answer "does this Agda's IOTCM parser accept the
+// new shape?" — a parser-identity question. They intentionally use
+// `atLeastMajorMinor` (not `versionAtLeast`) so a prerelease build
+// like 2.9.0-rc1, which is produced from the same codebase as
+// 2.9.0, reports the same shape as the stable release. Using
+// `versionAtLeast` here would return false for rc1 (because
+// prerelease sorts below stable), and the server would send the
+// pre-2.9 bare form to an rc and eat a `cannot read:` error.
 
 /** Agda 2.9.0 changed GiveResult from a raw string to {"paren": bool}. */
 export function hasStructuredGiveResult(agdaVersion: AgdaVersion): boolean {
-  return versionAtLeast(agdaVersion, parseAgdaVersion("2.9.0"));
+  return atLeastMajorMinor(agdaVersion, 2, 9);
 }
 
 /**
  * Agda 2.9.0 added a Rewrite mode argument to `Cmd_constraints`. On
- * 2.8.0 and earlier the bare form `Cmd_constraints` is the only one
- * Agda accepts; on 2.9.0+ the bare form is rejected with `cannot read:`
- * and a mode argument (e.g. `Normalised`) is required. Verified empirically
- * against agda 2.8.0 (Homebrew) and agda 2.9.0 (.cache/agda/2.9.0).
+ * 2.8.x and earlier the bare form `Cmd_constraints` is the only one
+ * Agda accepts; on 2.9.x the bare form is rejected with `cannot read:`
+ * and a mode argument (e.g. `Normalised`) is required. Verified
+ * empirically against agda 2.8.0 (Homebrew) and agda 2.9.0
+ * (`.cache/agda/2.9.0/bin/agda`). Prereleases of 2.9.0 report `true`
+ * because the parser change lives in the 2.9 codebase.
  */
 export function hasConstraintsRewriteMode(agdaVersion: AgdaVersion): boolean {
-  return versionAtLeast(agdaVersion, parseAgdaVersion("2.9.0"));
+  return atLeastMajorMinor(agdaVersion, 2, 9);
 }
 
 // ── Tool description helpers ────────────────────────────────────────

@@ -12,7 +12,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { relative } from "node:path";
 
 import type { AgdaSession } from "../agda-process.js";
@@ -85,6 +85,47 @@ export function register(
             classification: "not-found",
             data: emptyCacheInfo(file),
             diagnostics: [{ severity: "error", message: `File not found: ${requestedFilePath}`, code: "not-found" }],
+          }),
+        );
+      }
+
+      // `agda_cache_info` is explicitly about ONE source file's
+      // interface artifacts. A directory input would fall through
+      // `findAgdaiArtifacts`, hit the suffix-swap (which fails for
+      // a non-source path), and return zero artifacts — which
+      // looks indistinguishable from "no cache yet". Reject
+      // directories up front so the caller gets an actionable
+      // error instead of silent zero results.
+      let inputStat: import("node:fs").Stats;
+      try {
+        inputStat = statSync(requestedFilePath);
+      } catch (err) {
+        return makeToolResult(
+          errorEnvelope({
+            tool: "agda_cache_info",
+            summary: `Could not stat file: ${file}`,
+            classification: "not-found",
+            data: emptyCacheInfo(file),
+            diagnostics: [{
+              severity: "error",
+              message: `Could not stat ${requestedFilePath}: ${err instanceof Error ? err.message : String(err)}`,
+              code: "not-found",
+            }],
+          }),
+        );
+      }
+      if (!inputStat.isFile()) {
+        return makeToolResult(
+          errorEnvelope({
+            tool: "agda_cache_info",
+            summary: `Not a regular file: ${file}`,
+            classification: "not-a-file",
+            data: emptyCacheInfo(file),
+            diagnostics: [{
+              severity: "error",
+              message: `agda_cache_info requires a single Agda source file — ${requestedFilePath} is a directory or special file. Pass a .agda / .lagda* path.`,
+              code: "not-a-file",
+            }],
           }),
         );
       }

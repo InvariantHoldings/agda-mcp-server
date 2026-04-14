@@ -60,6 +60,39 @@ export function versionAtLeast(
 }
 
 /**
+ * Returns true if `version`'s numeric `major.minor` tuple is at
+ * least `(major, minor)`, ignoring the prerelease flag and every
+ * numeric component after minor.
+ *
+ * Use this instead of `versionAtLeast` for **protocol-shape gates**
+ * where the question is "does this Agda's IOTCM parser accept the
+ * new form?" — not "has the stable release of feature X landed?".
+ * A 2.9.0-rc1 build is produced from the same codebase as 2.9.0 and
+ * therefore has the same parser, so a protocol gate must return true
+ * for both. `versionAtLeast(rc1, 2.9.0)` returns false (prerelease
+ * sorts below stable), which is correct for release-ordering
+ * questions but wrong for parser-identity questions.
+ *
+ * Empirically validated against agda 2.8.0 and agda 2.9.0 for
+ * `Cmd_constraints`'s Rewrite mode argument; see
+ * `test/unit/agda/constraints-version-gating.test.ts` for the pinned
+ * boundary cases, and
+ * `test/integration/agda/agda-constraints-2-{8,9}-0.test.ts` for the
+ * end-to-end coverage.
+ */
+export function atLeastMajorMinor(
+  version: AgdaVersion,
+  major: number,
+  minor: number,
+): boolean {
+  const vMajor = version.parts[0] ?? 0;
+  if (vMajor > major) return true;
+  if (vMajor < major) return false;
+  const vMinor = version.parts[1] ?? 0;
+  return vMinor >= minor;
+}
+
+/**
  * Detect the installed Agda version by running `agda --version`.
  * Returns undefined if Agda is not available.
  */

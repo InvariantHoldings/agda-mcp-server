@@ -167,6 +167,28 @@ test("agda_cache_info keeps display paths stable when repoRoot is a symlink", as
   expect(result.content[0].text).not.toContain("../");
 });
 
+test("agda_cache_info rejects a directory input with a clear not-a-file error", async () => {
+  // Defensive: `agda_cache_info` is about one source file. A
+  // directory input would otherwise fall through `findAgdaiArtifacts`,
+  // fail the suffix swap, and silently return zero artifacts —
+  // indistinguishable from "cache is cold". Reject it up front.
+  const dir = resolve(sandbox, "proj");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(resolve(dir, "proj.agda-lib"), "name: proj\ninclude: .\n");
+  mkdirSync(resolve(dir, "Subdir"));
+
+  const server = createCapturingServer();
+  registerCacheTools(server as unknown as McpServer, stubSession, dir);
+
+  const result = await server.get("agda_cache_info")!.callback({ file: "Subdir" });
+
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent.classification).toBe("not-a-file");
+  // The actionable hint is in the diagnostic, not the summary.
+  const diags: Array<{ message: string; code: string }> = result.structuredContent.diagnostics;
+  expect(diags.some((d) => d.code === "not-a-file" && /directory or special file/.test(d.message))).toBe(true);
+});
+
 test("agda_cache_info refuses paths that escape the repo root", async () => {
   const dir = resolve(sandbox, "proj");
   mkdirSync(dir, { recursive: true });

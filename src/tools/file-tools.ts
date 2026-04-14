@@ -109,8 +109,22 @@ export function register(
         }
       }
       const modules: string[] = [];
+      const unreadableDirs: string[] = [];
       function walk(dir: string, requestedDir: string, displayPrefix: string): void {
-        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        let entries: import("node:fs").Dirent[];
+        try {
+          entries = readdirSync(dir, { withFileTypes: true });
+        } catch (err) {
+          // One unreadable subdir (permission denied, broken
+          // symlink, ENOTDIR race from a concurrent rename) must
+          // not crash the entire listing. Collect the path so the
+          // response can tell the caller which subtrees were
+          // skipped, then keep walking the siblings.
+          unreadableDirs.push(displayPrefix);
+          logger.trace("agda_list_modules: readdir failed, skipping subtree", { dir, err });
+          return;
+        }
+        for (const entry of entries) {
           const nextRequestedPath = resolve(requestedDir, entry.name);
           const nextDisplayPath = join(displayPrefix, entry.name);
           if (entry.isDirectory()) walk(resolve(dir, entry.name), nextRequestedPath, nextDisplayPath);
@@ -162,6 +176,10 @@ export function register(
       if (hasMore) {
         lines.push("");
         lines.push(`**More results available.** Re-call with \`offset: ${nextOffset}\` to fetch the next page.`);
+      }
+      if (unreadableDirs.length > 0) {
+        lines.push("");
+        lines.push(`**Skipped ${unreadableDirs.length} unreadable subtree(s):** ${unreadableDirs.join(", ")}. Check file permissions or broken symlinks; modules beneath these directories are not included in the total count.`);
       }
       return lines.join("\n");
     },
@@ -228,8 +246,20 @@ export function register(
         }
       }
       const matches: Array<{ file: string; line: number; text: string }> = [];
+      const unreadableDirs: string[] = [];
+      const unreadableFiles: string[] = [];
       function searchDir(dir: string, requestedDir: string, displayPrefix: string): void {
-        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        let entries: import("node:fs").Dirent[];
+        try {
+          entries = readdirSync(dir, { withFileTypes: true });
+        } catch (err) {
+          // Same graceful-walk contract as `agda_list_modules`: one
+          // unreadable subtree must not crash the search.
+          unreadableDirs.push(displayPrefix);
+          logger.trace("agda_search_definitions: readdir failed, skipping subtree", { dir, err });
+          return;
+        }
+        for (const entry of entries) {
           const nextRequestedPath = resolve(requestedDir, entry.name);
           const nextDisplayPath = join(displayPrefix, entry.name);
           if (entry.isDirectory()) {
@@ -240,10 +270,21 @@ export function register(
             if (!filePath) {
               continue;
             }
-            const lines = readFileSync(filePath, "utf-8").split("\n");
-            for (let i = 0; i < lines.length; i++) {
-              if (lines[i].includes(query)) {
-                matches.push({ file: nextDisplayPath, line: i + 1, text: lines[i].trim() });
+            let fileLines: string[];
+            try {
+              fileLines = readFileSync(filePath, "utf-8").split("\n");
+            } catch (err) {
+              // A file that readdir saw but readFile can't open
+              // (permission change mid-walk, truncated mid-read) is
+              // surfaced as a single "unreadable file" entry rather
+              // than dropped silently or crashing the tool.
+              unreadableFiles.push(nextDisplayPath);
+              logger.trace("agda_search_definitions: readFile failed", { file: filePath, err });
+              continue;
+            }
+            for (let i = 0; i < fileLines.length; i++) {
+              if (fileLines[i].includes(query)) {
+                matches.push({ file: nextDisplayPath, line: i + 1, text: fileLines[i].trim() });
               }
             }
           }
@@ -254,10 +295,21 @@ export function register(
         requestedSearchRoot,
         relativeToRequestedRoot(repoRoot, requestedSearchRoot),
       );
-      if (matches.length === 0) return `No matches for "${query}" in ${tier ?? "agda/"}`;
-      const capped = matches.slice(0, 50);
-      let output = `## Search: "${query}" (${matches.length} matches${matches.length > 50 ? ", showing first 50" : ""})\n\n`;
-      for (const m of capped) output += `- **${m.file}:${m.line}** \`${m.text}\`\n`;
+      let output: string;
+      if (matches.length === 0) {
+        output = `No matches for "${query}" in ${tier ?? "agda/"}`;
+      } else {
+        const capped = matches.slice(0, 50);
+        output = `## Search: "${query}" (${matches.length} matches${matches.length > 50 ? ", showing first 50" : ""})\n\n`;
+        for (const m of capped) output += `- **${m.file}:${m.line}** \`${m.text}\`\n`;
+      }
+      if (unreadableDirs.length > 0 || unreadableFiles.length > 0) {
+        output += `\n_Skipped ${unreadableDirs.length} unreadable subtree(s)`;
+        if (unreadableFiles.length > 0) {
+          output += ` and ${unreadableFiles.length} unreadable file(s)`;
+        }
+        output += `; check file permissions or broken symlinks._`;
+      }
       return output;
     },
   });

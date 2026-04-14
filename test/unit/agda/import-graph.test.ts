@@ -73,6 +73,96 @@ test("buildImportGraph ignores `import` strings inside line comments", () => {
   expect(graph.imports.get("WithLineComment.agda")).toEqual([]);
 });
 
+test("buildImportGraph handles nested block comments `{- {- nested -} -}`", () => {
+  // Agda's block comments nest. An inner `{-` must not fool the
+  // stripper into closing on the inner `-}` and then mis-parsing
+  // the rest of the text as outside-comment source.
+  writeAgda("A.agda", [
+    "module A where",
+    "{- outer",
+    "  {- inner with open import Bogus -}",
+    "still inside the outer comment -}",
+    "open import B",
+  ].join("\n"));
+  writeAgda("B.agda", "module B where\n");
+  writeAgda("Bogus.agda", "module Bogus where\n");
+  const graph = buildImportGraph(sandbox);
+  // The real import edge is still captured.
+  expect(graph.imports.get("A.agda")).toEqual(["B.agda"]);
+  // The fake import buried inside the nested comment is NOT.
+  expect(graph.imports.get("A.agda")).not.toContain("Bogus.agda");
+});
+
+test("buildImportGraph tolerates an unclosed block comment without crashing", () => {
+  // Garbage-in-garbage-out is fine, but the scanner must not throw:
+  // one malformed file in a many-hundred-module repo shouldn't take
+  // the whole graph build down.
+  writeAgda("Broken.agda", [
+    "module Broken where",
+    "{- this comment is never closed",
+    "open import Neighbour",
+  ].join("\n"));
+  writeAgda("Neighbour.agda", "module Neighbour where\n");
+  expect(() => buildImportGraph(sandbox)).not.toThrow();
+  const graph = buildImportGraph(sandbox);
+  // The module still registers (module name parses OK before the
+  // opener) and the bogus import inside the unclosed comment is
+  // dropped — which is the right call: we can't know where the
+  // comment was supposed to end.
+  expect(graph.modules.has("Broken.agda")).toBe(true);
+  expect(graph.imports.get("Broken.agda")).toEqual([]);
+});
+
+test("buildImportGraph treats `{-# ... #-}` pragmas as block comments and doesn't mask real imports", () => {
+  // `{-# OPTIONS ... #-}` is a pragma form. It starts with `{-` and
+  // ends with `-}`, so the stripper consumes it as a block comment
+  // — that's fine, because pragmas don't contain imports. The
+  // important thing is the real `open import` below it still shows
+  // up in the graph.
+  writeAgda("WithPragma.agda", [
+    "{-# OPTIONS --no-positivity-check #-}",
+    "module WithPragma where",
+    "open import Neighbour",
+  ].join("\n"));
+  writeAgda("Neighbour.agda", "module Neighbour where\n");
+  const graph = buildImportGraph(sandbox);
+  expect(graph.imports.get("WithPragma.agda")).toEqual(["Neighbour.agda"]);
+});
+
+test("buildImportGraph walker never throws on unreadable sibling subdirs", async (ctx) => {
+  const { chmodSync } = await import("node:fs");
+  writeAgda("ok/Good.agda", "module Good where\n");
+  const blockedDir = resolve(sandbox, "blocked");
+  mkdirSync(blockedDir, { recursive: true });
+  writeAgda("blocked/Hidden.agda", "module Hidden where\n");
+
+  try {
+    chmodSync(blockedDir, 0o000);
+  } catch {
+    ctx.skip();
+    return;
+  }
+  // Confirm the OS enforces the permission; some CI sandboxes
+  // silently ignore chmod on directories.
+  try {
+    const { readdirSync: rd } = await import("node:fs");
+    rd(blockedDir);
+    chmodSync(blockedDir, 0o700);
+    ctx.skip();
+    return;
+  } catch { /* expected */ }
+
+  try {
+    expect(() => buildImportGraph(sandbox)).not.toThrow();
+    // The readable sibling is still picked up.
+    const graph = buildImportGraph(sandbox);
+    expect(graph.modules.has("ok/Good.agda")).toBe(true);
+    expect(graph.modules.has("blocked/Hidden.agda")).toBe(false);
+  } finally {
+    chmodSync(blockedDir, 0o700);
+  }
+});
+
 // ── direct + transitive import edges ─────────────────────────────
 
 test("buildImportGraph captures a direct open-import edge", () => {

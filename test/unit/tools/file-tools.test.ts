@@ -183,6 +183,67 @@ test("agda_list_modules pattern filter is case-insensitive and reports both tota
   }
 });
 
+test("agda_list_modules keeps walking siblings when one subtree is unreadable", async (ctx) => {
+  // Hardening for "one subtree crashes the whole tool" — a bad
+  // permission or broken symlink on ONE subdir must not prevent the
+  // tool from returning results for all the readable siblings.
+  // Uses chmod to force readdir(sub) to fail; if chmod is a no-op
+  // on the platform (Windows, some CI sandboxes), the test skips.
+  const { chmodSync } = await import("node:fs");
+  clearToolManifest();
+  const sandbox = mkdtempSync(join(tmpdir(), "agda-mcp-list-modules-walkerr-"));
+  try {
+    const kernel = join(sandbox, "agda", "Kernel");
+    const readable = join(kernel, "Readable");
+    const blocked = join(kernel, "Blocked");
+    mkdirSync(readable, { recursive: true });
+    mkdirSync(blocked, { recursive: true });
+    writeFileSync(join(readable, "Good.agda"), "module Kernel.Readable.Good where\n");
+    writeFileSync(join(blocked, "Hidden.agda"), "module Kernel.Blocked.Hidden where\n");
+
+    try {
+      chmodSync(blocked, 0o000);
+    } catch {
+      ctx.skip();
+      return;
+    }
+    // Sanity-check that the OS actually enforces the permission;
+    // some Docker/CI filesystems silently ignore chmod, in which
+    // case the test is a no-op rather than a lie.
+    try {
+      const { readdirSync: rd } = await import("node:fs");
+      rd(blocked);
+      chmodSync(blocked, 0o700);
+      ctx.skip();
+      return;
+    } catch {
+      // Expected — readdir of the blocked dir threw.
+    }
+
+    const server = createCapturingServer();
+    registerFileTools(server as unknown as McpServer, { getAgdaVersion: () => null } as any, sandbox);
+
+    const result = await server.get("agda_list_modules")!.callback({ tier: "Kernel" });
+
+    expect(result.isError).toBe(false);
+    const text: string = result.content[0].text;
+    // The readable sibling still got listed.
+    expect(text).toContain("Good.agda");
+    expect(text).not.toContain("Hidden.agda");
+    // The unreadable subtree is reported as skipped.
+    expect(text).toMatch(/Skipped 1 unreadable subtree/);
+
+    chmodSync(blocked, 0o700);
+  } finally {
+    // Restore any lingering restrictive permission so the rmSync
+    // below can remove everything cleanly.
+    try {
+      chmodSync(join(sandbox, "agda", "Kernel", "Blocked"), 0o700);
+    } catch { /* already restored */ }
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
 test("agda_list_modules with offset past the end returns an empty page but keeps the total", async () => {
   clearToolManifest();
   const { sandbox } = buildLargeKernelFixture();
