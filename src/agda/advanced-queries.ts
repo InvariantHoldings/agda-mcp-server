@@ -31,7 +31,27 @@ import {
   rewriteTopLevelCommand,
   topLevelCommand,
 } from "../protocol/command-builder.js";
+import { hasConstraintsRewriteMode } from "./version-support.js";
 import { throwOnFatalProtocolStderr } from "./protocol-errors.js";
+
+/**
+ * Build the IOTCM payload for `Cmd_constraints`, version-gated.
+ *
+ * Agda 2.9.0 added a `Rewrite` mode argument to `Cmd_constraints`; the
+ * bare form that worked through 2.8.0 is rejected with `cannot read:`
+ * on 2.9.0+. We default to `Normalised` (matching `Cmd_metas Normalised`)
+ * when the version is unknown so that the more recent protocol shape is
+ * the safe fallback going forward.
+ */
+export function buildConstraintsCommand(
+  ctx: Pick<AgdaCommandContext, "getAgdaVersion">,
+): string {
+  const version = ctx.getAgdaVersion();
+  if (version && !hasConstraintsRewriteMode(version)) {
+    return topLevelCommand("Cmd_constraints");
+  }
+  return rewriteTopLevelCommand("Cmd_constraints", "Normalised");
+}
 
 /** Show current constraints. */
 export async function constraints(
@@ -39,7 +59,7 @@ export async function constraints(
 ): Promise<{ text: string }> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(topLevelCommand("Cmd_constraints")),
+    ctx.iotcm(buildConstraintsCommand(ctx)),
   );
   throwOnFatalProtocolStderr(responses);
   return { text: decodeDisplayTextResponses(responses).text };

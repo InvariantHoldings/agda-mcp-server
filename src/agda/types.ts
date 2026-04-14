@@ -4,19 +4,22 @@
 
 import type { ChildProcess } from "node:child_process";
 import type { EventEmitter } from "node:events";
+import type { AgdaVersion } from "./agda-version.js";
 
 // ── Session context ───────────────────────────────────────────────────
 
 /**
  * Minimal command-dispatch context for delegate functions.
- * Delegates only need to send commands and read goal state —
- * they never touch the process, buffer, or event emitter.
+ * Delegates only need to send commands, read goal state, and read
+ * the detected Agda version (for protocol-shape gating) — they
+ * never touch the process, buffer, or event emitter.
  */
 export interface AgdaCommandContext {
   sendCommand(cmd: string): Promise<AgdaResponse[]>;
   iotcm(agdaCmd: string): string;
   requireFile(): string;
   syncGoalIdsFromResponses(responses: AgdaResponse[]): void;
+  getAgdaVersion(): AgdaVersion | null;
   readonly goalIds: number[];
 }
 

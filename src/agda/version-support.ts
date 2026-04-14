@@ -107,6 +107,17 @@ export function hasStructuredGiveResult(agdaVersion: AgdaVersion): boolean {
   return versionAtLeast(agdaVersion, parseAgdaVersion("2.9.0"));
 }
 
+/**
+ * Agda 2.9.0 added a Rewrite mode argument to `Cmd_constraints`. On
+ * 2.8.0 and earlier the bare form `Cmd_constraints` is the only one
+ * Agda accepts; on 2.9.0+ the bare form is rejected with `cannot read:`
+ * and a mode argument (e.g. `Normalised`) is required. Verified empirically
+ * against agda 2.8.0 (Homebrew) and agda 2.9.0 (.cache/agda/2.9.0).
+ */
+export function hasConstraintsRewriteMode(agdaVersion: AgdaVersion): boolean {
+  return versionAtLeast(agdaVersion, parseAgdaVersion("2.9.0"));
+}
+
 // ── Tool description helpers ────────────────────────────────────────
 
 /**
