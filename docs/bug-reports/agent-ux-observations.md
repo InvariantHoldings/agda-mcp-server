@@ -15,109 +15,6 @@ concrete, fixable list so the server earns an agent's trust.
 
 ---
 
-## 1. Consistency and correctness bugs (highest priority)
-
-These aren't feature requests — they're observed incidents where the server
-returned information that contradicted ground truth. Fix these first; nothing
-else matters if an agent can't trust the tool's output.
-
-### 1.1 `agda_load` and `agda_typecheck` disagreed on the same file — **✓ shipped (#39)**
-
-Observed on a module with stacked errors: `agda_load` reported `type-error`
-with a first-error line well past the real failure point; `agda_typecheck`
-reported `ok-complete` with no errors; the command-line compiler reported a
-different, still-earlier first-error line. All three disagreed on the same
-file, same content, same toolchain.
-
-**Ask:** `agda_load` and `agda_typecheck` MUST share one authoritative view of
-session state (single `AgdaSession` instance, single `currentFile`/mtime,
-single interaction with `_build/`). They should return bit-identical
-`success`, `classification`, and `errors` for the same file.
-
-**Status:** fixed in this release (issue #39). `agda_typecheck` now routes
-through the shared singleton `AgdaSession`, the footgun `typeCheckBatch`
-helper has been moved out of the production API surface, and `agda_load`
-response envelopes include `previousClassification` / `previousLoadedAtMs` on
-reloads plus a `session-regression` info diagnostic when a reload drops from a
-previously successful classification into a failed load.
-
-### 1.2 `agda_metas` returned errors from a *different* loaded file — **✓ shipped**
-
-After `agda_load File.agda` reported `classification: ok-complete,
-goalCount: 0`, a follow-up `agda_metas` returned a well-formatted error
-sourced from a transitive dependency of `File.agda`. The load call claimed
-clean; the metas call revealed otherwise.
-
-**Ask:** either the load call surfaces transitive-dependency errors by
-default (an agent cannot proceed if a dep is broken, so pretending otherwise
-wastes tokens and time), or `agda_metas` explicitly tags each diagnostic with
-its owning file and separates "metas in the loaded file" from "diagnostics
-accrued from dependencies". Today an agent has to assume any error anywhere
-invalidates the load.
-
-**Status:** shipped in this release. `agda_metas` is now a structured
-tool whose response includes a `loadedFile` field plus `errorsByFile`
-and `warningsByFile` arrays. Each entry in those arrays is
-`{ file, ownedByLoadedFile, messages }`, so a caller immediately sees
-which diagnostics belong to the currently-loaded file versus a
-transitive dependency. A `dependency-errors` warning-level diagnostic
-fires whenever any error is attributed to a file other than the loaded
-one, with the count in the message. The null-file bucket collects any
-diagnostics whose text didn't embed a parseable path, and is always
-tagged `ownedByLoadedFile: false` for safety.
-
-### 1.3 Query tools returned the previous typecheck error instead of an answer — **✓ shipped**
-
-A query tool was invoked on a name while a file with an unrelated error was
-loaded. The response body echoed the type error verbatim as the value of the
-query's `explanation` field, with no indication that the tool had been unable
-to compute a real answer — the error was stuffed into a success-shaped
-payload.
-
-**Ask:** when a query-style tool (`agda_why_in_scope`, `agda_infer`,
-`agda_compute`, `agda_search_about`, `agda_show_module`, ...) cannot compute
-its result because the session is in an error state, the response should be a
-structured `unavailable` classification with the blocking error, not the error
-embedded in a happy-path payload.
-
-**Status:** shipped in this release. A new `sessionErrorStateGate` helper
-short-circuits each of those five query tools when
-`session.getLastClassification() === "type-error"`. The gated response is
-an error envelope with `classification: "unavailable"` and a
-`session-unavailable` diagnostic naming the loaded file and the remediation
-(fix the load errors first, then re-run `agda_load`). The gate is
-conservative — `ok-with-holes`, `ok-complete`, and the no-load-yet state
-all let queries proceed exactly as before — and it tolerates session
-stubs that don't implement the getter (short-circuits to null).
-
-### 1.4 `ok-complete` classification despite holes in the source — **✓ shipped**
-
-`agda_load` returned `classification: ok-complete, hasHoles: false,
-goalCount: 0` on a file whose source contained multiple `{!!}` holes. Root
-cause: an earlier scope-check failure aborted the load before it reached the
-holes, so those holes were never registered as metas. Internally fine — but
-the report needs to reflect "I never scope-checked past line N" rather than
-"this file is complete".
-
-**Ask:** when a load terminates early due to an error, include a
-`lastCheckedLine` (or `scopeCheckReached`) field in the load response so
-agents know how much of the file was actually seen. A `hasHoles: false` on an
-aborted load is actively misleading.
-
-**Status:** shipped in this release. `parseLoadResponses` now scans
-errors and warnings for `file.agda:LINE[:COL]` locations and records
-the smallest line number as `lastCheckedLine` on the load response.
-`LoadResult` and `loadDataSchema` both expose the field, and `agda_load`
-emits a `scope-check-extent` info diagnostic whenever it's non-null.
-The diagnostic has two variants: a loud "treat hasHoles/goalCount as
-lower bounds" message when the load looks clean but carries a
-diagnostic location, and a softer "earliest diagnostic at line N"
-message when the load is genuinely failing. Extraction is defensive
-against non-Agda paths, zero/negative line numbers, and non-string
-entries; it handles absolute and relative paths, column-suffixed and
-column-range formats, and the literate `.lagda.md` variant.
-
----
 
 ## 2. Triage: help an agent pick what to load
 
@@ -292,26 +189,6 @@ has depth/mode flags; the MCP tool exposes none.
 parameters. Let an agent say "try auto with depth 5 and `+helper-module`"
 before giving up.
 
-### 4.3 Goal renumbering after edits is opaque — **✓ shipped (partial)**
-
-Every time an agent edits-then-reloads, goal IDs can renumber. `agda_reload`
-currently reports the post-reload state but doesn't *map* old IDs to new
-IDs. An agent tracking a goal across a refactor has to re-identify it by
-type.
-
-**Ask:** `agda_reload` returns `{solved: [oldIds], new: [newIds],
-renumbered: [{old, new}]}` with a best-effort stable identity based on the
-declaration site, not the metavariable counter.
-
-**Status:** the set-diff half of this ask shipped with the write-back
-work on PR #37. After any proof-action reload, tool output now
-includes a `Goal diff: solved ?X; new ?Y.` line computed by
-`diffGoalIds(goalIdsBefore, goalIdsAfter)` in
-`src/session/reload-and-diagnose.ts`. The `renumbered` mapping
-(declaration-site-stable identity across edits) is still an open
-follow-up — it needs source-position tracking across edits and is
-harder than the set diff.
-
 ---
 
 ## 5. Cross-file analytics an agent actually needs
@@ -370,71 +247,12 @@ cache or always bust it — and it should tell the agent which mode it's in.
 - A `forceRecompile: true` flag on `agda_load` as an opt-in escape hatch for
   when an agent suspects a stale cache.
 
-### 6.3 Toolchain version in every response — **✓ shipped**
-
-`agda_show_version` exists as a dedicated tool. Stamping the Agda version
-into every response's `provenance` field would save an agent from ever
-re-asking.
-
-**Ask:** include `agdaVersion` in the `provenance` block returned by every
-tool. Cheap observability win.
-
-**Status:** shipped in this release. `src/index.ts` captures
-`agda --version` via `execFileSync` at server startup (with `shell: false`
-so there is no shell-injection surface) and stamps both `serverVersion`
-and `agdaVersion` into a module-scoped `globalProvenance` registry.
-`okEnvelope` / `errorEnvelope` merge that registry into every
-response's `provenance` block, with tool-local provenance keys
-overriding global ones with the same name. The registry is a
-null-prototype object and refuses `__proto__` / `constructor` /
-`prototype` keys (defense-in-depth for CWE-1321).
-
----
-
-## 7. Write-back for proof actions — **✓ shipped (PR #37)**
-
-An agent following Emacs semantics expects `agda_give`, `agda_refine`,
-`agda_case_split`, `agda_auto`, `agda_solve_one`, and `agda_solve_all` to
-rewrite the source file. Previously some of them only mutated the
-interactive session's in-memory state; the agent had to round-trip
-through a separate `Edit` call, and any missed `Edit` silently
-desynchronized the server state from disk state.
-
-**Ask:** every proof-action tool should either (a) write back to disk by
-default and return the exact diff that was applied, or (b) take an explicit
-`persist: true|false` parameter, with `persist: true` being the recommended
-default. Pair this with a blessed `agda_apply_edit(file, old, new)` that
-performs the edit AND invalidates the server's interactive state AND
-reloads, all in one call.
-
-**Status:** shipped in PR #37. All eight proof-action tools
-(`agda_give`, `agda_refine`, `agda_refine_exact`, `agda_intro`,
-`agda_auto`, `agda_case_split`, `agda_solve_one`, `agda_solve_all`)
-now accept `writeToFile: boolean` with default `true`, write via a
-shared atomic-write (`writeFileAtomic` = temp-file + rename), auto-
-reload through `reloadAndDiagnose`, and surface a goal-ID diff with
-every reload. A new `agda_apply_edit(file, oldText, newText,
-occurrence?)` round-trip primitive covers non-goal edits (imports,
-renames, typos) and bypasses the session-error gate so it can be
-used to repair files that failed to load. The pipeline enforces a
-staleness guard (`isFileStale()`) to refuse edits when the file
-changed on disk since the last load. See
-[write-proof-actions-audit.md](./write-proof-actions-audit.md) for
-the audit log and any deferred follow-ups. The "exact diff" part
-of the ask is not shipped — we return a summary message and the
-goal-ID diff, not a textual patch.
-
 ---
 
 ## Priority ranking
 
 Shipped in recent releases:
 
-- §1.1 `agda_load` / `agda_typecheck` session-state unification (#39). ✓
-- §1.2 `agda_metas` error attribution by owning file. ✓
-- §1.3 query tools return `unavailable` on session error state. ✓
-- §1.4 `lastCheckedLine` surfaced on silent-abort loads. ✓
-- §7 write-back for proof actions + `agda_apply_edit` (PR #37). ✓
 - §4.3 set-diff half of goal-ID renumbering (PR #37). ✓
 
 If one afternoon of server work is available after that, spend it on:
@@ -453,3 +271,49 @@ If one afternoon of server work is available after that, spend it on:
    mapping the doc originally asks for; set diff is already shipped.
 
 Everything after that is incremental.
+
+
+
+## Remaining follow-ups (post-merge)
+
+Items deliberately not fixed in this PR, ordered by impact:
+
+### T6. Live-Agda typecheck for `.expected.agda` fixtures
+
+Run every `test/fixtures/agda/Write*.expected.agda` through a live
+`AgdaSession` in the integration suite and assert
+`goalCount === 0` and `classification === "ok-complete"`. Builds
+confidence that the fixture vectors stay type-checkable as Agda
+versions drift. Defers because it requires the integration harness,
+which is a separate setup from the unit test layer this PR added.
+
+### M6. Hole positions recomputed on every single-edit call
+
+`applyProofEdit` calls `findGoalPosition` which scans the whole
+file for every single proof action. N sequential single-goal edits
+rescan the file N times. Trivial perf impact in practice (typical
+files are <10k lines, scanner is ~O(n)), and the batch path is
+already optimal for tools that do many edits at once. Fix only if
+a profile shows it mattering.
+
+### L1. Redundant Zod type casts in `goal-tools.ts`
+
+`expr as string`, `variable as string`, etc. Zod has already
+validated and narrowed the types — these casts are noise.
+Removing them requires threading input types through
+`registerGoalTextTool`, which is out of scope for this PR. Bundle
+with the next touches to that file.
+
+### L2. Inconsistent error-message phrasing
+
+"Apply the edit manually" vs "Apply the edits manually" vs "No
+confirmed replacement text was returned" — cosmetic. Normalize
+through a small helper set when the next round of review comments
+surfaces them.
+
+### L4. `GoalIdDiff.introduced` field name vs "new" label
+
+The internal field is `introduced` because `new` is a reserved
+word in TS; the rendered output uses `new ?X` for the
+agent-facing label. The JSDoc already explains the mapping.
+Leaving as-is — renaming would be pure churn.
