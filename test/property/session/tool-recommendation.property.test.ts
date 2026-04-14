@@ -155,3 +155,23 @@ test("knownArgs is always a valid object", async () => {
     }),
   );
 });
+
+test("busy/exiting with empty manifest returns no recommendations", async () => {
+  await fc.assert(
+    fc.property(
+      fc.constantFrom("busy" as const, "exiting" as const),
+      arbClassification,
+      (phase, classification) => {
+        const recs = deriveToolRecommendations({
+          phase,
+          loadedFile: "/x.agda",
+          stale: false,
+          goalIds: [0],
+          classification,
+          availableTools: [], // empty manifest
+        });
+        expect(recs).toHaveLength(0);
+      },
+    ),
+  );
+});

@@ -63,7 +63,7 @@ export function registerSessionSnapshot(
         projectRoot,
         stale: session.isFileStale(),
         goalIds: session.getGoalIds(),
-        invisibleGoalCount: 0, // not yet tracked at session level
+        invisibleGoalCount: session.getInvisibleGoalCount(),
         classification: session.getLastClassification(),
         agdaVersion,
         lastLoadedAt: session.getLastLoadedAt(),

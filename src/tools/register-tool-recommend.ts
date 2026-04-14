@@ -9,7 +9,6 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import type { AgdaSession } from "../agda-process.js";
-import { formatVersion } from "../agda/agda-version.js";
 import { listToolManifest } from "./manifest.js";
 import { deriveToolRecommendations } from "../session/tool-recommendation.js";
 import { makeToolResult, okEnvelope, registerStructuredTool } from "./tool-helpers.js";

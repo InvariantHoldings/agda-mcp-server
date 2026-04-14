@@ -280,7 +280,6 @@ function extractTreeBlocks(lines: string[]): CodeBlock[] {
       const agdaIdx = line.indexOf("\\agda{");
       if (agdaIdx !== -1) {
         inBlock = true;
-        startLine = i + 2; // 1-indexed, next line after \agda{
         // Content after \agda{ on the same line
         const afterOpen = line.slice(agdaIdx + 6);
         braceDepth = 1;
@@ -307,10 +306,13 @@ function extractTreeBlocks(lines: string[]): CodeBlock[] {
           // Multi-line — content after \agda{ on opening line
           const firstLineContent = afterOpen.trim();
           if (firstLineContent) {
+            // Code starts on the same line as \agda{
+            startLine = i + 1;
             codeLines = [afterOpen];
           } else {
+            // Code starts on the next line
+            startLine = i + 2;
             codeLines = [];
-            // Adjust startLine to the next line
           }
         }
       }

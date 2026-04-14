@@ -69,26 +69,25 @@ export function deriveToolRecommendations(
   }
 
   if (input.phase === "busy") {
-    recommendations.push({
+    addIfAvailable(recommendations, toolSet, input.availableTools, {
       tool: "agda_session_snapshot",
-      category: "reporting",
       rationale: "Session is busy. Poll snapshot to check when command completes.",
       priority: 1,
       knownArgs: {},
       blockers: ["Session is currently processing a command."],
     });
-    return recommendations;
+    return sortByPriority(recommendations);
   }
 
   if (input.phase === "exiting") {
-    return [{
+    addIfAvailable(recommendations, toolSet, input.availableTools, {
       tool: "agda_load",
-      category: "session",
       rationale: "Session is shutting down. Restart by loading a file.",
       priority: 1,
       knownArgs: {},
       blockers: ["Session is exiting."],
-    }];
+    });
+    return sortByPriority(recommendations);
   }
 
   // ── Staleness ───────────────────────────────────────────────────

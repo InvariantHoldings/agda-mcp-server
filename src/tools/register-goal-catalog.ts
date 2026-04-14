@@ -52,7 +52,7 @@ export function registerGoalCatalog(
     description:
       "Return a structured catalog of all goals in the current proof state: goal IDs, types, contexts, splittable variables, and per-goal suggestions. Requires a file to be loaded.",
     category: "proof",
-    protocolCommands: ["Cmd_metas", "Cmd_goal_type_context"],
+    protocolCommands: ["Cmd_goal_type_context"],
     outputDataSchema: goalCatalogDataSchema,
     callback: async () => {
       const loadedFile = session.getLoadedFile();
@@ -98,7 +98,7 @@ export function registerGoalCatalog(
 
       const catalog = buildGoalCatalog({
         goals: goalInfos,
-        invisibleGoalCount: 0, // not tracked at session level yet
+        invisibleGoalCount: session.getInvisibleGoalCount(),
       });
 
       const text = renderGoalCatalogText(catalog);
