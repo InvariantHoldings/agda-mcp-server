@@ -54,11 +54,14 @@ export function extractRstBlocks(lines: string[]): CodeBlock[] {
           codeLines.pop();
         }
         if (codeLines.length > 0) {
-          blocks.push({
-            startLine,
-            endLine: startLine + codeLines.length - 1,
-            code: codeLines.join("\n"),
-          });
+          const code = codeLines.join("\n");
+          if (code.trim()) {
+            blocks.push({
+              startLine,
+              endLine: startLine + codeLines.length - 1,
+              code,
+            });
+          }
         }
         inBlock = false;
         codeLines = [];
@@ -78,11 +81,14 @@ export function extractRstBlocks(lines: string[]): CodeBlock[] {
       codeLines.pop();
     }
     if (codeLines.length > 0) {
-      blocks.push({
-        startLine,
-        endLine: startLine + codeLines.length - 1,
-        code: codeLines.join("\n"),
-      });
+      const code = codeLines.join("\n");
+      if (code.trim()) {
+        blocks.push({
+          startLine,
+          endLine: startLine + codeLines.length - 1,
+          code,
+        });
+      }
     }
   }
 

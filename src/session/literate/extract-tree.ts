@@ -74,11 +74,12 @@ export function extractTreeBlocks(lines: string[]): CodeBlock[] {
       }
 
       if (foundEnd) {
-        if (codeLines.length > 0) {
+        const code = codeLines.join("\n");
+        if (code.trim()) {
           blocks.push({
             startLine,
             endLine: i + 1,
-            code: codeLines.join("\n"),
+            code,
           });
         }
         inBlock = false;
