@@ -387,3 +387,64 @@ describe("language-aware fenced block parsing", () => {
     expect(result.blocks[0].code).toBe("module T where");
   });
 });
+
+describe("empty block handling", () => {
+  it("skips empty latex blocks", () => {
+    const content = [
+      "\\begin{code}",
+      "\\end{code}",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda", content);
+    expect(result.blocks).toHaveLength(0);
+  });
+
+  it("skips empty fenced blocks in markdown", () => {
+    const content = [
+      "```agda",
+      "```",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.md", content);
+    expect(result.blocks).toHaveLength(0);
+  });
+
+  it("skips empty org blocks", () => {
+    const content = [
+      "#+begin_src agda2",
+      "#+end_src",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.org", content);
+    expect(result.blocks).toHaveLength(0);
+  });
+
+  it("skips empty tree blocks", () => {
+    const content = "\\agda{}";
+    const result = extractLiterateCode("M.lagda.tree", content);
+    expect(result.blocks).toHaveLength(0);
+  });
+
+  it("skips empty multi-line tree blocks", () => {
+    const content = [
+      "\\agda{",
+      "}",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.tree", content);
+    expect(result.blocks).toHaveLength(0);
+  });
+
+  it("mixes empty and non-empty blocks correctly", () => {
+    const content = [
+      "```agda",
+      "```",
+      "",
+      "```agda",
+      "module Real where",
+      "```",
+      "",
+      "```agda",
+      "```",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.md", content);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].code).toBe("module Real where");
+  });
+});

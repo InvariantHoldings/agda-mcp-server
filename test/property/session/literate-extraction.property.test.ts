@@ -166,6 +166,56 @@ test("result format always matches the detected format for the filename", async 
   );
 });
 
+// ── Property: empty blocks are never emitted ────────────────────────
+
+/** Build a literate file whose delimiters contain zero code lines. */
+function wrapEmpty(format: LiterateFormat): string {
+  switch (format) {
+    case "latex":
+      return "\\begin{code}\n\\end{code}";
+    case "markdown":
+      return "```agda\n```";
+    case "typst":
+      return "```agda\n```";
+    case "org":
+      return "#+begin_src agda2\n#+end_src";
+    case "tree":
+      return "\\agda{\n}";
+    // RST is special: an empty indented block after :: is just the :: line
+    // followed by a blank + non-indented content, which produces no block.
+    case "rst":
+      return "::\n\n  \n\nnot indented";
+  }
+}
+
+test("empty delimited blocks produce zero extracted blocks", async () => {
+  await fc.assert(
+    fc.property(arbLiterateExt, (extInfo) => {
+      const content = wrapEmpty(extInfo.format);
+      const result = extractLiterateCode(`Module${extInfo.ext}`, content);
+      // Every emitted block must have non-empty code
+      for (const block of result.blocks) {
+        expect(block.code.trim().length).toBeGreaterThan(0);
+      }
+    }),
+  );
+});
+
+test("no extracted block has endLine < startLine", async () => {
+  await fc.assert(
+    fc.property(arbLiterateExt, arbCodeBlock, (extInfo, codeLines) => {
+      const code = codeLines.join("\n");
+      const content = wrapInFormat(extInfo.format, code);
+      const result = extractLiterateCode(`Module${extInfo.ext}`, content);
+      for (const block of result.blocks) {
+        expect(block.endLine).toBeGreaterThanOrEqual(block.startLine);
+      }
+    }),
+  );
+});
+
+// ── Property: language-aware fenced blocks ──────────────────────────
+
 const arbOtherLang = fc.constantFrom("haskell", "python", "javascript", "rust", "");
 
 test("non-agda fenced blocks never appear in extracted code (markdown/typst)", async () => {
