@@ -1,7 +1,7 @@
 {
   "name": "agda-mcp-server",
-  "version": "0.6.4",
-  "description": "MCP server for interactive Agda proof development — type-checking, goal inspection, case splitting, proof search, and more via the Model Context Protocol",
+  "version": "0.6.5",
+  "description": "MCP server for interactive Agda proof development \u2014 type-checking, goal inspection, case splitting, proof search, and more via the Model Context Protocol",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
