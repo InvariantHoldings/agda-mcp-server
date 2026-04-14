@@ -10,6 +10,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import type { AgdaSession } from "../agda-process.js";
+import { logger } from "../agda/logger.js";
 import { buildGoalCatalog, renderGoalCatalogText } from "../session/goal-catalog.js";
 import { makeToolResult, okEnvelope, errorEnvelope, errorDiagnostic, registerStructuredTool } from "./tool-helpers.js";
 
@@ -95,9 +96,13 @@ export function registerGoalCatalog(
             type: info.type,
             context: info.context,
           });
-        } catch {
+        } catch (err) {
           // If a goal query fails (stale, etc), include with minimal info
           failedGoalQueries++;
+          logger.warn("goal typeContext query failed", {
+            goalId,
+            error: err instanceof Error ? err.message : String(err),
+          });
           goalInfos.push({
             goalId,
             type: "?",
