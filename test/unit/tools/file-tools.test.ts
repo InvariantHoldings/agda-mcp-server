@@ -66,7 +66,7 @@ test("agda_list_modules keeps display paths stable when repoRoot is a symlink", 
 
   try {
     const server = createCapturingServer();
-    registerFileTools(server as unknown as McpServer, {} as any, fixture.linkedRepoRoot);
+    registerFileTools(server as unknown as McpServer, { getAgdaVersion: () => null } as any, fixture.linkedRepoRoot);
 
     const result = await server.get("agda_list_modules")!.callback({ tier: "Kernel" });
 
@@ -88,7 +88,7 @@ test("agda_search_definitions skips symlinked files that resolve outside the pro
 
   try {
     const server = createCapturingServer();
-    registerFileTools(server as unknown as McpServer, {} as any, fixture.linkedRepoRoot);
+    registerFileTools(server as unknown as McpServer, { getAgdaVersion: () => null } as any, fixture.linkedRepoRoot);
 
     const safeResult = await server.get("agda_search_definitions")!.callback({
       query: "foo",

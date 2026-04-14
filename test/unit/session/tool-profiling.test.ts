@@ -19,6 +19,9 @@ function createCapturingServer() {
 
 function createSuccessfulSessionStub() {
   return {
+    getAgdaVersion() {
+      return null;
+    },
     getLoadedFile() {
       return null;
     },
@@ -59,6 +62,9 @@ function createSuccessfulSessionStub() {
 
 function createProfilingSessionStub() {
   return {
+    getAgdaVersion() {
+      return null;
+    },
     getLoadedFile() {
       return null;
     },

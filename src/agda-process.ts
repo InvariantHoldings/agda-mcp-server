@@ -48,3 +48,21 @@ export { extractMessage, escapeAgdaString } from "./agda/response-parsing.js";
 export { normalizeAgdaResponse } from "./agda/normalize-response.js";
 export { parseLoadResponses } from "./agda/parse-load-responses.js";
 export { parseContextEntry, deriveSuggestions, findMatchingTerms } from "./agda/goal-analysis.js";
+export type { AgdaVersion } from "./agda/agda-version.js";
+export {
+  parseAgdaVersion,
+  compareVersions,
+  versionAtLeast,
+  detectAgdaVersion,
+  formatVersion,
+} from "./agda/agda-version.js";
+export {
+  isAgdaSourceFile,
+  supportedSourceExtensions,
+  supportsFeatureFlag,
+  supportedFeatureFlags,
+  hasStructuredGiveResult,
+  filePathDescription,
+  getAgdaCapabilities,
+  type AgdaCapabilities,
+} from "./agda/version-support.js";

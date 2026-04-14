@@ -8,6 +8,7 @@
 
 import { z } from "zod";
 
+import { formatVersion } from "../agda-process.js";
 import type { AgdaSession } from "../agda-process.js";
 
 export const manifestEntrySchema = z.object({
@@ -21,6 +22,10 @@ export const manifestEntrySchema = z.object({
 
 export const toolsCatalogDataSchema = z.object({
   serverVersion: z.string(),
+  agdaVersion: z.string().optional(),
+  supportedExtensions: z.array(z.string()).optional(),
+  supportedFeatureFlags: z.array(z.string()).optional(),
+  structuredGiveResult: z.boolean().optional(),
   tools: z.array(manifestEntrySchema),
 });
 
@@ -76,6 +81,13 @@ export const bugBundleSchema = z.object({
 });
 
 export async function tryGetAgdaVersion(session: AgdaSession): Promise<string | undefined> {
+  // Prefer the cached version set by inline detection (no extra round-trip).
+  const cached = session.getAgdaVersion();
+  if (cached) {
+    return formatVersion(cached);
+  }
+  // Fall back to a live query if detection hasn't run yet (e.g. this tool
+  // is invoked before any other command on a fresh session).
   try {
     const result = await session.query.showVersion();
     return result.version || undefined;

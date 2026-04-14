@@ -23,6 +23,9 @@ function createCapturingServer() {
 
 function createSessionStub() {
   return {
+    getAgdaVersion() {
+      return null;
+    },
     getLoadedFile() {
       return null;
     },
@@ -140,6 +143,7 @@ test("agda_typecheck and agda_load share the injected AgdaSession instance", asy
   };
 
   const session = {
+    getAgdaVersion: () => null,
     getLoadedFile() {
       return null;
     },
@@ -188,6 +192,7 @@ test("agda_load surfaces regression diagnostic when reload drops from ok-complet
   writeFileSync(absPath, "module Probe where\n", "utf8");
 
   const session = {
+    getAgdaVersion: () => null,
     getLoadedFile() {
       return absPath;
     },
@@ -252,6 +257,7 @@ test("agda_load surfaces scope-check-extent diagnostic on apparent-clean-but-sus
   writeFileSync(resolve(root, fileName), "module Probe where\n", "utf8");
 
   const session = {
+    getAgdaVersion: () => null,
     getLoadedFile() {
       return null;
     },
@@ -312,6 +318,7 @@ test("agda_load surfaces scope-check-extent diagnostic with context-level messag
   writeFileSync(resolve(root, fileName), "module Probe where\n", "utf8");
 
   const session = {
+    getAgdaVersion: () => null,
     getLoadedFile() {
       return null;
     },
@@ -367,6 +374,7 @@ test("agda_load omits scope-check-extent diagnostic when lastCheckedLine is null
   writeFileSync(resolve(root, fileName), "module Probe where\n", "utf8");
 
   const session = {
+    getAgdaVersion: () => null,
     getLoadedFile() {
       return null;
     },
@@ -419,6 +427,7 @@ test("agda_load omits regression diagnostic on first load", async () => {
   writeFileSync(resolve(root, fileName), "module Probe where\n", "utf8");
 
   const session = {
+    getAgdaVersion: () => null,
     getLoadedFile() {
       return null;
     },

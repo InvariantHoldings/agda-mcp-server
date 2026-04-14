@@ -13,7 +13,7 @@ import { z } from "zod";
 import { existsSync } from "node:fs";
 import { relative } from "node:path";
 
-import { AgdaSession } from "../agda-process.js";
+import { AgdaSession, filePathDescription } from "../agda-process.js";
 import {
   errorDiagnostic,
   makeToolResult,
@@ -45,7 +45,7 @@ export function registerAgdaLoadNoMetas(
     category: "session",
     protocolCommands: ["Cmd_load_no_metas"],
     inputSchema: {
-      file: z.string().describe("Path to the .agda file (relative to repo root or absolute)"),
+      file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
     },
     outputDataSchema: loadDataSchema,
     callback: async ({ file }: { file: string }) => {

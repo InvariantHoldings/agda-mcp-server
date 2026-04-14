@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { relative } from "node:path";
 import { existsSync } from "node:fs";
-import { AgdaSession } from "../agda-process.js";
+import { AgdaSession, filePathDescription } from "../agda-process.js";
 import {
   missingPathToolError,
   registerGoalTextTool,
@@ -31,7 +31,7 @@ export function register(
     protocolCommands: ["Cmd_compile"],
     inputSchema: {
       backend: z.string().describe(backendExpressionHelp()),
-      file: z.string().describe("Path to the .agda file to compile (relative to repo root or absolute)"),
+      file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
       args: z.array(z.string()).optional().describe("Optional Agda CLI arguments for the compile command"),
     },
     callback: async ({ backend, file, args }: { backend: string; file: string; args?: string[] }) => {

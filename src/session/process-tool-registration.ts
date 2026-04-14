@@ -5,7 +5,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { relative } from "node:path";
 
-import { AgdaSession } from "../agda-process.js";
+import {
+  AgdaSession,
+  getAgdaCapabilities,
+} from "../agda-process.js";
 import { availableSessionTools, processCommandDataSchema, sessionStatusDataSchema, versionDataSchema } from "./tool-presentation.js";
 import {
   errorEnvelope,
@@ -65,7 +68,7 @@ export function registerSessionProcessTools(
   registerStructuredTool({
     server,
     name: "agda_show_version",
-    description: "Show the version string reported by the running Agda interactive process.",
+    description: "Show the Agda version and runtime capabilities: supported source extensions, feature flags, and protocol changes.",
     category: "process",
     protocolCommands: ["Cmd_show_version"],
     outputDataSchema: versionDataSchema,
@@ -73,14 +76,37 @@ export function registerSessionProcessTools(
       try {
         const result = await session.query.showVersion();
         const version = result.version || "(version unavailable)";
+
+        // Prefer the cached parsed version (populated by inline detection before
+        // this command ran) to avoid an extra Cmd_show_version round-trip.
+        const { agdaVersion, supportedExtensions, supportedFeatureFlags, structuredGiveResult } =
+          getAgdaCapabilities(session.getAgdaVersion());
+
+        let output = `## Agda version\n\n${version}\n`;
+        if (supportedExtensions) {
+          output += `\n**Supported source extensions:** ${supportedExtensions.join(", ")}\n`;
+        }
+        if (supportedFeatureFlags && supportedFeatureFlags.length > 0) {
+          output += `**Supported feature flags:** ${supportedFeatureFlags.join(", ")}\n`;
+        }
+        if (structuredGiveResult !== undefined) {
+          output += `**Structured give result (2.9.0+):** ${structuredGiveResult ? "yes" : "no"}\n`;
+        }
+
         return makeToolResult(
           okEnvelope({
             tool: "agda_show_version",
             summary: `Agda version: ${version}`,
-            data: { version },
+            data: {
+              version,
+              agdaVersion,
+              supportedExtensions,
+              supportedFeatureFlags,
+              structuredGiveResult,
+            },
             provenance: { protocolCommands: ["Cmd_show_version"] },
           }),
-          `## Agda version\n\n${version}\n`,
+          output,
         );
       } catch (err) {
         const message = `Error: ${err instanceof Error ? err.message : String(err)}`;

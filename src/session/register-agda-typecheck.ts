@@ -15,7 +15,7 @@ import { z } from "zod";
 import { existsSync } from "node:fs";
 import { relative } from "node:path";
 
-import { AgdaSession } from "../agda-process.js";
+import { AgdaSession, filePathDescription } from "../agda-process.js";
 import {
   errorDiagnostic,
   makeToolResult,
@@ -52,7 +52,7 @@ export function registerAgdaTypecheck(
     category: "session",
     protocolCommands: ["Cmd_load", "Cmd_metas"],
     inputSchema: {
-      file: z.string().describe("Path to the .agda file"),
+      file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
       profileOptions: z.array(z.string()).optional().describe(
         `Agda profiling options. Valid values: ${VALID_PROFILE_OPTION_STRINGS.join(", ")}. ` +
         "Note: internal, modules, and definitions are mutually exclusive.",

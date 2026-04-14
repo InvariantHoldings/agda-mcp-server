@@ -39,6 +39,9 @@ import type {
   AgdaResponse,
   LoadResult,
 } from "./types.js";
+import { logger } from "./logger.js";
+import { type AgdaVersion, parseAgdaVersion } from "./agda-version.js";
+import { decodeDisplayTextResponses } from "../protocol/responses/text-display.js";
 import { findAgdaBinary } from "./binary-discovery.js";
 import { runLoad, runLoadNoMetas } from "./session-load-impl.js";
 import { statSync } from "node:fs";
@@ -65,6 +68,10 @@ export class AgdaSession {
   currentFile: string | null = null;
   goalIds: number[] = [];
   exiting = false;
+  private detectedVersion: AgdaVersion | null = null;
+  private versionDetectionAttempts = 0;
+  static readonly VERSION_DETECTION_MAX_ATTEMPTS = 3;
+  private static readonly VERSION_DETECTION_TIMEOUT_MS = 15_000;
   // The three load-history fields below are exposed to the sibling
   // session-load-impl.ts so the runLoad / runLoadNoMetas helpers can
   // update session state after a Cmd_load completes. External
@@ -138,6 +145,9 @@ export class AgdaSession {
       this.lastClassification = null;
       this.lastLoadedAt = null;
       this.exiting = false;
+      // Reset version detection so the next process start re-detects cleanly.
+      this.detectedVersion = null;
+      this.versionDetectionAttempts = 0;
       this.transport.handleProcessClose();
     });
 
@@ -156,23 +166,104 @@ export class AgdaSession {
   }
 
   /**
+   * Scan responses from Cmd_show_version and return the version string, or
+   * undefined if no Version DisplayInfo response is present.
+   *
+   * Filters strictly to `kind === "DisplayInfo"` / `info.kind === "Version"`
+   * responses to avoid mis-parsing timing output or other messages as
+   * version strings. Reuses the same decoder that `showVersion()` uses.
+   */
+  private static extractRawVersionString(responses: AgdaResponse[]): string | undefined {
+    const { text } = decodeDisplayTextResponses(responses, {
+      infoKinds: ["Version"],
+      position: "first",
+    });
+    return text || undefined;
+  }
+
+  /**
    * Send an IOTCM command and collect responses until completion.
    * Returns all JSON responses received during this command.
    *
    * Commands are serialized via a promise queue so that concurrent MCP
    * tool calls never interleave on the single-process Agda stdin/stdout.
+   *
+   * Version detection runs inline before the first real command so that
+   * `getAgdaVersion()` is populated for every caller, including the one
+   * that triggers the first command.
    */
   sendCommand(
     command: string,
     timeoutMs = configuredCommandTimeoutMs(),
   ): Promise<AgdaResponse[]> {
-    const task = this.commandQueue.then(() => {
+    const task = this.commandQueue.then(async () => {
       const proc = this.ensureProcess();
-      return this.transport.sendCommand(proc, command, timeoutMs);
+
+      // Detect Agda version inline before the user command so that
+      // getAgdaVersion() is populated for the current command's callers.
+      // Retry on transient failures up to VERSION_DETECTION_MAX_ATTEMPTS.
+      //
+      // Special case: if the user command itself is Cmd_show_version, skip
+      // the pre-flight round-trip and instead extract the version from the
+      // actual command's responses (one round-trip instead of two).
+      const needsDetection =
+        this.detectedVersion === null &&
+        this.versionDetectionAttempts < AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
+      const commandIsVersionQuery = command.includes("Cmd_show_version");
+
+      if (needsDetection && !commandIsVersionQuery) {
+        this.versionDetectionAttempts++;
+        try {
+          const vCmd = this.iotcm("Cmd_show_version");
+          const responses = await this.transport.sendCommand(
+            proc,
+            vCmd,
+            AgdaSession.VERSION_DETECTION_TIMEOUT_MS,
+          );
+          const raw = AgdaSession.extractRawVersionString(responses);
+          if (raw) {
+            try {
+              this.detectedVersion = parseAgdaVersion(raw);
+              logger.trace("detected Agda version", {
+                version: this.detectedVersion,
+              });
+            } catch {
+              // Could not parse version string; attempt slot consumed,
+              // retry will happen on the next command if under the limit.
+            }
+          }
+        } catch {
+          // Best-effort — command error consumes an attempt slot; will retry
+          // on subsequent commands up to VERSION_DETECTION_MAX_ATTEMPTS.
+        }
+      }
+
+      const responses = await this.transport.sendCommand(proc, command, timeoutMs);
+
+      // Piggyback: when the user command was Cmd_show_version and detection
+      // was still pending, extract the version from those responses so we avoid
+      // an extra round-trip on the first agda_show_version invocation.
+      if (needsDetection && commandIsVersionQuery) {
+        this.versionDetectionAttempts++;
+        try {
+          const raw = AgdaSession.extractRawVersionString(responses);
+          if (raw) {
+            this.detectedVersion = parseAgdaVersion(raw);
+            logger.trace("detected Agda version (piggybacked)", {
+              version: this.detectedVersion,
+            });
+          }
+        } catch (err) {
+          // Attempt slot consumed; retry on next command if under the limit.
+          logger.trace("version detection piggyback failed", { err });
+        }
+      }
+
+      return responses;
     });
     // Chain onto the queue — swallow rejections so a failed command
     // doesn't block subsequent commands from executing.
-    this.commandQueue = task.then(() => {}, () => {});
+    this.commandQueue = task.then(() => { }, () => { });
     return task;
   }
 
@@ -285,6 +376,16 @@ export class AgdaSession {
 
   // ── Accessors ─────────────────────────────────────────────────────
 
+  /**
+   * Get the detected Agda version, or null if not yet detected.
+   * Populated by the inline version detection that runs before each
+   * command (once per process lifecycle). Callers within a command
+   * handler can rely on this being set if detection succeeded.
+   */
+  getAgdaVersion(): AgdaVersion | null {
+    return this.detectedVersion;
+  }
+
   /** Get current goal IDs. */
   getGoalIds(): number[] {
     return [...this.goalIds];
@@ -334,6 +435,8 @@ export class AgdaSession {
     this.lastLoadedMtime = null;
     this.lastClassification = null;
     this.lastLoadedAt = null;
+    this.detectedVersion = null;
+    this.versionDetectionAttempts = 0;
     this.transport.destroy();
     this.commandQueue = Promise.resolve();
     this.exiting = false;

@@ -25,7 +25,7 @@ export function register(
   session: AgdaSession,
   _repoRoot: string,
 ): void {
-  registerToolsCatalog(server);
+  registerToolsCatalog(server, session);
   registerProtocolParity(server);
   registerBugReportBundle(server, session);
   registerBugReportUpdateBundle(server, session);
