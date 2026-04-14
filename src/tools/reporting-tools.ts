@@ -20,6 +20,7 @@ import { registerBugReportBundle, registerBugReportUpdateBundle } from "./regist
 import { registerGoalCatalog } from "./register-goal-catalog.js";
 import { registerProtocolParity } from "./register-protocol-parity.js";
 import { registerSessionSnapshot } from "./register-session-snapshot.js";
+import { registerToolRecommend } from "./register-tool-recommend.js";
 import { registerToolsCatalog } from "./register-tools-catalog.js";
 
 export function register(
@@ -33,4 +34,5 @@ export function register(
   registerBugReportUpdateBundle(server, session);
   registerSessionSnapshot(server, session, _repoRoot);
   registerGoalCatalog(server, session, _repoRoot);
+  registerToolRecommend(server, session, _repoRoot);
 }

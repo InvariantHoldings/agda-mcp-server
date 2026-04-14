@@ -327,6 +327,12 @@
     "requiresLiveAgda": true
   },
   {
+    "tool": "agda_tool_recommend",
+    "suite": "test/unit/session/tool-recommendation.test.ts",
+    "scenario": "tool recommendation from session state",
+    "requiresLiveAgda": false
+  },
+  {
     "tool": "agda_tools_catalog",
     "suite": "test/integration/mcp/mcp-server.test.ts",
     "scenario": "catalog and manifest",
