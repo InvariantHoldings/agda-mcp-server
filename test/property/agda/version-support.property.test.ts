@@ -14,6 +14,7 @@ import {
   supportedFeatureFlags,
   supportsFeatureFlag,
   hasStructuredGiveResult,
+  hasConstraintsRewriteMode,
   filePathDescription,
   getAgdaCapabilities,
 } from "../../../src/agda/version-support.js";
@@ -117,6 +118,48 @@ test("hasStructuredGiveResult is non-decreasing in version", () => {
       if (hasStructuredGiveResult(lo)) {
         expect(hasStructuredGiveResult(hi)).toBe(true);
       }
+    }),
+  );
+});
+
+test("hasConstraintsRewriteMode is non-decreasing in version", () => {
+  fc.assert(
+    fc.property(arbVersionPair, ([lo, hi]) => {
+      if (hasConstraintsRewriteMode(lo)) {
+        expect(hasConstraintsRewriteMode(hi)).toBe(true);
+      }
+    }),
+  );
+});
+
+// ── Protocol-shape gates are prerelease-agnostic ─────────────────────────────
+//
+// Parser-identity questions (does THIS Agda's IOTCM parser accept
+// the new shape?) must return the same answer for a prerelease and
+// its GA counterpart — the prerelease is built from the same
+// codebase, so the parser is the same. This was a real latent bug:
+// a 2.9.0-rc1 build would get the pre-2.9 bare `Cmd_constraints`
+// sent to it and eat a `cannot read:` error, because
+// `versionAtLeast(rc1, 2.9.0)` is false (prerelease sorts below
+// stable). The fix: protocol gates use `atLeastMajorMinor`, which
+// ignores the prerelease flag entirely.
+
+test("hasConstraintsRewriteMode is prerelease-agnostic", () => {
+  fc.assert(
+    fc.property(arbVersion, (ver) => {
+      const stable: AgdaVersion = { parts: ver.parts, prerelease: false };
+      const pre: AgdaVersion = { parts: ver.parts, prerelease: true };
+      expect(hasConstraintsRewriteMode(pre)).toBe(hasConstraintsRewriteMode(stable));
+    }),
+  );
+});
+
+test("hasStructuredGiveResult is prerelease-agnostic", () => {
+  fc.assert(
+    fc.property(arbVersion, (ver) => {
+      const stable: AgdaVersion = { parts: ver.parts, prerelease: false };
+      const pre: AgdaVersion = { parts: ver.parts, prerelease: true };
+      expect(hasStructuredGiveResult(pre)).toBe(hasStructuredGiveResult(stable));
     }),
   );
 });

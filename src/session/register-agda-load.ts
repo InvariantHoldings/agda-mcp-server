@@ -16,6 +16,7 @@ import { existsSync } from "node:fs";
 import { relative } from "node:path";
 
 import { AgdaSession, filePathDescription } from "../agda-process.js";
+import { bustAgdaiCache } from "../agda/agdai-cache.js";
 import {
   errorDiagnostic,
   infoDiagnostic,
@@ -58,9 +59,12 @@ export function registerAgdaLoad(
         `Agda profiling options. Valid values: ${VALID_PROFILE_OPTION_STRINGS.join(", ")}. ` +
         "Note: internal, modules, and definitions are mutually exclusive.",
       ),
+      forceRecompile: z.boolean().optional().describe(
+        "If true, delete every `.agdai` interface artifact for this source file before sending Cmd_load — both the separated `_build/<version>/agda/<rel>.agdai` form and the local `<source>.agdai` fallback. Use as an escape hatch when an agent suspects a stale cache; the diagnostic on the response will list the paths that were busted.",
+      ),
     },
     outputDataSchema: loadDataSchema,
-    callback: async ({ file, profileOptions }: { file: string; profileOptions?: string[] }) => {
+    callback: async ({ file, profileOptions, forceRecompile }: { file: string; profileOptions?: string[]; forceRecompile?: boolean }) => {
       const startMs = performance.now();
 
       const profileError = validateProfileOptionsOrError(
@@ -95,6 +99,19 @@ export function registerAgdaLoad(
         const previousLoadedAtMs = isReload
           ? (session.getLastLoadedAt?.() ?? null)
           : null;
+
+        // Bust the cache before Cmd_load so Agda can't return a stale
+        // cached interface and pretend it's fresh. Best-effort: a
+        // failure to delete one artifact (e.g. permission denied) is
+        // surfaced via the `force-recompile` info diagnostic but
+        // never aborts the load itself — the recompile is still
+        // worth trying on whatever artifacts we *could* clear.
+        const bustResult = forceRecompile
+          ? bustAgdaiCache(filePath, repoRoot)
+          : { removed: [], failed: [] as Array<{ path: string; reason: string }> };
+        const bustedAgdaiPaths = bustResult.removed;
+        const bustFailures = bustResult.failed;
+
         const result = await session.load(filePath, { profileOptions });
         const relPath = relative(repoRoot, requestedFilePath);
         const diagnostics = [
@@ -109,6 +126,21 @@ export function registerAgdaLoad(
               "completeness",
             ),
           );
+        }
+
+        if (forceRecompile) {
+          const bustedSummary = bustedAgdaiPaths.length === 0
+            ? "forceRecompile requested; no `.agdai` artifacts were present to bust."
+            : `forceRecompile requested; busted ${bustedAgdaiPaths.length} \`.agdai\` artifact(s) before reload: ${bustedAgdaiPaths.join(", ")}`;
+          diagnostics.push(infoDiagnostic(bustedSummary, "force-recompile"));
+          for (const failure of bustFailures) {
+            diagnostics.push(
+              warningDiagnostic(
+                `forceRecompile: could not delete ${failure.path} — ${failure.reason}. The file may still be read by Agda as a stale cache on the next load.`,
+                "force-recompile-failed",
+              ),
+            );
+          }
         }
 
         const previousWasSuccess = previousClassification === "ok-complete"
@@ -194,6 +226,9 @@ export function registerAgdaLoad(
               previousClassification,
               previousLoadedAtMs,
               lastCheckedLine,
+              forceRecompile: forceRecompile ?? false,
+              bustedAgdaiPaths,
+              bustedAgdaiFailures: bustFailures,
             },
             diagnostics,
             stale: session.isFileStale() || undefined,
