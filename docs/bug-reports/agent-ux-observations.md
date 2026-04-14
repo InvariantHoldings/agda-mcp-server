@@ -243,18 +243,39 @@ that grep-match paths.
 **Ask:** post-process compiler error messages in the MCP layer to resolve
 those placeholders to `<ext>` or the concrete list before returning.
 
-### 6.2 Stale `.agdai` cache ambiguity
+### 6.2 Stale `.agdai` cache ambiguity — **✓ shipped**
 
 The session-state desync in §1.1 was consistent with one code path reading a
 cached `.agdai` and another not. The server should either always trust the
 cache or always bust it — and it should tell the agent which mode it's in.
 
-**Ask:**
+**Shipped:**
 
-- `agda_cache_info(file)` returning cache hit/miss, mtime, and
-  `source_hash == cached_hash`.
-- A `forceRecompile: true` flag on `agda_load` as an opt-in escape hatch for
-  when an agent suspects a stale cache.
+- **`agda_cache_info(file)`** — new structured tool. Reports every `.agdai`
+  artifact for the given source: kind (`separated` under
+  `_build/<version>/agda` vs `local` next to the source), the Agda version
+  that produced it, the cache mtime, the source mtime, and a `fresh` boolean.
+  When stale artifacts exist the response prints the exact
+  `forceRecompile: true` follow-up. Implementation:
+  [`src/tools/cache-tools.ts`](../../src/tools/cache-tools.ts) on top of the
+  layout helpers in [`src/agda/agdai-cache.ts`](../../src/agda/agdai-cache.ts);
+  unit coverage in [`test/unit/tools/cache-tools.test.ts`](../../test/unit/tools/cache-tools.test.ts).
+
+- **`forceRecompile: true` on `agda_load`** — opt-in escape hatch that
+  deletes every `.agdai` for the source (both the separated and the local
+  layout) before sending Cmd_load. The list of busted paths surfaces both as
+  a `force-recompile` info diagnostic and as a `bustedAgdaiPaths` field on
+  the structured response. End-to-end coverage against pinned Agda 2.9.0 in
+  [`test/integration/agda/agda-force-recompile.test.ts`](../../test/integration/agda/agda-force-recompile.test.ts).
+
+The cache helper deliberately mirrors Agda's own `Agda.Interaction.FindFile.toIFile`
+formula (project root via the closest ancestor `.agda-lib`, then
+`<root>/_build/<version>/agda/<rel>.agdai`, with the local-interface
+fallback `<sourceDir>/<basename>.agdai` when no `.agda-lib` exists),
+verified empirically against `.cache/agda/2.9.0/bin/agda`. The unit
+test [`test/unit/agda/agdai-cache.test.ts`](../../test/unit/agda/agdai-cache.test.ts)
+also pins the defensive case where a stray `_build/` from a sibling project
+must not be misidentified as a project root.
 
 ---
 

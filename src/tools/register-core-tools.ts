@@ -15,6 +15,7 @@ import { register as registerDisplay } from "./display.js";
 import { register as registerBackend } from "./backend.js";
 import { register as registerAnalysis } from "./analysis-tools.js";
 import { register as registerReporting } from "./reporting-tools.js";
+import { register as registerCacheTools } from "./cache-tools.js";
 
 export function registerCoreTools(
   server: McpServer,
@@ -31,4 +32,5 @@ export function registerCoreTools(
   registerBackend(server, session, projectRoot);
   registerAnalysis(server, session, projectRoot);
   registerReporting(server, session, projectRoot);
+  registerCacheTools(server, session, projectRoot);
 }

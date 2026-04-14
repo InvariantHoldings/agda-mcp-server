@@ -23,6 +23,8 @@ export const loadDataSchema = z.object({
   previousClassification: z.string().nullable().optional(),
   previousLoadedAtMs: z.number().nullable().optional(),
   lastCheckedLine: z.number().int().positive().nullable().optional(),
+  forceRecompile: z.boolean().optional().describe("True iff the caller asked us to bust the .agdai cache before loading."),
+  bustedAgdaiPaths: z.array(z.string()).optional().describe("Absolute paths of `.agdai` artifacts deleted before this load. Empty when forceRecompile was false or the cache was already cold."),
 });
 
 export const sessionStatusDataSchema = z.object({
