@@ -60,14 +60,23 @@ it. Lets an agent pick "fix the file whose repair unblocks the most work"
 instead of alphabetical order. Cheap to build from the existing module
 resolver.
 
-### 2.4 Pagination and filtering on `agda_list_modules`
+### 2.4 Pagination and filtering on `agda_list_modules` — **✓ shipped**
 
 `agda_list_modules` on a large subdirectory can return tens of kilobytes of
 text and blow past an MCP client's token budget. A single listing tool
 should never be the thing that forces an agent to fall back to shell `find`.
 
-**Ask:** add `offset`, `limit`, and `pattern` parameters to
-`agda_list_modules`. Default page size ~50.
+**Ask (now shipped):** `agda_list_modules` accepts `offset`, `limit`, and
+`pattern` parameters. Default page size is 25; `limit` is capped at 500.
+`pattern` is a case-insensitive substring match on the relative path. Every
+response includes the unfiltered total module count, the filtered match
+count (when a pattern is set), and the `Showing N–M of K` range; if more
+results remain, the response footer prints the exact `offset` value to use
+on the follow-up call. See
+[`src/tools/file-tools.ts`](../../src/tools/file-tools.ts) for the
+implementation and
+[`test/unit/tools/file-tools.test.ts`](../../test/unit/tools/file-tools.test.ts)
+for the pagination/filter test cases.
 
 ---
 

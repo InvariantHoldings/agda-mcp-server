@@ -13,6 +13,15 @@ import { logger } from "../agda/logger.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import { missingPathToolError, ToolInvocationError, registerTextTool } from "./tool-helpers.js";
 
+/**
+ * Default page size for `agda_list_modules`. Sized so a single response
+ * comfortably fits inside an MCP client's per-tool token budget on a
+ * many-hundred-module project — see §2.4 of the agent UX bug report.
+ */
+const LIST_MODULES_DEFAULT_LIMIT = 25;
+/** Hard cap so a caller can't ask for, say, 100k results in one shot. */
+const LIST_MODULES_MAX_LIMIT = 500;
+
 function relativeToRequestedRoot(repoRoot: string, requestedRoot: string, relativePath = ""): string {
   const requestedBase = relative(repoRoot, requestedRoot);
   return relativePath ? join(requestedBase, relativePath) : requestedBase;
@@ -58,10 +67,17 @@ export function register(
   registerTextTool({
     server,
     name: "agda_list_modules",
-    description: "List Agda modules in a directory tier (MathLib, Foundation, Kernel, Research, Extensions, etc.).",
+    description: "List Agda modules in a directory tier (MathLib, Foundation, Kernel, Research, Extensions, etc.). Always reports the total module count; paginated to keep responses small (default page size 25). Use `offset` to scroll, `limit` to enlarge the page, and `pattern` for a case-insensitive substring filter on the relative path.",
     category: "navigation",
-    inputSchema: { tier: z.string().describe("The tier to list, e.g. 'Kernel', 'Foundation', 'MathLib'") },
-    callback: async ({ tier }: { tier: string }) => {
+    inputSchema: {
+      tier: z.string().describe("The tier to list, e.g. 'Kernel', 'Foundation', 'MathLib'"),
+      offset: z.number().int().min(0).optional().describe("0-based starting index into the sorted result list. Defaults to 0."),
+      limit: z.number().int().min(1).max(LIST_MODULES_MAX_LIMIT).optional().describe(
+        `Maximum number of modules to return in this page. Defaults to ${LIST_MODULES_DEFAULT_LIMIT}; capped at ${LIST_MODULES_MAX_LIMIT}.`,
+      ),
+      pattern: z.string().optional().describe("Case-insensitive substring filter applied to each module's relative path before pagination."),
+    },
+    callback: async ({ tier, offset, limit, pattern }: { tier: string; offset?: number; limit?: number; pattern?: string }) => {
       const requestedTierDir = resolveFileWithinRoot(repoRoot, join("agda", tier));
       if (!existsSync(requestedTierDir)) {
         throw new ToolInvocationError({
@@ -112,7 +128,42 @@ export function register(
         relativeToRequestedRoot(repoRoot, requestedTierDir),
       );
       modules.sort();
-      return `## agda/${tier} (${modules.length} modules)\n\n${modules.map((m) => `- ${m}`).join("\n")}`;
+
+      const normalizedPattern = pattern?.toLowerCase() ?? null;
+      const filtered = normalizedPattern === null
+        ? modules
+        : modules.filter((m) => m.toLowerCase().includes(normalizedPattern));
+
+      const effectiveOffset = offset ?? 0;
+      const effectiveLimit = limit ?? LIST_MODULES_DEFAULT_LIMIT;
+      const page = filtered.slice(effectiveOffset, effectiveOffset + effectiveLimit);
+      const nextOffset = effectiveOffset + page.length;
+      const hasMore = nextOffset < filtered.length;
+
+      const totalLine = normalizedPattern === null
+        ? `**Total:** ${modules.length} modules in \`agda/${tier}\`.`
+        : `**Total:** ${filtered.length} matches for \`${pattern}\` (out of ${modules.length} modules in \`agda/${tier}\`).`;
+      const rangeStart = page.length === 0 ? effectiveOffset : effectiveOffset + 1;
+      const rangeEnd = effectiveOffset + page.length;
+      const showingLine = page.length === 0
+        ? `**Showing:** none — \`offset: ${effectiveOffset}\` is past the end (${filtered.length} total).`
+        : `**Showing:** ${rangeStart}–${rangeEnd} of ${filtered.length}.`;
+
+      const lines = [
+        `## agda/${tier}`,
+        "",
+        totalLine,
+        showingLine,
+        "",
+      ];
+      if (page.length > 0) {
+        for (const m of page) lines.push(`- ${m}`);
+      }
+      if (hasMore) {
+        lines.push("");
+        lines.push(`**More results available.** Re-call with \`offset: ${nextOffset}\` to fetch the next page.`);
+      }
+      return lines.join("\n");
     },
   });
 
