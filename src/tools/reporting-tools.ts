@@ -17,6 +17,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AgdaSession } from "../agda-process.js";
 
 import { registerBugReportBundle, registerBugReportUpdateBundle } from "./register-bug-bundles.js";
+import { registerGoalCatalog } from "./register-goal-catalog.js";
 import { registerProtocolParity } from "./register-protocol-parity.js";
 import { registerSessionSnapshot } from "./register-session-snapshot.js";
 import { registerToolsCatalog } from "./register-tools-catalog.js";
@@ -31,4 +32,5 @@ export function register(
   registerBugReportBundle(server, session);
   registerBugReportUpdateBundle(server, session);
   registerSessionSnapshot(server, session, _repoRoot);
+  registerGoalCatalog(server, session, _repoRoot);
 }

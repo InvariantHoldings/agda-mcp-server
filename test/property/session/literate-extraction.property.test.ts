@@ -41,6 +41,13 @@ const arbCodeLine = fc.string({ minLength: 0, maxLength: 40 })
 
 const arbCodeBlock = fc.array(arbCodeLine, { minLength: 1, maxLength: 5 });
 
+// For the "at least one block" property, we need non-empty content.
+// RST blocks consisting only of empty/whitespace lines get trimmed away.
+const arbNonEmptyCodeBlock = fc.array(
+  arbCodeLine.filter((s) => s.trim().length > 0),
+  { minLength: 1, maxLength: 5 },
+);
+
 function wrapInFormat(format: LiterateFormat, code: string): string {
   switch (format) {
     case "latex":
@@ -138,7 +145,7 @@ test("blocks are ordered and non-overlapping", async () => {
 
 test("literate files with valid wrappers produce at least one block", async () => {
   await fc.assert(
-    fc.property(arbLiterateExt, arbCodeBlock, (extInfo, codeLines) => {
+    fc.property(arbLiterateExt, arbNonEmptyCodeBlock, (extInfo, codeLines) => {
       const code = codeLines.join("\n");
       const content = wrapInFormat(extInfo.format, code);
       const result = extractLiterateCode(`Module${extInfo.ext}`, content);

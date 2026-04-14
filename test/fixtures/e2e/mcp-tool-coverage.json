@@ -123,6 +123,12 @@
     "requiresLiveAgda": true
   },
   {
+    "tool": "agda_goal_catalog",
+    "suite": "test/unit/session/goal-catalog.test.ts",
+    "scenario": "goal catalog introspection",
+    "requiresLiveAgda": false
+  },
+  {
     "tool": "agda_goal_type",
     "suite": "test/integration/mcp/mcp-server.test.ts",
     "scenario": "goal access after load",
