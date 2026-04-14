@@ -165,3 +165,32 @@ test("result format always matches the detected format for the filename", async 
     }),
   );
 });
+
+const arbOtherLang = fc.constantFrom("haskell", "python", "javascript", "rust", "");
+
+test("non-agda fenced blocks never appear in extracted code (markdown/typst)", async () => {
+  // Use uniquely-tagged content so we can distinguish which block was extracted
+  const AGDA_TAG = "AGDA_UNIQUE_MARKER_42";
+  const OTHER_TAG = "OTHER_UNIQUE_MARKER_99";
+  await fc.assert(
+    fc.property(
+      fc.constantFrom(
+        { ext: ".lagda.md", format: "markdown" as const },
+        { ext: ".lagda.typ", format: "typst" as const },
+      ),
+      arbOtherLang,
+      (extInfo, otherLang) => {
+        const otherBlock = otherLang
+          ? `\`\`\`${otherLang}\n${OTHER_TAG}\n\`\`\``
+          : `\`\`\`\n${OTHER_TAG}\n\`\`\``;
+        const agdaBlock = `\`\`\`agda\n${AGDA_TAG}\n\`\`\``;
+        const content = `${otherBlock}\n\n${agdaBlock}`;
+        const result = extractLiterateCode(`M${extInfo.ext}`, content);
+        // Only the agda block should be extracted
+        expect(result.blocks).toHaveLength(1);
+        expect(result.code).toContain(AGDA_TAG);
+        expect(result.code).not.toContain(OTHER_TAG);
+      },
+    ),
+  );
+});

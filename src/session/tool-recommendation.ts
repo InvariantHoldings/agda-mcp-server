@@ -68,6 +68,17 @@ export function deriveToolRecommendations(
     return sortByPriority(recommendations);
   }
 
+  if (input.phase === "starting") {
+    addIfAvailable(recommendations, toolSet, input.availableTools, {
+      tool: "agda_session_snapshot",
+      rationale: "Session is starting up. Re-check status when the process is ready.",
+      priority: 1,
+      knownArgs: {},
+      blockers: ["Session is initializing."],
+    });
+    return sortByPriority(recommendations);
+  }
+
   if (input.phase === "busy") {
     addIfAvailable(recommendations, toolSet, input.availableTools, {
       tool: "agda_session_snapshot",

@@ -234,3 +234,156 @@ describe("extractLiterateCode edge cases", () => {
     expect(result.blocks[0].code).toBe("module Real where");
   });
 });
+
+describe("unclosed code blocks", () => {
+  it("preserves code from unclosed latex block", () => {
+    const content = [
+      "\\begin{code}",
+      "module Unclosed where",
+      "open import Data.Nat",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda", content);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].code).toContain("module Unclosed where");
+    expect(result.blocks[0].code).toContain("open import Data.Nat");
+  });
+
+  it("preserves code from unclosed markdown block", () => {
+    const content = [
+      "```agda",
+      "module Unclosed where",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.md", content);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].code).toBe("module Unclosed where");
+  });
+
+  it("preserves code from unclosed org block", () => {
+    const content = [
+      "#+begin_src agda2",
+      "module Unclosed where",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.org", content);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].code).toBe("module Unclosed where");
+  });
+
+  it("preserves code from unclosed tree block", () => {
+    const content = [
+      "\\agda{",
+      "module Unclosed where",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.tree", content);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].code).toBe("module Unclosed where");
+  });
+
+  it("preserves closed blocks + includes unclosed trailing block", () => {
+    const content = [
+      "```agda",
+      "module Closed where",
+      "```",
+      "",
+      "```agda",
+      "module Unclosed where",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.md", content);
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[0].code).toBe("module Closed where");
+    expect(result.blocks[1].code).toBe("module Unclosed where");
+  });
+});
+
+describe("language-aware fenced block parsing", () => {
+  it("skips bare fenced blocks without language annotation", () => {
+    const content = [
+      "```",
+      "not agda code",
+      "```",
+      "",
+      "```agda",
+      "module Real where",
+      "```",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.md", content);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].code).toBe("module Real where");
+  });
+
+  it("skips blocks annotated with other languages", () => {
+    const content = [
+      "```python",
+      "print('hello')",
+      "```",
+      "",
+      "```javascript",
+      "console.log('hi')",
+      "```",
+      "",
+      "```agda",
+      "module Real where",
+      "```",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.md", content);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].code).toBe("module Real where");
+  });
+
+  it("does not treat ```agda text inside a non-agda block as code", () => {
+    const content = [
+      "```markdown",
+      "Here is an example: ```agda means Agda code",
+      "```",
+      "",
+      "```agda",
+      "module Actual where",
+      "```",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.md", content);
+    // The text "```agda" on line 2 is inside a ```markdown block, so it
+    // should be ignored. Only the real ```agda block should be extracted.
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].code).toBe("module Actual where");
+  });
+
+  it("handles interleaved agda and non-agda blocks", () => {
+    const content = [
+      "# Module",
+      "",
+      "```agda",
+      "module A where",
+      "```",
+      "",
+      "Some prose",
+      "",
+      "```haskell",
+      "not agda",
+      "```",
+      "",
+      "```agda",
+      "open import Data.Nat",
+      "```",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.md", content);
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[0].code).toBe("module A where");
+    expect(result.blocks[1].code).toBe("open import Data.Nat");
+  });
+
+  it("handles typst files with same language-aware logic", () => {
+    const content = [
+      "= Title",
+      "",
+      "```python",
+      "print('skip')",
+      "```",
+      "",
+      "```agda",
+      "module T where",
+      "```",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.typ", content);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0].code).toBe("module T where");
+  });
+});

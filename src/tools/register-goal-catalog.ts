@@ -77,6 +77,7 @@ export function registerGoalCatalog(
 
       // For each goal, get type and context via goalTypeContext
       const goalInfos: Array<{ goalId: number; type: string; context: string[] }> = [];
+      let failedGoalQueries = 0;
 
       for (const goalId of goalIds) {
         try {
@@ -88,6 +89,7 @@ export function registerGoalCatalog(
           });
         } catch {
           // If a goal query fails (stale, etc), include with minimal info
+          failedGoalQueries++;
           goalInfos.push({
             goalId,
             type: "?",
@@ -103,13 +105,23 @@ export function registerGoalCatalog(
 
       const text = renderGoalCatalogText(catalog);
 
+      const warningParts: string[] = [];
+      if (failedGoalQueries > 0) {
+        warningParts.push(
+          `⚠️ ${failedGoalQueries}/${goalIds.length} goal queries failed — types shown as "?" may be stale.`,
+        );
+      }
+      const warningText = warningParts.length > 0
+        ? "\n" + warningParts.join("\n") + "\n"
+        : "";
+
       return makeToolResult(
         okEnvelope({
           tool: "agda_goal_catalog",
-          summary: `${catalog.goalCount} goal(s)${catalog.hasHoles ? " with holes" : ""}.`,
+          summary: `${catalog.goalCount} goal(s)${catalog.hasHoles ? " with holes" : ""}${failedGoalQueries > 0 ? ` (${failedGoalQueries} query failures)` : ""}.`,
           data: { ...catalog },
         }),
-        text,
+        text + warningText,
       );
     },
   });

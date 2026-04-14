@@ -127,31 +127,70 @@ function extractLatexBlocks(lines: string[]): CodeBlock[] {
     }
   }
 
+  // Handle unclosed block — include accumulated code rather than silently discarding
+  if (inBlock && codeLines.length > 0) {
+    blocks.push({
+      startLine,
+      endLine: lines.length,
+      code: codeLines.join("\n"),
+    });
+  }
+
   return blocks;
 }
 
 function extractFencedBlocks(lines: string[]): CodeBlock[] {
   const blocks: CodeBlock[] = [];
-  let inBlock = false;
+  let inAgdaBlock = false;
+  let inOtherBlock = false;
   let startLine = 0;
   let codeLines: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
-    if (!inBlock && /^```+\s*agda\s*$/i.test(trimmed)) {
-      inBlock = true;
-      startLine = i + 2; // 1-indexed, next line after ```agda
-      codeLines = [];
-    } else if (inBlock && /^```+\s*$/.test(trimmed)) {
-      blocks.push({
-        startLine,
-        endLine: i, // line before closing ```
-        code: codeLines.join("\n"),
-      });
-      inBlock = false;
-    } else if (inBlock) {
-      codeLines.push(lines[i]);
+
+    if (inAgdaBlock) {
+      // Inside an Agda block — look for closing fence
+      if (/^```+\s*$/.test(trimmed)) {
+        blocks.push({
+          startLine,
+          endLine: i, // line before closing ```
+          code: codeLines.join("\n"),
+        });
+        inAgdaBlock = false;
+      } else {
+        codeLines.push(lines[i]);
+      }
+    } else if (inOtherBlock) {
+      // Inside a non-Agda fenced block — skip until closing fence
+      if (/^```+\s*$/.test(trimmed)) {
+        inOtherBlock = false;
+      }
+    } else {
+      // Not inside any block — check for opening fences
+      if (/^```+\s*agda\s*$/i.test(trimmed)) {
+        // Agda code block
+        inAgdaBlock = true;
+        startLine = i + 2; // 1-indexed, next line after ```agda
+        codeLines = [];
+      } else if (/^```+/.test(trimmed)) {
+        // Any other fenced block (bare ``` or ```haskell, etc.)
+        // Only treat as a non-Agda block if it has content after
+        // the backticks (language annotation) OR is just bare ```.
+        // Either way, skip the whole block so its contents don't
+        // accidentally get matched as Agda code.
+        inOtherBlock = true;
+      }
     }
+  }
+
+  // Handle unclosed block — include accumulated code rather than silently discarding
+  if (inAgdaBlock && codeLines.length > 0) {
+    blocks.push({
+      startLine,
+      endLine: lines.length,
+      code: codeLines.join("\n"),
+    });
   }
 
   return blocks;
@@ -262,6 +301,15 @@ function extractOrgBlocks(lines: string[]): CodeBlock[] {
     }
   }
 
+  // Handle unclosed block — include accumulated code rather than silently discarding
+  if (inBlock && codeLines.length > 0) {
+    blocks.push({
+      startLine,
+      endLine: lines.length,
+      code: codeLines.join("\n"),
+    });
+  }
+
   return blocks;
 }
 
@@ -348,6 +396,15 @@ function extractTreeBlocks(lines: string[]): CodeBlock[] {
         codeLines.push(line);
       }
     }
+  }
+
+  // Handle unclosed \agda{ block — include accumulated code
+  if (inBlock && codeLines.length > 0) {
+    blocks.push({
+      startLine,
+      endLine: lines.length,
+      code: codeLines.join("\n"),
+    });
   }
 
   return blocks;

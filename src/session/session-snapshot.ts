@@ -131,6 +131,16 @@ export function deriveSuggestedActions(input: ActionInput): SuggestedAction[] {
     return actions;
   }
 
+  // Phase: starting — process is initializing
+  if (input.phase === "starting") {
+    actions.push({
+      tool: "agda_session_snapshot",
+      rationale: "Session is starting up. Re-check status when the process is ready.",
+      priority: 1,
+    });
+    return actions;
+  }
+
   // Phase: busy — wait
   if (input.phase === "busy") {
     return [{
@@ -138,6 +148,16 @@ export function deriveSuggestedActions(input: ActionInput): SuggestedAction[] {
       rationale: "Session is busy processing a command. Re-check status after it completes.",
       priority: 1,
     }];
+  }
+
+  // Phase: exiting — suggest reloading
+  if (input.phase === "exiting") {
+    actions.push({
+      tool: "agda_load",
+      rationale: "Session is shutting down. Restart by loading a file.",
+      priority: 1,
+    });
+    return actions;
   }
 
   // Stale file — suggest reload
