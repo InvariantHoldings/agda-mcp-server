@@ -201,6 +201,50 @@ test("empty delimited blocks produce zero extracted blocks", async () => {
   );
 });
 
+/** Build a literate file whose delimiters contain only whitespace lines. */
+function wrapWhitespaceOnly(format: LiterateFormat): string {
+  switch (format) {
+    case "latex":
+      return "\\begin{code}\n   \n  \n\\end{code}";
+    case "markdown":
+      return "```agda\n  \n   \n```";
+    case "typst":
+      return "```agda\n  \n```";
+    case "org":
+      return "#+begin_src agda2\n  \n#+end_src";
+    case "tree":
+      return "\\agda{\n   \n}";
+    case "rst":
+      return "::\n\n     \n\nnot indented";
+  }
+}
+
+test("whitespace-only delimited blocks produce zero extracted blocks", async () => {
+  await fc.assert(
+    fc.property(arbLiterateExt, (extInfo) => {
+      const content = wrapWhitespaceOnly(extInfo.format);
+      const result = extractLiterateCode(`Module${extInfo.ext}`, content);
+      // Every emitted block must have non-whitespace code
+      for (const block of result.blocks) {
+        expect(block.code.trim().length).toBeGreaterThan(0);
+      }
+    }),
+  );
+});
+
+test("every extracted block has non-whitespace code", async () => {
+  await fc.assert(
+    fc.property(arbLiterateExt, arbCodeBlock, (extInfo, codeLines) => {
+      const code = codeLines.join("\n");
+      const content = wrapInFormat(extInfo.format, code);
+      const result = extractLiterateCode(`Module${extInfo.ext}`, content);
+      for (const block of result.blocks) {
+        expect(block.code.trim().length).toBeGreaterThan(0);
+      }
+    }),
+  );
+});
+
 test("no extracted block has endLine < startLine", async () => {
   await fc.assert(
     fc.property(arbLiterateExt, arbCodeBlock, (extInfo, codeLines) => {

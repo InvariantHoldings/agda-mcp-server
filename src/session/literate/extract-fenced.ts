@@ -21,11 +21,12 @@ export function extractFencedBlocks(lines: string[]): CodeBlock[] {
     if (inAgdaBlock) {
       // Inside an Agda block — look for closing fence
       if (/^```+\s*$/.test(trimmed)) {
-        if (codeLines.length > 0) {
+        const code = codeLines.join("\n");
+        if (code.trim()) {
           blocks.push({
             startLine,
             endLine: i, // line before closing ```
-            code: codeLines.join("\n"),
+            code,
           });
         }
         inAgdaBlock = false;
@@ -54,12 +55,15 @@ export function extractFencedBlocks(lines: string[]): CodeBlock[] {
   }
 
   // Handle unclosed block — include accumulated code rather than silently discarding
-  if (inAgdaBlock && codeLines.length > 0) {
-    blocks.push({
-      startLine,
-      endLine: lines.length,
-      code: codeLines.join("\n"),
-    });
+  if (inAgdaBlock) {
+    const code = codeLines.join("\n");
+    if (code.trim()) {
+      blocks.push({
+        startLine,
+        endLine: lines.length,
+        code,
+      });
+    }
   }
 
   return blocks;

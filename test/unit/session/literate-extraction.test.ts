@@ -447,4 +447,36 @@ describe("empty block handling", () => {
     expect(result.blocks).toHaveLength(1);
     expect(result.blocks[0].code).toBe("module Real where");
   });
+
+  it("skips whitespace-only latex blocks", () => {
+    const content = [
+      "\\begin{code}",
+      "   ",
+      "  ",
+      "\\end{code}",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda", content);
+    expect(result.blocks).toHaveLength(0);
+  });
+
+  it("skips whitespace-only fenced blocks", () => {
+    const content = [
+      "```agda",
+      "  ",
+      "",
+      "```",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.md", content);
+    expect(result.blocks).toHaveLength(0);
+  });
+
+  it("skips whitespace-only org blocks", () => {
+    const content = [
+      "#+begin_src agda2",
+      "  ",
+      "#+end_src",
+    ].join("\n");
+    const result = extractLiterateCode("M.lagda.org", content);
+    expect(result.blocks).toHaveLength(0);
+  });
 });

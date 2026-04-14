@@ -20,11 +20,12 @@ export function extractOrgBlocks(lines: string[]): CodeBlock[] {
       startLine = i + 2; // 1-indexed, next line after #+begin_src
       codeLines = [];
     } else if (inBlock && trimmed === "#+end_src") {
-      if (codeLines.length > 0) {
+      const code = codeLines.join("\n");
+      if (code.trim()) {
         blocks.push({
           startLine,
           endLine: i, // line before #+end_src
-          code: codeLines.join("\n"),
+          code,
         });
       }
       inBlock = false;
@@ -34,12 +35,15 @@ export function extractOrgBlocks(lines: string[]): CodeBlock[] {
   }
 
   // Handle unclosed block — include accumulated code rather than silently discarding
-  if (inBlock && codeLines.length > 0) {
-    blocks.push({
-      startLine,
-      endLine: lines.length,
-      code: codeLines.join("\n"),
-    });
+  if (inBlock) {
+    const code = codeLines.join("\n");
+    if (code.trim()) {
+      blocks.push({
+        startLine,
+        endLine: lines.length,
+        code,
+      });
+    }
   }
 
   return blocks;
