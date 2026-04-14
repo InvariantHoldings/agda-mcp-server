@@ -16,14 +16,16 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { AgdaSession } from "./agda-process.js";
+import { AgdaSession, findAgdaBinary } from "./agda-process.js";
 import { PROJECT_ROOT, SERVER_REPO_ROOT, resolveProjectPath } from "./repo-root.js";
 import { getServerVersion } from "./server-version.js";
 
 import { registerCoreTools } from "./tools/register-core-tools.js";
+import { registerGlobalProvenance } from "./tools/tool-helpers.js";
 
 type ExtensionRegister = (
   server: McpServer,
@@ -31,8 +33,52 @@ type ExtensionRegister = (
   projectRoot: string,
 ) => void | Promise<void>;
 
-// Single shared session — Agda is stateful, one file at a time
+// Single shared session — the authoritative source of truth for Agda
+// session state in the running server. Every load-family tool
+// (agda_load, agda_load_no_metas, agda_typecheck, ...) MUST route
+// through this instance so currentFile, lastLoadedMtime, goalIds, and
+// the repo's _build/ interface state stay coherent across tool calls.
+// A second, parallel AgdaSession would share _build/ on disk but not
+// its session state, leaving tools with divergent views of what is
+// loaded. See issue #39 for the concrete regression this invariant
+// fixes.
 const session = new AgdaSession(PROJECT_ROOT);
+
+// Stamp the server version and (best-effort) the Agda version into every
+// tool response's provenance block. Agents repeatedly need to know which
+// toolchain produced a given response — without this stamp they either
+// re-call agda_show_version per tool use or infer from context. Version
+// capture is best-effort: if `agda --version` fails, the provenance
+// entry is simply omitted so tools continue to work.
+//
+// SECURITY: we use execFileSync, not execSync, because agdaBin is derived
+// from PROJECT_ROOT which is derived from the AGDA_MCP_ROOT env var (and
+// can also be the AGDA_BIN env var directly). execSync's string form runs
+// the command through `/bin/sh -c`, which would interpret any shell
+// metacharacter in an attacker-controlled env var as a command separator
+// (CVE class: CWE-78). execFileSync calls execvp() on the raw path with
+// the args array, so the shell is never involved and no metacharacter
+// interpretation occurs. The `shell: false` option is the default and is
+// passed explicitly as belt-and-suspenders to prevent a future maintainer
+// from re-enabling shell semantics.
+registerGlobalProvenance("serverVersion", getServerVersion());
+try {
+  const agdaBin = findAgdaBinary(PROJECT_ROOT);
+  const rawVersion = execFileSync(agdaBin, ["--version"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: 5000,
+    shell: false,
+  });
+  const firstLine = rawVersion.split(/\r?\n/u)[0]?.trim();
+  if (firstLine) {
+    registerGlobalProvenance("agdaVersion", firstLine);
+  }
+} catch {
+  // Agda not reachable from the spawn point — skip the provenance stamp.
+  // The server will still run (e.g. in harness tests that don't need
+  // Agda, or when the binary is discovered later via AGDA_BIN).
+}
 
 const server = new McpServer({
   name: "agda-mcp-server",

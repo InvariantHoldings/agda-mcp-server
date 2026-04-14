@@ -18,6 +18,7 @@ import { decodeGoalDisplayResponses } from "../protocol/responses/goal-display.j
 import {
   decodeCaseSplitResponses,
   decodeGiveLikeResponse,
+  resolveGiveReplacementText,
 } from "../protocol/responses/proof-actions.js";
 import { decodeDisplayInfoEvents } from "../protocol/responses/display-info.js";
 import { decodeLoadDisplayResponses } from "../protocol/responses/load-display.js";
@@ -114,7 +115,10 @@ export async function give(
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);
-  return { result: decodeGiveLikeResponse(responses) };
+  return {
+    result: decodeGiveLikeResponse(responses),
+    replacementText: resolveGiveReplacementText(responses, expr),
+  };
 }
 
 /** Refine a goal — apply a function and create subgoals. */
@@ -129,7 +133,10 @@ export async function refine(
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);
-  return { result: decodeGiveLikeResponse(responses) };
+  return {
+    result: decodeGiveLikeResponse(responses),
+    replacementText: resolveGiveReplacementText(responses, expr),
+  };
 }
 
 /** Refine a goal using Agda's exact Cmd_refine command. */
@@ -144,7 +151,10 @@ export async function refineExact(
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);
-  return { result: decodeGiveLikeResponse(responses) };
+  return {
+    result: decodeGiveLikeResponse(responses),
+    replacementText: resolveGiveReplacementText(responses, expr),
+  };
 }
 
 /** Introduce a lambda or constructor using Agda's exact Cmd_intro command. */
@@ -159,7 +169,10 @@ export async function intro(
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);
-  return { result: decodeGiveLikeResponse(responses) };
+  return {
+    result: decodeGiveLikeResponse(responses),
+    replacementText: resolveGiveReplacementText(responses, expr),
+  };
 }
 
 /** Auto-solve a single goal. */
@@ -179,24 +192,25 @@ export async function autoOne(
 /** List all unsolved metavariables (goals). */
 export async function metas(
   ctx: AgdaCommandContext,
-): Promise<{ goals: AgdaGoal[]; text: string }> {
+): Promise<{ goals: AgdaGoal[]; text: string; errors: string[]; warnings: string[] }> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
     ctx.iotcm(rewriteTopLevelCommand("Cmd_metas", "Normalised")),
   );
   throwOnFatalProtocolStderr(responses);
 
+  const decoded = decodeLoadDisplayResponses(responses);
   const text = decodeDisplayInfoEvents(responses)
     .map((event) => event.text)
     .filter(Boolean)
     .at(-1) ?? "";
-  const goals = decodeLoadDisplayResponses(responses).visibleGoals.map((goal) => ({
+  const goals = decoded.visibleGoals.map((goal) => ({
     goalId: goal.goalId,
     type: goal.type,
     context: [] as string[],
   }));
 
-  const derivedGoalIds = decodeLoadDisplayResponses(responses).visibleGoals.map((goal) => goal.goalId);
+  const derivedGoalIds = decoded.visibleGoals.map((goal) => goal.goalId);
   ctx.syncGoalIdsFromResponses(responses);
 
   // Fall back only when Cmd_metas produced no goal-state evidence at all.
@@ -204,5 +218,10 @@ export async function metas(
     goals.push(...ctx.goalIds.map((id) => ({ goalId: id, type: "?", context: [] as string[] })));
   }
 
-  return { goals, text };
+  return {
+    goals,
+    text,
+    errors: decoded.errors,
+    warnings: decoded.warnings,
+  };
 }

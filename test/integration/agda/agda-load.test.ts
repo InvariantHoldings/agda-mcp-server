@@ -1,7 +1,8 @@
 import { test, expect } from "vitest";
 import { resolve } from "node:path";
 
-import { AgdaSession, typeCheckBatch } from "../../../src/agda-process.js";
+import { AgdaSession } from "../../../src/agda-process.js";
+import { typeCheckDisposable } from "../../helpers/typecheck-disposable.js";
 import {
   detectAgdaVersion,
   parseAgdaVersion,
@@ -77,7 +78,7 @@ it("WithHoles.agda: success, >=1 goal with valid ID", async () => {
   expect(r.goals[0].goalId >= 0).toBeTruthy();
 });
 
-it("WithHoles.agda: agda_load succeeds but agda_load_no_metas fails", async () => {
+itSince("2.8.0")("WithHoles.agda: agda_load succeeds but agda_load_no_metas fails", async () => {
   const load = await loadFixture("WithHoles.agda");
   const strict = await loadFixtureNoMetas("WithHoles.agda");
 
@@ -234,7 +235,7 @@ it("WithAbstract.agda: detects invisible goals in abstract block", async () => {
   expect(typeof r.invisibleGoalCount).toBe("number");
 });
 
-it("WithAbstract.agda: invisible holes fail strict load", async () => {
+itSince("2.8.0")("WithAbstract.agda: invisible holes fail strict load", async () => {
   const load = await loadFixture("WithAbstract.agda");
   const strict = await loadFixtureNoMetas("WithAbstract.agda");
 
@@ -245,7 +246,7 @@ it("WithAbstract.agda: invisible holes fail strict load", async () => {
   ).toBeTruthy();
 });
 
-it("InferredMeta.agda: unresolved inferred-style metas fail strict load", async () => {
+itSince("2.8.0")("InferredMeta.agda: unresolved inferred-style metas fail strict load", async () => {
   const load = await loadFixture("InferredMeta.agda");
   const strict = await loadFixtureNoMetas("InferredMeta.agda");
 
@@ -282,13 +283,13 @@ itSince("2.6.0")("UniverseCumulativity.agda: loads with --cumulativity", async (
 
 // ── typecheck matches load ───────────────────────────────
 
-it("typeCheckBatch matches agda_load for clean file", async () => {
-  const batch = await typeCheckBatch("CompleteFixture.agda", FIXTURES);
+it("typeCheckDisposable matches agda_load for clean file", async () => {
+  const batch = await typeCheckDisposable("CompleteFixture.agda", FIXTURES);
   expect(batch.success).toBe(true);
 });
 
-it("typeCheckBatch matches agda_load for type error", async () => {
-  const batch = await typeCheckBatch("TypeError.agda", FIXTURES);
+it("typeCheckDisposable matches agda_load for type error", async () => {
+  const batch = await typeCheckDisposable("TypeError.agda", FIXTURES);
   expect(batch.success).toBe(false);
   expect(batch.errors.length >= 1).toBeTruthy();
 });

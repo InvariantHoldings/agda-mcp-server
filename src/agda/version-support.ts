@@ -15,9 +15,13 @@ import {
 
 // ── Literate format support ─────────────────────────────────────────
 
-/** All recognised Agda source file extensions and their minimum Agda version. */
-const AGDA_SOURCE_EXTENSIONS: ReadonlyArray<{ suffix: string; minVersion: AgdaVersion }> = [
-  { suffix: ".agda",        minVersion: parseAgdaVersion("0.0") },
+/**
+ * All recognised Agda source file extensions and the minimum Agda
+ * version that introduced each one. `.agda` predates the version
+ * numbers we track, so its `minVersion` is absent (always supported).
+ */
+const AGDA_SOURCE_EXTENSIONS: ReadonlyArray<{ suffix: string; minVersion?: AgdaVersion }> = [
+  { suffix: ".agda" },
   { suffix: ".lagda",       minVersion: parseAgdaVersion("2.5.1") },
   { suffix: ".lagda.tex",   minVersion: parseAgdaVersion("2.5.3") },
   { suffix: ".lagda.md",    minVersion: parseAgdaVersion("2.5.3") },
@@ -38,7 +42,7 @@ export function isAgdaSourceFile(
 ): boolean {
   for (const ext of AGDA_SOURCE_EXTENSIONS) {
     if (filename.endsWith(ext.suffix)) {
-      if (agdaVersion && !versionAtLeast(agdaVersion, ext.minVersion)) {
+      if (agdaVersion && ext.minVersion && !versionAtLeast(agdaVersion, ext.minVersion)) {
         return false;
       }
       return true;
@@ -53,7 +57,7 @@ export function isAgdaSourceFile(
  */
 export function supportedSourceExtensions(agdaVersion?: AgdaVersion): string[] {
   return AGDA_SOURCE_EXTENSIONS
-    .filter((ext) => !agdaVersion || versionAtLeast(agdaVersion, ext.minVersion))
+    .filter((ext) => !agdaVersion || !ext.minVersion || versionAtLeast(agdaVersion, ext.minVersion))
     .map((ext) => ext.suffix);
 }
 
