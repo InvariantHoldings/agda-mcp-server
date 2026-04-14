@@ -49,6 +49,7 @@
   { "tool": "agda_check_postulates", "suite": "test/integration/mcp/mcp-remaining-tools-e2e.test.ts", "scenario": "detect postulates in temporary project", "requiresLiveAgda": false },
   { "tool": "agda_search_definitions", "suite": "test/integration/mcp/mcp-remaining-tools-e2e.test.ts", "scenario": "search definitions in temporary project", "requiresLiveAgda": false },
   { "tool": "agda_cache_info", "suite": "test/unit/tools/cache-tools.test.ts", "scenario": "cache info reports separated and local .agdai artifacts", "requiresLiveAgda": false },
+  { "tool": "agda_impact", "suite": "test/unit/tools/impact-tool.test.ts", "scenario": "impact reports direct and transitive dependents", "requiresLiveAgda": false },
 
   { "tool": "agda_why_in_scope", "suite": "test/integration/mcp/mcp-server.test.ts", "scenario": "navigation and query tools", "requiresLiveAgda": true },
   { "tool": "agda_show_module", "suite": "test/integration/mcp/mcp-server.test.ts", "scenario": "navigation and query tools", "requiresLiveAgda": true },

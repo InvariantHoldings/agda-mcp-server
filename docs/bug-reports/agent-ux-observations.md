@@ -53,12 +53,30 @@ machine-readable `suggested_action` (e.g.
 can then auto-batch all `mechanical-*` fixes in a single pass and reserve
 interactive sessions for `proof-obligation`.
 
-### 2.3 Dependency impact query
+### 2.3 Dependency impact query — **✓ shipped**
 
-**Ask:** `agda_impact file.agda` → list of files that transitively import
-it. Lets an agent pick "fix the file whose repair unblocks the most work"
-instead of alphabetical order. Cheap to build from the existing module
-resolver.
+**Ask (now shipped):** `agda_impact file.agda` returns the file's direct
+and transitive dependents in both directions. The structured response
+includes:
+
+- `directDependents` / `transitiveDependents` — modules that import this
+  file (the answer to "who is unblocked when I fix this?")
+- `directDependencies` / `transitiveDependencies` — modules this file
+  imports (cheap byproduct of the same parse)
+- `graphSize` — sanity check that the scanner saw the right number of
+  modules under the project root
+
+The graph is rebuilt from disk each call so newly added or moved files
+are picked up immediately. The walker skips `_build/`, `.git/`,
+`node_modules/`, and dotfile directories so a vendored copy of stdlib
+can't pollute the impact set. The parser is comment-aware (block and
+line) and `using`/`hiding`/`renaming`/`as`/`public` clauses are stripped
+from the import target so a `open import Data.List using (List)` still
+resolves to `Data.List`. Implementation:
+[`src/agda/import-graph.ts`](../../src/agda/import-graph.ts) and
+[`src/tools/impact-tool.ts`](../../src/tools/impact-tool.ts); coverage
+in [`test/unit/agda/import-graph.test.ts`](../../test/unit/agda/import-graph.test.ts)
+and [`test/unit/tools/impact-tool.test.ts`](../../test/unit/tools/impact-tool.test.ts).
 
 ### 2.4 Pagination and filtering on `agda_list_modules` — **✓ shipped**
 
