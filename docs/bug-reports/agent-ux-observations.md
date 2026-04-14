@@ -5,9 +5,9 @@
 **Consumer:** an AI coding agent performing mechanical repair and theorem
 extension across a large multi-file Agda project (several hundred modules,
 multiple subdirectories).
-**Status:** working document. Items marked **✓ shipped** are in the repo today.
-Items marked **→ tracked on ...** are addressed on a named branch or open PR.
-Everything else is an open ask.
+**Status:** working document — remaining open asks only. Shipped items are
+pruned on each release; check `git log docs/bug-reports/agent-ux-observations.md`
+to see which asks were resolved in which release.
 
 Every item below is tied to a specific pain observed during the session, not
 speculation. The point of the document is to turn "this feels wrong" into a
@@ -52,49 +52,6 @@ machine-readable `suggested_action` (e.g.
 `{action: "add_import", symbol: "proj₁", from: "Data.Product"}`). An agent
 can then auto-batch all `mechanical-*` fixes in a single pass and reserve
 interactive sessions for `proof-obligation`.
-
-### 2.3 Dependency impact query — **✓ shipped**
-
-**Ask (now shipped):** `agda_impact file.agda` returns the file's direct
-and transitive dependents in both directions. The structured response
-includes:
-
-- `directDependents` / `transitiveDependents` — modules that import this
-  file (the answer to "who is unblocked when I fix this?")
-- `directDependencies` / `transitiveDependencies` — modules this file
-  imports (cheap byproduct of the same parse)
-- `graphSize` — sanity check that the scanner saw the right number of
-  modules under the project root
-
-The graph is rebuilt from disk each call so newly added or moved files
-are picked up immediately. The walker skips `_build/`, `.git/`,
-`node_modules/`, and dotfile directories so a vendored copy of stdlib
-can't pollute the impact set. The parser is comment-aware (block and
-line) and `using`/`hiding`/`renaming`/`as`/`public` clauses are stripped
-from the import target so a `open import Data.List using (List)` still
-resolves to `Data.List`. Implementation:
-[`src/agda/import-graph.ts`](../../src/agda/import-graph.ts) and
-[`src/tools/impact-tool.ts`](../../src/tools/impact-tool.ts); coverage
-in [`test/unit/agda/import-graph.test.ts`](../../test/unit/agda/import-graph.test.ts)
-and [`test/unit/tools/impact-tool.test.ts`](../../test/unit/tools/impact-tool.test.ts).
-
-### 2.4 Pagination and filtering on `agda_list_modules` — **✓ shipped**
-
-`agda_list_modules` on a large subdirectory can return tens of kilobytes of
-text and blow past an MCP client's token budget. A single listing tool
-should never be the thing that forces an agent to fall back to shell `find`.
-
-**Ask (now shipped):** `agda_list_modules` accepts `offset`, `limit`, and
-`pattern` parameters. Default page size is 25; `limit` is capped at 500.
-`pattern` is a case-insensitive substring match on the relative path. Every
-response includes the unfiltered total module count, the filtered match
-count (when a pattern is set), and the `Showing N–M of K` range; if more
-results remain, the response footer prints the exact `offset` value to use
-on the follow-up call. See
-[`src/tools/file-tools.ts`](../../src/tools/file-tools.ts) for the
-implementation and
-[`test/unit/tools/file-tools.test.ts`](../../test/unit/tools/file-tools.test.ts)
-for the pagination/filter test cases.
 
 ---
 
@@ -261,49 +218,11 @@ that grep-match paths.
 **Ask:** post-process compiler error messages in the MCP layer to resolve
 those placeholders to `<ext>` or the concrete list before returning.
 
-### 6.2 Stale `.agdai` cache ambiguity — **✓ shipped**
-
-The session-state desync in §1.1 was consistent with one code path reading a
-cached `.agdai` and another not. The server should either always trust the
-cache or always bust it — and it should tell the agent which mode it's in.
-
-**Shipped:**
-
-- **`agda_cache_info(file)`** — new structured tool. Reports every `.agdai`
-  artifact for the given source: kind (`separated` under
-  `_build/<version>/agda` vs `local` next to the source), the Agda version
-  that produced it, the cache mtime, the source mtime, and a `fresh` boolean.
-  When stale artifacts exist the response prints the exact
-  `forceRecompile: true` follow-up. Implementation:
-  [`src/tools/cache-tools.ts`](../../src/tools/cache-tools.ts) on top of the
-  layout helpers in [`src/agda/agdai-cache.ts`](../../src/agda/agdai-cache.ts);
-  unit coverage in [`test/unit/tools/cache-tools.test.ts`](../../test/unit/tools/cache-tools.test.ts).
-
-- **`forceRecompile: true` on `agda_load`** — opt-in escape hatch that
-  deletes every `.agdai` for the source (both the separated and the local
-  layout) before sending Cmd_load. The list of busted paths surfaces both as
-  a `force-recompile` info diagnostic and as a `bustedAgdaiPaths` field on
-  the structured response. End-to-end coverage against pinned Agda 2.9.0 in
-  [`test/integration/agda/agda-force-recompile.test.ts`](../../test/integration/agda/agda-force-recompile.test.ts).
-
-The cache helper deliberately mirrors Agda's own `Agda.Interaction.FindFile.toIFile`
-formula (project root via the closest ancestor `.agda-lib`, then
-`<root>/_build/<version>/agda/<rel>.agdai`, with the local-interface
-fallback `<sourceDir>/<basename>.agdai` when no `.agda-lib` exists),
-verified empirically against `.cache/agda/2.9.0/bin/agda`. The unit
-test [`test/unit/agda/agdai-cache.test.ts`](../../test/unit/agda/agdai-cache.test.ts)
-also pins the defensive case where a stray `_build/` from a sibling project
-must not be misidentified as a project root.
-
 ---
 
 ## Priority ranking
 
-Shipped in recent releases:
-
-- §4.3 set-diff half of goal-ID renumbering (PR #37). ✓
-
-If one afternoon of server work is available after that, spend it on:
+If one afternoon of server work is available, spend it on:
 
 1. **§2.2 pre-load triage classifier** — biggest throughput win on a large
    codebase.
@@ -311,12 +230,9 @@ If one afternoon of server work is available after that, spend it on:
    build.
 3. **§4.1 module-wide `agda_term_search`** — turns the interactive loop
    from three round-trips to one on most applications.
-4. **§2.1 / §2.3 bulk status + dependency impact** — makes a many-hundred
-   module codebase actually navigable.
-5. **§6.2 `forceRecompile` / `agda_cache_info`** — stale `.agdai` escape
-   hatch; directly complements the #39 fix.
-6. **§4.3 declaration-site-stable goal identity** — the `renumbered`
-   mapping the doc originally asks for; set diff is already shipped.
+4. **§2.1 bulk status with cascade deduplication** — the other half of what
+   makes a many-hundred module codebase actually navigable. (The dependency
+   half, §2.3 `agda_impact`, already shipped.)
 
 Everything after that is incremental.
 
