@@ -133,6 +133,28 @@ test("busy phase never recommends proof tools", async () => {
   );
 });
 
+test("starting phase suggests snapshot, never proof tools", async () => {
+  await fc.assert(
+    fc.property(arbClassification, (classification) => {
+      const recs = deriveToolRecommendations({
+        phase: "starting",
+        loadedFile: null,
+        stale: false,
+        goalIds: [],
+        classification,
+        availableTools: fakeManifest,
+      });
+      const proofTools = ["agda_goal_type", "agda_case_split", "agda_auto", "agda_give", "agda_refine"];
+      for (const rec of recs) {
+        expect(proofTools).not.toContain(rec.tool);
+      }
+      if (recs.length > 0) {
+        expect(recs[0].tool).toBe("agda_session_snapshot");
+      }
+    }),
+  );
+});
+
 test("no duplicate tool recommendations", async () => {
   await fc.assert(
     fc.property(arbInput, (input) => {

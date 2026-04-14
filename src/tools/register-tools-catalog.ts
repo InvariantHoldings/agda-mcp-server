@@ -15,7 +15,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AgdaSession, getAgdaCapabilities } from "../agda-process.js";
 import { getServerVersion } from "../server-version.js";
 
-import { listToolManifest } from "./manifest.js";
+import { listToolManifest, listToolSchemas } from "./manifest.js";
 import { makeToolResult, okEnvelope, registerStructuredTool } from "./tool-helpers.js";
 import { toolsCatalogDataSchema, tryGetAgdaVersion } from "./reporting-schemas.js";
 
@@ -28,6 +28,7 @@ export function registerToolsCatalog(server: McpServer, session: AgdaSession): v
     outputDataSchema: toolsCatalogDataSchema,
     callback: async () => {
       const tools = listToolManifest();
+      const schemas = listToolSchemas();
       const serverVersion = getServerVersion();
       // Trigger version detection if it hasn't run yet (e.g. when this
       // tool is invoked before any other Agda command). tryGetAgdaVersion
@@ -61,11 +62,23 @@ export function registerToolsCatalog(server: McpServer, session: AgdaSession): v
         output += `**Structured give result (2.9.0+):** ${structuredGiveResult ? "yes" : "no"}\n`;
       }
       output += "\n";
+      const schemaMap = new Map(schemas.map((s) => [s.name, s]));
       for (const tool of tools) {
         const commands = tool.protocolCommands.length > 0
           ? tool.protocolCommands.join(", ")
           : "(none)";
         output += `- \`${tool.name}\` [${tool.category}] — ${commands}\n`;
+        const schema = schemaMap.get(tool.name);
+        if (schema) {
+          const inputKeys = Object.entries(schema.inputSchema);
+          const outputKeys = Object.entries(schema.outputSchema);
+          if (inputKeys.length > 0) {
+            output += `  Input: ${inputKeys.map(([k, v]) => `${k}: ${v}`).join(", ")}\n`;
+          }
+          if (outputKeys.length > 0) {
+            output += `  Output: ${outputKeys.map(([k, v]) => `${k}: ${v}`).join(", ")}\n`;
+          }
+        }
       }
 
       return makeToolResult(

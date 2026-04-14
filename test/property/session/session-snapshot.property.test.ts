@@ -175,3 +175,37 @@ test("busy phase never suggests proof-action tools", async () => {
     }),
   );
 });
+
+test("starting phase always suggests agda_session_snapshot", async () => {
+  await fc.assert(
+    fc.property(arbClassification, fc.boolean(), (classification, stale) => {
+      const actions = deriveSuggestedActions({
+        phase: "starting",
+        classification,
+        hasHoles: false,
+        goalCount: 0,
+        stale,
+        loadedFile: null,
+      });
+      expect(actions).toHaveLength(1);
+      expect(actions[0].tool).toBe("agda_session_snapshot");
+    }),
+  );
+});
+
+test("exiting phase always suggests agda_load", async () => {
+  await fc.assert(
+    fc.property(arbClassification, fc.boolean(), (classification, stale) => {
+      const actions = deriveSuggestedActions({
+        phase: "exiting",
+        classification,
+        hasHoles: false,
+        goalCount: 0,
+        stale,
+        loadedFile: "/x.agda",
+      });
+      expect(actions).toHaveLength(1);
+      expect(actions[0].tool).toBe("agda_load");
+    }),
+  );
+});
