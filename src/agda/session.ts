@@ -81,6 +81,7 @@ export class AgdaSession {
   lastLoadedMtime: number | null = null;
   lastClassification: string | null = null;
   lastLoadedAt: number | null = null;
+  lastInvisibleGoalCount = 0;
   private libraryRegistration: LibraryRegistration | null = null;
   private readonly transport = new AgdaTransport();
   private commandQueue: Promise<unknown> = Promise.resolve();
@@ -120,6 +121,7 @@ export class AgdaSession {
     // Process died or never started — reset stale state
     this.currentFile = null;
     this.goalIds = [];
+    this.lastInvisibleGoalCount = 0;
 
     const agdaBin = findAgdaBinary(this.repoRoot);
     const registration = this.getLibraryRegistration();
@@ -144,6 +146,7 @@ export class AgdaSession {
       this.lastLoadedMtime = null;
       this.lastClassification = null;
       this.lastLoadedAt = null;
+      this.lastInvisibleGoalCount = 0;
       this.exiting = false;
       // Reset version detection so the next process start re-detects cleanly.
       this.detectedVersion = null;
@@ -412,6 +415,11 @@ export class AgdaSession {
     return this.lastLoadedAt;
   }
 
+  /** Get the invisible goal count from the most recent load. */
+  getInvisibleGoalCount(): number {
+    return this.lastInvisibleGoalCount;
+  }
+
   /** Get the current high-level session phase. */
   getPhase(): SessionPhase {
     return deriveSessionPhase({
@@ -435,6 +443,7 @@ export class AgdaSession {
     this.lastLoadedMtime = null;
     this.lastClassification = null;
     this.lastLoadedAt = null;
+    this.lastInvisibleGoalCount = 0;
     this.detectedVersion = null;
     this.versionDetectionAttempts = 0;
     this.transport.destroy();

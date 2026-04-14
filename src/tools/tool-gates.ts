@@ -109,7 +109,14 @@ export function sessionErrorStateGate<T extends Record<string, unknown>>(
       summary,
       classification: "unavailable",
       data: emptyData,
-      diagnostics: [errorDiagnostic(summary, "session-unavailable")],
+      diagnostics: [
+        errorDiagnostic(summary, "session-unavailable", "agda_load"),
+        infoDiagnostic(
+          "Fix the type errors in the source file, then call agda_load to reload.",
+          "recovery-hint",
+          "agda_load",
+        ),
+      ],
     }),
     summary,
   );
@@ -132,6 +139,13 @@ export function validateGoalId(
         summary: "No file loaded. Call `agda_load` first.",
         classification: "no-loaded-file",
         data: { goalId },
+        diagnostics: [
+          errorDiagnostic(
+            "No file loaded. Call `agda_load` first.",
+            "no-loaded-file",
+            "agda_load",
+          ),
+        ],
       }),
     );
   }
@@ -154,6 +168,7 @@ export function validateGoalId(
           infoDiagnostic(
             "Run `agda_load` to refresh goals after modifying the file.",
             "reload-hint",
+            "agda_load",
           ),
         ],
       }),

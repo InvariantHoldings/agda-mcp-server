@@ -18,6 +18,8 @@ export interface ToolDiagnostic {
   severity: "error" | "warning" | "info";
   message: string;
   code?: string;
+  /** Machine-readable hint: the MCP tool an agent should call next to resolve this diagnostic. */
+  nextAction?: string;
 }
 
 export interface ToolEnvelope<T extends Record<string, unknown>> {
@@ -43,6 +45,7 @@ export const diagnosticSchema = z.object({
   severity: z.enum(["error", "warning", "info"]),
   message: z.string(),
   code: z.string().optional(),
+  nextAction: z.string().optional(),
 });
 
 const envelopeBaseSchema = z.object({
@@ -75,16 +78,16 @@ export function makeToolResult<T extends Record<string, unknown>>(
   };
 }
 
-export function infoDiagnostic(message: string, code?: string): ToolDiagnostic {
-  return { severity: "info", message, code };
+export function infoDiagnostic(message: string, code?: string, nextAction?: string): ToolDiagnostic {
+  return { severity: "info", message, code, nextAction };
 }
 
-export function warningDiagnostic(message: string, code?: string): ToolDiagnostic {
-  return { severity: "warning", message, code };
+export function warningDiagnostic(message: string, code?: string, nextAction?: string): ToolDiagnostic {
+  return { severity: "warning", message, code, nextAction };
 }
 
-export function errorDiagnostic(message: string, code?: string): ToolDiagnostic {
-  return { severity: "error", message, code };
+export function errorDiagnostic(message: string, code?: string, nextAction?: string): ToolDiagnostic {
+  return { severity: "error", message, code, nextAction };
 }
 
 export function okEnvelope<T extends Record<string, unknown>>(args: {

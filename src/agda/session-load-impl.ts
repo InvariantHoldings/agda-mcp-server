@@ -140,6 +140,7 @@ export async function runLoad(
   session.goalIds = goalIds;
   session.lastClassification = classification;
   session.lastLoadedAt = Date.now();
+  session.lastInvisibleGoalCount = parsed.invisibleGoalCount;
 
   logger.trace("load complete", {
     file: absPath,
@@ -185,6 +186,7 @@ export async function runLoadNoMetas(
   session.lastLoadedMtime = statSync(absPath).mtimeMs;
   session.lastClassification = parsed.classification;
   session.lastLoadedAt = Date.now();
+  session.lastInvisibleGoalCount = parsed.invisibleGoalCount;
 
   return {
     success: parsed.success,

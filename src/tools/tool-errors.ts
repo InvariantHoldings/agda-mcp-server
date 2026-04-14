@@ -10,6 +10,7 @@ import { PathSandboxError } from "../repo-root.js";
 
 import {
   errorDiagnostic,
+  infoDiagnostic,
   errorEnvelope,
   makeToolResult,
   type ToolDiagnostic,
@@ -43,7 +44,13 @@ export function missingPathToolError(kind: "file" | "directory", path: string): 
   return new ToolInvocationError({
     message,
     classification: "not-found",
-    diagnostics: [errorDiagnostic(message, "not-found")],
+    diagnostics: [
+      errorDiagnostic(message, "not-found"),
+      infoDiagnostic(
+        "Check the file path relative to the project root.",
+        "path-hint",
+      ),
+    ],
     data: { path },
   });
 }
@@ -63,7 +70,11 @@ export function toToolInvocationError(err: unknown): ToolInvocationError {
   }
 
   const message = err instanceof Error ? err.message : String(err);
-  return new ToolInvocationError({ message: `Error: ${message}` });
+  return new ToolInvocationError({
+    message: `Error: ${message}`,
+    classification: "tool-error",
+    diagnostics: [errorDiagnostic(`Error: ${message}`, "unexpected-error")],
+  });
 }
 
 export function makeTextToolErrorResult(

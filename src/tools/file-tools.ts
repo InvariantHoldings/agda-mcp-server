@@ -12,6 +12,7 @@ import { isAgdaSourceFile, filePathDescription } from "../agda/version-support.j
 import { logger } from "../agda/logger.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import { missingPathToolError, ToolInvocationError, registerTextTool } from "./tool-helpers.js";
+import { extractLiterateCode } from "../session/literate-extraction.js";
 
 /**
  * Default page size for `agda_list_modules`. Sized so a single response
@@ -46,21 +47,52 @@ export function register(
   registerTextTool({
     server,
     name: "agda_read_module",
-    description: "Read an Agda module file and return its contents with line numbers.",
+    description: "Read an Agda module file and return its contents with line numbers. For literate files (.lagda.md, .lagda.tex, etc.), use `codeOnly: true` to extract just the Agda code blocks, stripping prose wrappers.",
     category: "navigation",
-    inputSchema: { file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)) },
-    callback: async ({ file }: { file: string }) => {
+    inputSchema: {
+      file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
+      codeOnly: z.boolean().optional().describe("When true, extract only Agda code blocks from literate files, stripping prose. Has no effect on plain .agda files."),
+    },
+    callback: async ({ file, codeOnly }: { file: string; codeOnly?: boolean }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(requestedFilePath)) {
         throw missingPathToolError("file", requestedFilePath);
       }
       const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const fileContent = readFileSync(filePath, "utf-8");
+      const relPath = relative(repoRoot, requestedFilePath);
+
+      if (codeOnly) {
+        const extraction = extractLiterateCode(filePath, fileContent);
+        if (extraction.format === null) {
+          // Plain .agda — codeOnly has no effect, return as normal
+          const numbered = fileContent
+            .split("\n")
+            .map((line, i) => `${String(i + 1).padStart(4)} | ${line}`)
+            .join("\n");
+          return `## ${relPath}\n\n\`\`\`agda\n${numbered}\n\`\`\``;
+        }
+
+        if (extraction.blocks.length === 0) {
+          return `## ${relPath} (code only)\n\nNo Agda code blocks found in this ${extraction.format} literate file.`;
+        }
+
+        let output = `## ${relPath} (code only — ${extraction.format} format, ${extraction.blocks.length} block(s))\n\n`;
+        for (const block of extraction.blocks) {
+          const numbered = block.code
+            .split("\n")
+            .map((line, lineIdx) => `${String(block.startLine + lineIdx).padStart(4)} | ${line}`)
+            .join("\n");
+          output += `\`\`\`agda\n${numbered}\n\`\`\`\n\n`;
+        }
+        return output.trimEnd();
+      }
+
       const numbered = fileContent
         .split("\n")
         .map((line, i) => `${String(i + 1).padStart(4)} | ${line}`)
         .join("\n");
-      return `## ${relative(repoRoot, requestedFilePath)}\n\n\`\`\`agda\n${numbered}\n\`\`\``;
+      return `## ${relPath}\n\n\`\`\`agda\n${numbered}\n\`\`\``;
     },
   });
 
