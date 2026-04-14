@@ -130,7 +130,23 @@ export function register(
         );
       }
 
-      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
+      let filePath: string;
+      try {
+        filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
+      } catch (err) {
+        if (err instanceof PathSandboxError) {
+          return makeToolResult(
+            errorEnvelope({
+              tool: "agda_cache_info",
+              summary: `Invalid file path: ${file}`,
+              classification: "invalid-path",
+              data: emptyCacheInfo(file),
+              diagnostics: [{ severity: "error", message: `Invalid file path: ${file}`, code: "invalid-path" }],
+            }),
+          );
+        }
+        throw err;
+      }
       const projectRoot = findAgdaProjectRoot(filePath, repoRoot);
       const artifacts = findAgdaiArtifacts(filePath, repoRoot);
 
