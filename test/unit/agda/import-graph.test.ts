@@ -283,7 +283,7 @@ test("buildImportGraph honours the project's existing FixtureDeps chain", () => 
   // Sanity-check that the parser handles the real fixtures we
   // keep under test/fixtures/agda/FixtureDeps. NatExtra imports
   // NatCore, so impact("NatCore") must include NatExtra.
-  const fixturesRoot = resolve(__dirname, "../../fixtures/agda");
+  const fixturesRoot = resolve(import.meta.dirname, "../../fixtures/agda");
   const graph = buildImportGraph(fixturesRoot);
   const impact = computeImpact(graph, fixturesRoot, "FixtureDeps/NatCore.agda");
   expect(impact).not.toBeNull();

@@ -91,7 +91,23 @@ export function register(
         );
       }
 
-      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
+      let filePath: string;
+      try {
+        filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
+      } catch (err) {
+        if (err instanceof PathSandboxError) {
+          return makeToolResult(
+            errorEnvelope({
+              tool: "agda_impact",
+              summary: `Invalid file path: ${file}`,
+              classification: "invalid-path",
+              data: emptyImpactData(file),
+              diagnostics: [{ severity: "error", message: `Invalid file path: ${file}`, code: "invalid-path" }],
+            }),
+          );
+        }
+        throw err;
+      }
       // Canonicalize the project root the same way `resolveExistingPathWithinRoot`
       // canonicalizes the source path, otherwise on macOS the graph
       // keys (built from `realpath(repoRoot)`) won't match the
@@ -122,7 +138,7 @@ export function register(
             data: emptyImpactData(notInGraphRel),
             diagnostics: [{
               severity: "error",
-              message: `File exists but no module declaration was parsed for ${notInGraphRel}.`,
+              message: `File exists but is not part of the scanned Agda import graph for ${notInGraphRel}; it may have been filtered out, may not be a recognized Agda source file, or no module declaration was parsed.`,
               code: "not-in-graph",
             }],
           }),
