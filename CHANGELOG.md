@@ -45,7 +45,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
   e2e coverage fixture matrix and is now correctly tracked
 - **Literate fenced-block extraction** — rewritten to track non-Agda blocks
   separately, preventing false matches when `` ```agda `` text appears inside
-  other fenced blocks; all four extractors now recover from unclosed blocks
+  other fenced blocks; all four delimited extractors now recover from
+  unclosed blocks
 - **Tree-format literate extraction** — fixed an off-by-one in `startLine`
   calculation when `\agda{` has code on the same line as the opening brace
 - **`agda_tool_recommend` duplicate recommendations** — stale + type-error
