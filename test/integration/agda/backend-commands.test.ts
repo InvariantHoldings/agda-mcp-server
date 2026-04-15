@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 
 import { AgdaSession } from "../../../src/agda-process.js";
+import { withIsolatedAgdaDir } from "../../helpers/isolated-agda-dir.js";
 
 const shouldRun = process.env.RUN_AGDA_BACKEND_INTEGRATION === "1";
 const backendExpr = process.env.AGDA_BACKEND_EXPR ?? "GHC";
@@ -18,6 +19,7 @@ function hasAgdaBinary() {
 const it = canRun ? test : test.skip;
 
 it("backend commands run against a live Agda session", async () => {
+  await withIsolatedAgdaDir(async () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-backend-it-"));
     const noHolePath = join(repoRoot, "BackendNoHole.agda");
     const holePath = join(repoRoot, "BackendHole.agda");
@@ -73,3 +75,4 @@ it("backend commands run against a live Agda session", async () => {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
+});
