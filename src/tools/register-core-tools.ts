@@ -17,6 +17,7 @@ import { register as registerAnalysis } from "./analysis-tools.js";
 import { register as registerReporting } from "./reporting-tools.js";
 import { register as registerCacheTools } from "./cache-tools.js";
 import { register as registerImpactTool } from "./impact-tool.js";
+import { register as registerAgentUxTools } from "./agent-ux-tools.js";
 
 export function registerCoreTools(
   server: McpServer,
@@ -35,4 +36,5 @@ export function registerCoreTools(
   registerReporting(server, session, projectRoot);
   registerCacheTools(server, session, projectRoot);
   registerImpactTool(server, session, projectRoot);
+  registerAgentUxTools(server, session, projectRoot);
 }

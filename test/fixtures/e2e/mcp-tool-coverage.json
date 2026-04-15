@@ -6,9 +6,21 @@
     "requiresLiveAgda": true
   },
   {
+    "tool": "agda_add_missing_clauses",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "missing-clause stub generation",
+    "requiresLiveAgda": false
+  },
+  {
     "tool": "agda_apply_edit",
     "suite": "test/unit/session/write-proof-edit-fixtures.test.ts",
     "scenario": "applyTextEdit adds an import line matching fixture expected",
+    "requiresLiveAgda": false
+  },
+  {
+    "tool": "agda_apply_rename",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "scoped rename with dry-run diff",
     "requiresLiveAgda": false
   },
   {
@@ -48,6 +60,18 @@
     "suite": "test/integration/mcp/mcp-remaining-tools-e2e.test.ts",
     "scenario": "bug update bundle creation",
     "requiresLiveAgda": true
+  },
+  {
+    "tool": "agda_builtin_migration_map",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "builtin migration map listing",
+    "requiresLiveAgda": false
+  },
+  {
+    "tool": "agda_bulk_status",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "bulk status clustering",
+    "requiresLiveAgda": false
   },
   {
     "tool": "agda_cache_info",
@@ -93,6 +117,12 @@
     "requiresLiveAgda": true
   },
   {
+    "tool": "agda_effective_options",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "effective options attribution",
+    "requiresLiveAgda": false
+  },
+  {
     "tool": "agda_elaborate",
     "suite": "test/integration/mcp/mcp-server.test.ts",
     "scenario": "navigation and query tools",
@@ -103,6 +133,12 @@
     "suite": "test/integration/mcp/mcp-end-to-end-parity.test.ts",
     "scenario": "abort and exit process controls",
     "requiresLiveAgda": true
+  },
+  {
+    "tool": "agda_find_clash_source",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "clash source identification",
+    "requiresLiveAgda": false
   },
   {
     "tool": "agda_give",
@@ -171,6 +207,12 @@
     "requiresLiveAgda": true
   },
   {
+    "tool": "agda_infer_fixity_conflicts",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "fixity conflict inference",
+    "requiresLiveAgda": false
+  },
+  {
     "tool": "agda_intro",
     "suite": "test/integration/mcp/mcp-end-to-end-parity.test.ts",
     "scenario": "intro transforms a function goal",
@@ -205,6 +247,18 @@
     "suite": "test/integration/mcp/mcp-end-to-end-parity.test.ts",
     "scenario": "proof query tools",
     "requiresLiveAgda": true
+  },
+  {
+    "tool": "agda_postulate_closure",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "transitive postulate closure",
+    "requiresLiveAgda": false
+  },
+  {
+    "tool": "agda_project_progress",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "project progress static summary",
+    "requiresLiveAgda": false
   },
   {
     "tool": "agda_proof_status",
@@ -303,6 +357,18 @@
     "requiresLiveAgda": true
   },
   {
+    "tool": "agda_stdlib_migration_map",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "stdlib migration map listing",
+    "requiresLiveAgda": false
+  },
+  {
+    "tool": "agda_suggest_import",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "reverse-index import suggestions",
+    "requiresLiveAgda": false
+  },
+  {
     "tool": "agda_term_search",
     "suite": "test/integration/mcp/mcp-remaining-tools-e2e.test.ts",
     "scenario": "term search in goal context",
@@ -339,10 +405,22 @@
     "requiresLiveAgda": false
   },
   {
+    "tool": "agda_triage_error",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "error triage classification",
+    "requiresLiveAgda": false
+  },
+  {
     "tool": "agda_typecheck",
     "suite": "test/integration/mcp/mcp-remaining-tools-e2e.test.ts",
     "scenario": "typecheck classifications",
     "requiresLiveAgda": true
+  },
+  {
+    "tool": "agda_verify_builtin",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "builtin existence probe",
+    "requiresLiveAgda": false
   },
   {
     "tool": "agda_why_in_scope",
