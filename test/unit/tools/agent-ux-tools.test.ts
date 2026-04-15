@@ -164,6 +164,28 @@ test("agda_infer_fixity_conflicts detects missing fixity precedence hazards", as
   expect(result.structuredContent.data.conflicts.length).toBeGreaterThan(0);
 });
 
+test("agda_find_clash_source returns invalid-path for escaping input file", async () => {
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_find_clash_source")!.callback({
+    symbol: "helper",
+    file: "../../etc/passwd",
+  });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent.classification).toBe("invalid-path");
+});
+
+test("agda_find_clash_source returns not-found for missing file", async () => {
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_find_clash_source")!.callback({
+    symbol: "helper",
+    file: "agda/Missing.agda",
+  });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent.classification).toBe("not-found");
+});
+
 test("agda_effective_options reports pragma options with source tags", async () => {
   writeAgda("agda/Main.agda", "{-# OPTIONS --safe --without-K #-}\nmodule Main where\n");
 

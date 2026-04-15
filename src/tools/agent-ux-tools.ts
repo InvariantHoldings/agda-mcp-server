@@ -576,7 +576,45 @@ export function register(
       clashSource: z.object({ module: z.string(), importLine: z.number().nullable() }).nullable(),
     }),
     callback: async ({ symbol, file }: { symbol: string; file: string }) => {
-      const filePath = resolveExistingPathWithinRoot(repoRoot, resolveFileWithinRoot(repoRoot, file));
+      let requestedPath: string;
+      try {
+        requestedPath = resolveFileWithinRoot(repoRoot, file);
+      } catch (err) {
+        if (err instanceof PathSandboxError) {
+          return makeToolResult(
+            errorEnvelope({
+              tool: "agda_find_clash_source",
+              summary: `Invalid file path: ${file}`,
+              classification: "invalid-path",
+              data: {
+                symbol,
+                localBindings: [],
+                importedBindings: [],
+                clashSource: null,
+              },
+              diagnostics: [errorDiagnostic(`Invalid file path: ${file}`, "invalid-path")],
+            }),
+          );
+        }
+        throw err;
+      }
+      if (!existsSync(requestedPath)) {
+        return makeToolResult(
+          errorEnvelope({
+            tool: "agda_find_clash_source",
+            summary: `File not found: ${file}`,
+            classification: "not-found",
+            data: {
+              symbol,
+              localBindings: [],
+              importedBindings: [],
+              clashSource: null,
+            },
+            diagnostics: [errorDiagnostic(`File not found: ${file}`, "not-found")],
+          }),
+        );
+      }
+      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedPath);
       const source = readFileSync(filePath, "utf8");
       const shape = parseModuleSourceShape(source);
       const defs = parseTopLevelDefinitions(source);
