@@ -179,10 +179,11 @@ export async function intro(
 export async function autoOne(
   ctx: AgdaCommandContext,
   goalId: number,
+  payload = "",
 ): Promise<AutoResult> {
   ctx.requireFile();
   const responses = await ctx.sendCommand(
-    ctx.iotcm(rewriteGoalCommand("Cmd_autoOne", "Normalised", goalId, quoted(""))),
+    ctx.iotcm(rewriteGoalCommand("Cmd_autoOne", "Normalised", goalId, quoted(payload))),
   );
   throwOnFatalProtocolStderr(responses);
   ctx.syncGoalIdsFromResponses(responses);

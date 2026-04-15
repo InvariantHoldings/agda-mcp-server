@@ -9,6 +9,7 @@ import { resolve, relative, join } from "node:path";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import type { AgdaSession } from "../agda-process.js";
 import { isAgdaSourceFile, filePathDescription } from "../agda/version-support.js";
+import { matchesTypePattern } from "../agda/agent-ux.js";
 import { logger } from "../agda/logger.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import { missingPathToolError, ToolInvocationError, registerTextTool } from "./tool-helpers.js";
@@ -60,7 +61,8 @@ export function register(
       }
       const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const fileContent = readFileSync(filePath, "utf-8");
-      const relPath = relative(repoRoot, requestedFilePath);
+      const canonicalRoot = resolveExistingPathWithinRoot(repoRoot, ".");
+      const relPath = relative(canonicalRoot, filePath);
 
       if (codeOnly) {
         const extraction = extractLiterateCode(filePath, fileContent);
@@ -231,22 +233,84 @@ export function register(
       const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const fileContent = readFileSync(filePath, "utf-8");
       const lines = fileContent.split("\n");
-      const postulates: string[] = [];
-      for (let i = 0; i < lines.length; i++) {
-        if (/^\s*postulate\b/.test(lines[i])) {
-          postulates.push(`Line ${i + 1}: ${lines[i].trim()}`);
-        }
+
+      interface PostulateBlock {
+        /** 1-based line number of the `postulate` keyword */
+        line: number;
+        /** Identifier names declared in the block (may be empty for inline postulate) */
+        declarations: string[];
       }
-      const relPath = relative(repoRoot, requestedFilePath);
+
+      const blocks: PostulateBlock[] = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (!/^postulate\b/.test(trimmed) && !/^\s+postulate\b/.test(lines[i])) {
+          continue;
+        }
+
+        // Check whether the postulate keyword has an inline declaration on the
+        // same line, e.g. `postulate ax : Set` or `postulate p q : Set`.
+        // If there is content after the keyword, parse it; otherwise collect
+        // the indented lines that follow as the block body.
+        const inlineMatch = /^postulate\s+(\S.*)$/.exec(trimmed);
+        if (inlineMatch) {
+          // Inline form: split on `:` and tokenise LHS to get all names
+          // (handles `postulate p q : Set` → ["p", "q"])
+          const lhs = inlineMatch[1].split(":")[0].trim();
+          const declNames = lhs.split(/\s+/u).filter((t) => t.length > 0 && !t.startsWith("--"));
+          blocks.push({ line: i + 1, declarations: declNames });
+          continue;
+        }
+
+        // Block form: collect following indented lines until de-indentation
+        const keywordIndent = lines[i].match(/^(\s*)/)?.[1].length ?? 0;
+        const declarations: string[] = [];
+        let j = i + 1;
+        while (j < lines.length) {
+          const bodyLine = lines[j];
+          const bodyTrimmed = bodyLine.trim();
+          // Skip blank lines and comment-only lines within the block
+          if (bodyTrimmed === "" || bodyTrimmed.startsWith("--")) {
+            j++;
+            continue;
+          }
+          // A non-blank line that is NOT more indented than the postulate keyword
+          // means we've left the block
+          const bodyIndent = bodyLine.match(/^(\s*)/)?.[1].length ?? 0;
+          if (bodyIndent <= keywordIndent) {
+            break;
+          }
+          // Split on `:` and tokenise LHS — handles `p q : Set` (multiple names)
+          const lhs = bodyTrimmed.split(":")[0].trim();
+          const names = lhs.split(/\s+/u).filter((t) => t.length > 0 && !t.startsWith("--"));
+          declarations.push(...names);
+          j++;
+        }
+        blocks.push({ line: i + 1, declarations });
+      }
+
+      const canonicalRoot = resolveExistingPathWithinRoot(repoRoot, ".");
+      const relPath = relative(canonicalRoot, filePath);
       const isKernel = relPath.startsWith("agda/Kernel/");
       let output = `## Postulate check: ${relPath}\n\n`;
-      if (postulates.length === 0) {
+      if (blocks.length === 0) {
         output += "No postulates found. Fully constructive.\n";
       } else {
-        output += `**${postulates.length} postulate(s) found**`;
+        const totalDecls = blocks.reduce((sum, b) => sum + b.declarations.length, 0);
+        const declSummary = totalDecls > 0
+          ? ` (${totalDecls} identifier${totalDecls === 1 ? "" : "s"} declared)`
+          : "";
+        output += `**${blocks.length} postulate block${blocks.length === 1 ? "" : "s"} found${declSummary}**`;
         if (isKernel) output += ` **VIOLATION: postulates are forbidden in Kernel/**`;
         output += "\n\n";
-        for (const p of postulates) output += `- ${p}\n`;
+        for (const block of blocks) {
+          if (block.declarations.length > 0) {
+            output += `- Line ${block.line}: postulate — ${block.declarations.join(", ")}\n`;
+          } else {
+            output += `- Line ${block.line}: postulate\n`;
+          }
+        }
       }
       return output;
     },
@@ -258,10 +322,27 @@ export function register(
     description: "Search for a definition, theorem, or type name across Agda modules.",
     category: "navigation",
     inputSchema: {
-      query: z.string().describe("The name or pattern to search for"),
+      query: z.string().optional().describe("The name or pattern to search for"),
+      typePattern: z.string().optional().describe("Type-shape query (wildcard `_` supported), e.g. `_ ≤ _ + _`"),
       tier: z.string().optional().describe("Optional tier to limit search (Kernel, Foundation, etc.)"),
     },
-    callback: async ({ query, tier }: { query: string; tier?: string }) => {
+    callback: async ({ query, typePattern, tier }: { query?: string; typePattern?: string; tier?: string }) => {
+      const mode: "name" | "type-pattern" = typePattern ? "type-pattern" : "name";
+      const actualQuery = (typePattern ?? query ?? "").trim();
+      if (actualQuery.length === 0) {
+        throw new ToolInvocationError({
+          message: "Provide either `query` or `typePattern`.",
+          classification: "invalid-input",
+          diagnostics: [
+            {
+              severity: "error",
+              message: "Provide either `query` or `typePattern`.",
+              code: "invalid-input",
+            },
+          ],
+          data: { query: actualQuery, tier },
+        });
+      }
       const requestedSearchRoot = tier
         ? resolveFileWithinRoot(repoRoot, join("agda", tier))
         : resolveFileWithinRoot(repoRoot, "agda");
@@ -315,9 +396,16 @@ export function register(
               continue;
             }
             for (let i = 0; i < fileLines.length; i++) {
-              if (fileLines[i].includes(query)) {
-                matches.push({ file: nextDisplayPath, line: i + 1, text: fileLines[i].trim() });
+              const line = fileLines[i];
+              if (mode === "name") {
+                if (!line.includes(actualQuery)) continue;
+                matches.push({ file: nextDisplayPath, line: i + 1, text: line.trim() });
+                continue;
               }
+              if (!line.includes(":")) continue;
+              const typePart = line.split(":").slice(1).join(":").trim();
+              if (!matchesTypePattern(typePart, actualQuery)) continue;
+              matches.push({ file: nextDisplayPath, line: i + 1, text: line.trim() });
             }
           }
         }
@@ -329,10 +417,12 @@ export function register(
       );
       let output: string;
       if (matches.length === 0) {
-        output = `No matches for "${query}" in ${tier ?? "agda/"}`;
+        output = mode === "name"
+          ? `No matches for "${actualQuery}" in ${tier ?? "agda/"}`
+          : `No type-pattern matches for "${actualQuery}" in ${tier ?? "agda/"}`;
       } else {
         const capped = matches.slice(0, 50);
-        output = `## Search: "${query}" (${matches.length} matches${matches.length > 50 ? ", showing first 50" : ""})\n\n`;
+        output = `## Search (${mode}): "${actualQuery}" (${matches.length} matches${matches.length > 50 ? ", showing first 50" : ""})\n\n`;
         for (const m of capped) output += `- **${m.file}:${m.line}** \`${m.text}\`\n`;
       }
       if (unreadableDirs.length > 0 || unreadableFiles.length > 0) {

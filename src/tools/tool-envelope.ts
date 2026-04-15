@@ -20,6 +20,8 @@ export interface ToolDiagnostic {
   code?: string;
   /** Machine-readable hint: the MCP tool an agent should call next to resolve this diagnostic. */
   nextAction?: string;
+  /** Structured "did you mean" suggestion extracted from diagnostics when available. */
+  suggestedRename?: string;
 }
 
 export interface ToolEnvelope<T extends Record<string, unknown>> {
@@ -46,6 +48,7 @@ export const diagnosticSchema = z.object({
   message: z.string(),
   code: z.string().optional(),
   nextAction: z.string().optional(),
+  suggestedRename: z.string().optional(),
 });
 
 const envelopeBaseSchema = z.object({

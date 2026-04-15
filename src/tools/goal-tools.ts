@@ -8,6 +8,7 @@ import { AgdaSession } from "../agda-process.js";
 import { registerGoalTextTool } from "./tool-helpers.js";
 import { applyEditAndReload } from "../session/reload-and-diagnose.js";
 import { hasReplacementText } from "../protocol/responses/proof-actions.js";
+import { buildAutoSearchPayload } from "../agda/agent-ux.js";
 
 // Appended to every write-capable proof-action tool description so
 // MCP clients surface the 512 KiB guard in their introspection. The
@@ -253,14 +254,27 @@ export function register(
     protocolCommands: ["Cmd_autoOne"],
     inputSchema: {
       goalId: z.number().describe("The goal ID to auto-solve"),
+      depth: z.number().int().min(0).max(50).optional().describe("Optional search depth"),
+      listCandidates: z.boolean().optional().describe("List candidate terms when no direct solution is found"),
+      excludeHints: z.array(z.string()).optional().describe("Hints/modules to exclude from search"),
+      hints: z.array(z.string()).optional().describe("Hints/modules to prioritize during search"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
-    callback: async ({ goalId, writeToFile }) => {
+    callback: async ({ goalId, writeToFile, depth, listCandidates, excludeHints, hints }) => {
       const shouldWrite = writeToFile !== false;
       const goalIdsBefore = session.getGoalIds();
-      const result = await session.goal.autoOne(goalId);
+      const payload = buildAutoSearchPayload({
+        depth: depth as number | undefined,
+        listCandidates: listCandidates as boolean | undefined,
+        excludeHints: excludeHints as string[] | undefined,
+        hints: hints as string[] | undefined,
+      });
+      const result = await session.goal.autoOne(goalId, payload);
       let output = `## Auto-solve ?${goalId}\n\n`;
       output += result.solution ? `**Solution:** \`${result.solution}\`\n` : `No automatic solution found.\n`;
+      if (payload.length > 0) {
+        output += `\nSearch payload: \`${payload}\`\n`;
+      }
 
       if (shouldWrite && session.currentFile) {
         if (hasReplacementText(result.solution)) {

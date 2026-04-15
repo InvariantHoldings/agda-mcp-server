@@ -1,0 +1,10 @@
+[
+  { "flag": "--cubical",      "minVersion": "2.6.0" },
+  { "flag": "--cumulativity", "minVersion": "2.6.0" },
+  { "flag": "--sized-types",  "minVersion": "2.2.0" },
+  { "flag": "--rewriting",    "minVersion": "2.4.2.4" },
+  { "flag": "--with-K",       "minVersion": "2.4.2.4" },
+  { "flag": "--guarded",      "minVersion": "2.6.2" },
+  { "flag": "--erasure",      "minVersion": "2.6.4" },
+  { "flag": "--two-level",    "minVersion": "2.6.2" }
+]

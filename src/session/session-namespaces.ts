@@ -17,7 +17,7 @@ export function createSessionNamespaces(ctx: AgdaCommandContext) {
       refine: (id: number, expr: string) => GoalOps.refine(ctx, id, expr),
       refineExact: (id: number, expr: string) => GoalOps.refineExact(ctx, id, expr),
       intro: (id: number, expr?: string) => GoalOps.intro(ctx, id, expr),
-      autoOne: (id: number) => GoalOps.autoOne(ctx, id),
+      autoOne: (id: number, payload?: string) => GoalOps.autoOne(ctx, id, payload),
       metas: () => GoalOps.metas(ctx),
     }),
     expr: Object.freeze({

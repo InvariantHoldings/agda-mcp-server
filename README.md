@@ -20,7 +20,9 @@ every request.
 - Goal-aware proof actions over MCP.
 - Stateless batch type-checking when you only want a quick validation pass.
 - Navigation and scope-inspection helpers for large Agda codebases.
+- Literate Agda support — extract code blocks from all seven literate formats.
 - Structured semantic outputs for every tool, alongside human-readable text.
+- Agent-native session introspection (`agda_session_snapshot`, `agda_goal_catalog`, `agda_tool_recommend`).
 - Bug-report and issue-update bundle generation with stable fingerprints.
 - A small extension system for project-specific or domain-specific tools.
 
@@ -71,6 +73,14 @@ node dist/index.js
 
 The published package also exposes the `agda-mcp-server` binary through the
 `bin` field in `package.json`.
+
+Use `--help` or `--version` to inspect the installed binary without starting
+the MCP server:
+
+```bash
+agda-mcp-server --version   # prints the server version
+agda-mcp-server --help      # prints usage and all environment variables
+```
 
 ## Quick start
 
@@ -257,6 +267,9 @@ At the current milestone, the server now exposes:
 - `agda_show_implicit_args` / `agda_toggle_implicit_args` and `agda_show_irrelevant_args` / `agda_toggle_irrelevant_args` for display toggles
 - `agda_compile`, `agda_backend_top`, and `agda_backend_hole` for backend interaction commands
 - `agda_tools_catalog` for manifest-derived tool and schema introspection
+- `agda_session_snapshot` for one-call agent session introspection with suggested actions
+- `agda_goal_catalog` for one-call full proof-state inspection across all goals
+- `agda_tool_recommend` for priority-ordered next-tool recommendations based on proof state
 - `agda_bug_report_bundle` and `agda_bug_report_update_bundle` for structured bug intake
 
 ### Session management
@@ -293,12 +306,14 @@ At the current milestone, the server now exposes:
 | `agda_backend_top`  | Send backend-specific top-level payload (`Cmd_backend_top`)            |
 | `agda_backend_hole` | Send backend-specific goal-hole payload (`Cmd_backend_hole`)           |
 
-### Reporting and issue intake
+### Reporting and agent introspection
 
-| Tool                            | Description                                                                      |
-| ------------------------------- | -------------------------------------------------------------------------------- |
-| `agda_bug_report_bundle`        | Generate a structured bundle for a new bug report or regression                  |
-| `agda_bug_report_update_bundle` | Generate a structured bundle for updating an existing bug report with new data   |
+| Tool                            | Description                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `agda_session_snapshot`         | Return a structured snapshot of session state: phase, goal counts, completeness, staleness, and prioritised suggested next actions |
+| `agda_tool_recommend`           | Suggest likely next MCP tool calls ordered by priority, with rationale and pre-filled arguments   |
+| `agda_bug_report_bundle`        | Generate a structured bundle for a new bug report or regression                                   |
+| `agda_bug_report_update_bundle` | Generate a structured bundle for updating an existing bug report with new data                    |
 
 ### Goal inspection and proof interaction
 
@@ -306,6 +321,7 @@ These tools require a file to be loaded first via `agda_load`.
 
 | Tool                           | Description                                                                               |
 | ------------------------------ | ----------------------------------------------------------------------------------------- |
+| `agda_goal_catalog`            | Return a structured catalog of all open goals: types, contexts, splittable variables, and per-goal suggestions |
 | `agda_goal_type`               | Show the goal type and local context for one interaction point                            |
 | `agda_goal`                    | Show only the goal type for one interaction point                                         |
 | `agda_context`                 | Show only the local context for one interaction point                                     |
@@ -329,15 +345,17 @@ These tools require a file to be loaded first via `agda_load`.
 
 ### Navigation and environment inspection
 
-| Tool                      | Description                                                           |
-| ------------------------- | --------------------------------------------------------------------- |
-| `agda_read_module`        | Read a module from disk with line numbers                             |
-| `agda_list_modules`       | List Agda modules under a tier or directory segment                   |
-| `agda_check_postulates`   | Check a file for `postulate` declarations                             |
-| `agda_search_definitions` | Search source files for matching identifiers or text                  |
-| `agda_why_in_scope`       | Explain why a name is in scope, either at top level or in a goal      |
-| `agda_show_module`        | Show what a module exports                                            |
-| `agda_search_about`       | Search the loaded environment for names whose types mention the query |
+| Tool                      | Description                                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `agda_read_module`        | Read a module from disk with line numbers; pass `codeOnly: true` to extract just Agda blocks from literate files       |
+| `agda_list_modules`       | List Agda modules in a directory tier; paginated (`offset`, `limit`, `pattern`) with total count in every response     |
+| `agda_impact`             | List files that transitively import a given file — direct and transitive dependents and dependencies                   |
+| `agda_cache_info`         | Show the `.agdai` interface cache paths for the loaded file                                                            |
+| `agda_check_postulates`   | Check a file for `postulate` declarations                                                                              |
+| `agda_search_definitions` | Search source files for matching identifiers or text                                                                   |
+| `agda_why_in_scope`       | Explain why a name is in scope, either at top level or in a goal                                                       |
+| `agda_show_module`        | Show what a module exports                                                                                             |
+| `agda_search_about`       | Search the loaded environment for names whose types mention the query                                                  |
 
 ## Typical interactive workflow
 

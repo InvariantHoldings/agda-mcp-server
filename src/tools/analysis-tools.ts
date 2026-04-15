@@ -176,23 +176,74 @@ export function register(
     inputSchema: {
       goalId: z.number().describe("The goal ID to search in"),
       targetType: z.string().optional().describe("Optional type to search for (defaults to the goal's type)"),
+      scope: z.enum(["local", "module", "imported"]).optional().describe("Search scope: local context only, module-wide, or imported definitions"),
+      offset: z.number().int().min(0).optional().describe("0-based pagination offset"),
+      limit: z.number().int().min(1).max(200).optional().describe("Maximum results to return"),
     },
-    callback: async ({ goalId, targetType }) => {
+    callback: async ({ goalId, targetType, scope, offset, limit }) => {
       const info = await session.goal.typeContext(goalId);
       const target = (targetType as string) || info.type;
       const contextEntries = info.context.map(parseContextEntry);
-      const matches = findMatchingTerms(target, contextEntries);
+      const effectiveScope = (scope as "local" | "module" | "imported" | undefined) ?? "module";
+      const localMatches = findMatchingTerms(target, contextEntries).map((match) => ({
+        name: match.name,
+        type: match.type,
+        source: "local" as const,
+      }));
+
+      let moduleMatches: Array<{ name: string; type: string; source: "module" | "imported" }> = [];
+      if (effectiveScope !== "local") {
+        try {
+          const about = await session.query.searchAbout(target);
+          const moduleSource: "module" | "imported" =
+            effectiveScope === "imported" ? "imported" : "module";
+          moduleMatches = about.results.map((entry) => ({
+            name: entry.name,
+            type: entry.term,
+            source: moduleSource,
+          }));
+        } catch {
+          moduleMatches = [];
+        }
+      }
+
+      const localNames = new Set(localMatches.map((entry) => entry.name));
+      let merged = [] as Array<{ name: string; type: string; source: "local" | "module" | "imported" }>;
+      if (effectiveScope === "local") {
+        merged = localMatches;
+      } else if (effectiveScope === "imported") {
+        merged = moduleMatches.filter((entry) => !localNames.has(entry.name));
+      } else {
+        merged = [...localMatches, ...moduleMatches];
+      }
+
+      const seen = new Set<string>();
+      merged = merged.filter((entry) => {
+        const key = `${entry.source}:${entry.name}:${entry.type}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      const effectiveOffset = (offset as number | undefined) ?? 0;
+      const effectiveLimit = (limit as number | undefined) ?? 30;
+      const matches = merged.slice(effectiveOffset, effectiveOffset + effectiveLimit);
 
       let output = `## Term Search in ?${goalId}\n\n`;
       output += `**Target type:** \`${target}\`\n\n`;
+      output += `**Scope:** \`${effectiveScope}\`\n`;
+      output += `**Total candidates:** ${merged.length}\n\n`;
 
       if (matches.length > 0) {
-        output += `### Matching terms (${matches.length})\n\n`;
+        output += `### Matching terms (${matches.length} shown)\n\n`;
         for (const m of matches) {
-          output += `- \`${m.name}\` : \`${m.type}\`\n`;
+          output += `- \`${m.name}\` : \`${m.type}\` (${m.source})\n`;
+        }
+        if (merged.length > effectiveOffset + effectiveLimit) {
+          output += `\nMore candidates available. Re-call with \`offset: ${effectiveOffset + effectiveLimit}\`.\n`;
         }
       } else {
-        output += "No exact type matches found in context.\n";
+        output += "No matching candidates found in the requested scope.\n";
       }
 
       // Provide hints for common patterns

@@ -27,6 +27,50 @@ import { getServerVersion } from "./server-version.js";
 import { registerCoreTools } from "./tools/register-core-tools.js";
 import { registerGlobalProvenance } from "./tools/tool-helpers.js";
 
+// ── CLI flag handling (must run before any Agda/session initialization) ──────
+const cliArgs = process.argv.slice(2);
+
+if (cliArgs.includes("--version") || cliArgs.includes("-v")) {
+  process.stdout.write(`${getServerVersion()}\n`);
+  process.exit(0);
+}
+
+if (cliArgs.includes("--help") || cliArgs.includes("-h")) {
+  process.stdout.write(`agda-mcp-server ${getServerVersion()}
+
+Usage: agda-mcp-server [--help | --version]
+
+When invoked with no arguments, starts the MCP server in stdio mode,
+ready to receive JSON-RPC requests from an MCP client (e.g. Claude
+Desktop, VS Code with MCP support, or any MCP-compatible host).
+
+Flags:
+  --help, -h      Show this help message and exit.
+  --version, -v   Print the server version and exit.
+
+Environment variables:
+  AGDA_MCP_ROOT                Project root directory. Agda files are
+                               resolved relative to this path.
+                               Default: current working directory.
+  AGDA_BIN                     Path to the Agda binary to use.
+                               Default: auto-detected from PATH or
+                               tooling/scripts/run-pinned-agda.sh.
+  AGDA_DIR                     Agda library directory.
+                               Default: ~/.agda
+  AGDA_MCP_EXTENSION_MODULES   Colon-separated list of extension module
+                               paths or package specifiers to load on
+                               startup.
+  AGDA_MCP_COMMAND_TIMEOUT_MS  Per-command timeout in milliseconds.
+                               Default: 120000 (2 minutes).
+  AGDA_MCP_IDLE_COMPLETION_MS  Idle time before a response is considered
+                               complete. Default: 250.
+  AGDA_MCP_DEBUG               Set to "1" to enable debug logging.
+
+Documentation: https://github.com/InvariantHoldings/agda-mcp-server
+`);
+  process.exit(0);
+}
+
 type ExtensionRegister = (
   server: McpServer,
   session: AgdaSession,
