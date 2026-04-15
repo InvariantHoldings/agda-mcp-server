@@ -23,6 +23,14 @@ describe("rewriteCompilerPlaceholders", () => {
     expect(rewriteCompilerPlaceholders(input)).toContain("<ext>");
     expect(rewriteCompilerPlaceholders(input)).not.toContain(".AGDA");
   });
+
+  test("rewrites additional literate placeholders such as .LAGDA.TYP/.LAGDA.TREE", () => {
+    const input = "supported placeholders: .LAGDA.TYP and .LAGDA.TREE";
+    const rewritten = rewriteCompilerPlaceholders(input);
+    expect(rewritten).not.toContain(".LAGDA.TYP");
+    expect(rewritten).not.toContain(".LAGDA.TREE");
+    expect((rewritten.match(/<ext>/gu) ?? []).length).toBe(2);
+  });
 });
 
 describe("extractSuggestedRename", () => {

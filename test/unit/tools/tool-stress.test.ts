@@ -19,22 +19,20 @@ import { register as registerFileTools } from "../../../src/tools/file-tools.js"
 import { register as registerCacheTools } from "../../../src/tools/cache-tools.js";
 import { register as registerImpactTool } from "../../../src/tools/impact-tool.js";
 import { clearToolManifest } from "../../../src/tools/manifest.js";
+import type { ToolResult } from "../../../src/tools/tool-helpers.js";
 
 // ── Harness ────────────────────────────────────────────────────────
 
 function createCapturingServer() {
-  const reg = new Map<string, (args: unknown) => Promise<unknown>>();
+  const reg = new Map<string, (args: unknown) => Promise<ToolResult<Record<string, unknown>>>>();
   return {
     registerTool(_name: string, _spec: unknown, cb: (a: unknown) => unknown) {
-      reg.set(_name, cb as (a: unknown) => Promise<unknown>);
+      reg.set(_name, cb as (a: unknown) => Promise<ToolResult<Record<string, unknown>>>);
     },
     async call(name: string, args: unknown = {}) {
       const cb = reg.get(name);
       if (!cb) throw new Error(`Tool not registered: ${name}`);
-      // Return as `any` — the actual shape is a full ToolEnvelope which varies
-      // per tool; casting to a partial type here hides real shape mismatches.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return cb(args) as Promise<any>;
+      return cb(args);
     },
   };
 }

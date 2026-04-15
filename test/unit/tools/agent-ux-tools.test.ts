@@ -113,6 +113,28 @@ test("agda_suggest_import finds candidate modules for a symbol", async () => {
   expect(result.structuredContent.data.candidates[0].module).toBe("Lib.A");
 });
 
+test("agda_suggest_import returns invalid-path for escaping input file", async () => {
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_suggest_import")!.callback({
+    symbol: "helper",
+    file: "../../etc/passwd",
+  });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent.classification).toBe("invalid-path");
+});
+
+test("agda_suggest_import returns not-found for missing input file", async () => {
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_suggest_import")!.callback({
+    symbol: "helper",
+    file: "agda/Missing.agda",
+  });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent.classification).toBe("not-found");
+});
+
 test("agda_apply_rename dry-run returns a diff and replacement count", async () => {
   writeAgda("agda/Main.agda", "module Main where\nfoo : Set\nfoo = Set\n");
 

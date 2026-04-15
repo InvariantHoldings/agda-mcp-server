@@ -501,7 +501,35 @@ export function register(
       })),
     }),
     callback: async ({ symbol, file, maxCandidates }: { symbol: string; file: string; maxCandidates?: number }) => {
-      const filePath = resolveExistingPathWithinRoot(repoRoot, resolveFileWithinRoot(repoRoot, file));
+      let requestedPath: string;
+      try {
+        requestedPath = resolveFileWithinRoot(repoRoot, file);
+      } catch (err) {
+        if (err instanceof PathSandboxError) {
+          return makeToolResult(
+            errorEnvelope({
+              tool: "agda_suggest_import",
+              summary: `Invalid file path: ${file}`,
+              classification: "invalid-path",
+              data: { symbol, candidates: [] },
+              diagnostics: [errorDiagnostic(`Invalid file path: ${file}`, "invalid-path")],
+            }),
+          );
+        }
+        throw err;
+      }
+      if (!existsSync(requestedPath)) {
+        return makeToolResult(
+          errorEnvelope({
+            tool: "agda_suggest_import",
+            summary: `File not found: ${file}`,
+            classification: "not-found",
+            data: { symbol, candidates: [] },
+            diagnostics: [errorDiagnostic(`File not found: ${file}`, "not-found")],
+          }),
+        );
+      }
+      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedPath);
       const source = readFileSync(filePath, "utf8");
       const shape = parseModuleSourceShape(source);
       const existingImports = new Set(shape.imports.map((imp) => imp.moduleName));

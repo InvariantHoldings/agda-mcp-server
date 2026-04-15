@@ -61,7 +61,8 @@ export function register(
       }
       const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const fileContent = readFileSync(filePath, "utf-8");
-      const relPath = relative(repoRoot, requestedFilePath);
+      const canonicalRoot = resolveExistingPathWithinRoot(repoRoot, ".");
+      const relPath = relative(canonicalRoot, filePath);
 
       if (codeOnly) {
         const extraction = extractLiterateCode(filePath, fileContent);
@@ -289,7 +290,8 @@ export function register(
         blocks.push({ line: i + 1, declarations });
       }
 
-      const relPath = relative(repoRoot, requestedFilePath);
+      const canonicalRoot = resolveExistingPathWithinRoot(repoRoot, ".");
+      const relPath = relative(canonicalRoot, filePath);
       const isKernel = relPath.startsWith("agda/Kernel/");
       let output = `## Postulate check: ${relPath}\n\n`;
       if (blocks.length === 0) {

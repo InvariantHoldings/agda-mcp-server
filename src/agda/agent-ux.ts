@@ -89,7 +89,7 @@ function clampProbability(value: number): number {
 export function rewriteCompilerPlaceholders(message: string): string {
   return message
     .replace(/\.AGDA\b/g, "<ext>")
-    .replace(/\.LAGDA(?:\.MD|\.TEX|\.RST|\.ORG)?\b/g, "<ext>");
+    .replace(/\.LAGDA(?:\.[A-Z]+)?\b/giu, "<ext>");
 }
 
 export function extractSuggestedRename(message: string): string | null {

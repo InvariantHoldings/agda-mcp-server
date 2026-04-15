@@ -291,3 +291,38 @@ test("agda_search_definitions skips symlinked files that resolve outside the pro
     rmSync(fixture.sandbox, { recursive: true, force: true });
   }
 });
+
+test("agda_check_postulates uses canonical relative path for symlinked repo roots", async (ctx) => {
+  clearToolManifest();
+  const fixture = ensureRepoSymlink(ctx);
+  if (!fixture) {
+    return;
+  }
+
+  try {
+    const server = createCapturingServer();
+    registerFileTools(server as unknown as McpServer, { getAgdaVersion: () => null } as any, fixture.linkedRepoRoot);
+
+    // Overwrite fixture file to include a postulate so Kernel violation logic runs.
+    const realKernelFile = join(fixture.sandbox, "real-repo", "agda", "Kernel", "Example.agda");
+    writeFileSync(realKernelFile, "module Example where\npostulate ax : Set\n");
+
+    // Symlink path INSIDE repo root to that Kernel file. Before the canonical
+    // rel-path fix, agda_check_postulates used requestedFilePath for relPath and
+    // would classify this as "KernelAlias.agda" (missing Kernel violation).
+    const aliasPath = join(fixture.linkedRepoRoot, "KernelAlias.agda");
+    symlinkSync(realKernelFile, aliasPath, "file");
+
+    const result = await server.get("agda_check_postulates")!.callback({
+      file: "KernelAlias.agda",
+    });
+
+    expect(result.isError).toBe(false);
+    const text: string = result.content[0].text;
+    expect(text).toContain("Postulate check: agda/Kernel/Example.agda");
+    expect(text).toContain("VIOLATION: postulates are forbidden in Kernel/");
+    expect(text.includes("../")).toBe(false);
+  } finally {
+    rmSync(fixture.sandbox, { recursive: true, force: true });
+  }
+});

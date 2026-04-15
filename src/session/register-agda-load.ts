@@ -119,14 +119,20 @@ export function registerAgdaLoad(
         const normalizedErrors = result.errors.map(rewriteCompilerPlaceholders);
         const normalizedWarnings = result.warnings.map(rewriteCompilerPlaceholders);
         const diagnostics: ToolDiagnostic[] = [
-          ...normalizedErrors.map((message) => ({
-            ...errorDiagnostic(message, "agda-error"),
-            ...(extractSuggestedRename(message) ? { suggestedRename: extractSuggestedRename(message) ?? undefined } : {}),
-          })),
-          ...normalizedWarnings.map((message) => ({
-            ...warningDiagnostic(message, "agda-warning"),
-            ...(extractSuggestedRename(message) ? { suggestedRename: extractSuggestedRename(message) ?? undefined } : {}),
-          })),
+          ...normalizedErrors.map((message) => {
+            const suggestedRename = extractSuggestedRename(message);
+            return {
+              ...errorDiagnostic(message, "agda-error"),
+              ...(suggestedRename ? { suggestedRename } : {}),
+            };
+          }),
+          ...normalizedWarnings.map((message) => {
+            const suggestedRename = extractSuggestedRename(message);
+            return {
+              ...warningDiagnostic(message, "agda-warning"),
+              ...(suggestedRename ? { suggestedRename } : {}),
+            };
+          }),
         ];
 
         if (result.hasHoles) {

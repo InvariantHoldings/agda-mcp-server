@@ -191,14 +191,16 @@ export function register(
         source: "local" as const,
       }));
 
-      let moduleMatches: Array<{ name: string; type: string; source: "module" }> = [];
+      let moduleMatches: Array<{ name: string; type: string; source: "module" | "imported" }> = [];
       if (effectiveScope !== "local") {
         try {
           const about = await session.query.searchAbout(target);
+          const moduleSource: "module" | "imported" =
+            effectiveScope === "imported" ? "imported" : "module";
           moduleMatches = about.results.map((entry) => ({
             name: entry.name,
             type: entry.term,
-            source: "module" as const,
+            source: moduleSource,
           }));
         } catch {
           moduleMatches = [];
@@ -206,7 +208,7 @@ export function register(
       }
 
       const localNames = new Set(localMatches.map((entry) => entry.name));
-      let merged = [] as Array<{ name: string; type: string; source: "local" | "module" }>;
+      let merged = [] as Array<{ name: string; type: string; source: "local" | "module" | "imported" }>;
       if (effectiveScope === "local") {
         merged = localMatches;
       } else if (effectiveScope === "imported") {
