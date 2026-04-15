@@ -231,22 +231,82 @@ export function register(
       const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const fileContent = readFileSync(filePath, "utf-8");
       const lines = fileContent.split("\n");
-      const postulates: string[] = [];
-      for (let i = 0; i < lines.length; i++) {
-        if (/^\s*postulate\b/.test(lines[i])) {
-          postulates.push(`Line ${i + 1}: ${lines[i].trim()}`);
-        }
+
+      interface PostulateBlock {
+        /** 1-based line number of the `postulate` keyword */
+        line: number;
+        /** Identifier names declared in the block (may be empty for inline postulate) */
+        declarations: string[];
       }
+
+      const blocks: PostulateBlock[] = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (!/^postulate\b/.test(trimmed) && !/^\s+postulate\b/.test(lines[i])) {
+          continue;
+        }
+
+        // Check whether the postulate keyword has an inline declaration on the
+        // same line, e.g. `postulate ax : Set`.  If there is content after the
+        // keyword, treat it as the (only) declared name; otherwise collect the
+        // indented lines that follow as the block body.
+        const inlineMatch = /^postulate\s+(\S.*)$/.exec(trimmed);
+        if (inlineMatch) {
+          // Inline form: postulate ax : Set
+          const declName = inlineMatch[1].split(":")[0].trim();
+          blocks.push({ line: i + 1, declarations: declName ? [declName] : [] });
+          continue;
+        }
+
+        // Block form: collect following indented lines until de-indentation
+        const keywordIndent = lines[i].match(/^(\s*)/)?.[1].length ?? 0;
+        const declarations: string[] = [];
+        let j = i + 1;
+        while (j < lines.length) {
+          const bodyLine = lines[j];
+          const bodyTrimmed = bodyLine.trim();
+          // Skip blank lines within the block
+          if (bodyTrimmed === "") {
+            j++;
+            continue;
+          }
+          // A non-blank line that is NOT more indented than the postulate keyword
+          // means we've left the block
+          const bodyIndent = bodyLine.match(/^(\s*)/)?.[1].length ?? 0;
+          if (bodyIndent <= keywordIndent) {
+            break;
+          }
+          // Extract the identifier name (text before the first `:`)
+          const declName = bodyTrimmed.split(":")[0].trim();
+          if (declName) {
+            declarations.push(declName);
+          }
+          j++;
+        }
+        blocks.push({ line: i + 1, declarations });
+      }
+
       const relPath = relative(repoRoot, requestedFilePath);
       const isKernel = relPath.startsWith("agda/Kernel/");
       let output = `## Postulate check: ${relPath}\n\n`;
-      if (postulates.length === 0) {
+      if (blocks.length === 0) {
         output += "No postulates found. Fully constructive.\n";
       } else {
-        output += `**${postulates.length} postulate(s) found**`;
+        const totalDecls = blocks.reduce((sum, b) => sum + b.declarations.length, 0);
+        const declSummary = totalDecls > 0
+          ? ` (${totalDecls} identifier${totalDecls === 1 ? "" : "s"} declared)`
+          : "";
+        output += `**${blocks.length} postulate block${blocks.length === 1 ? "" : "s"} found${declSummary}**`;
         if (isKernel) output += ` **VIOLATION: postulates are forbidden in Kernel/**`;
         output += "\n\n";
-        for (const p of postulates) output += `- ${p}\n`;
+        for (const block of blocks) {
+          if (block.declarations.length > 0) {
+            output += `- Line ${block.line}: postulate — ${block.declarations.join(", ")}\n`;
+          } else {
+            output += `- Line ${block.line}: postulate\n`;
+          }
+        }
       }
       return output;
     },
