@@ -74,6 +74,14 @@ node dist/index.js
 The published package also exposes the `agda-mcp-server` binary through the
 `bin` field in `package.json`.
 
+Use `--help` or `--version` to inspect the installed binary without starting
+the MCP server:
+
+```bash
+agda-mcp-server --version   # prints the server version
+agda-mcp-server --help      # prints usage and all environment variables
+```
+
 ## Quick start
 
 Start the server on stdio with a project root:
@@ -341,6 +349,8 @@ These tools require a file to be loaded first via `agda_load`.
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `agda_read_module`        | Read a module from disk with line numbers; pass `codeOnly: true` to extract just Agda blocks from literate files       |
 | `agda_list_modules`       | List Agda modules in a directory tier; paginated (`offset`, `limit`, `pattern`) with total count in every response     |
+| `agda_impact`             | List files that transitively import a given file — direct and transitive dependents and dependencies                   |
+| `agda_cache_info`         | Show the `.agdai` interface cache paths for the loaded file                                                            |
 | `agda_check_postulates`   | Check a file for `postulate` declarations                                                                              |
 | `agda_search_definitions` | Search source files for matching identifiers or text                                                                   |
 | `agda_why_in_scope`       | Explain why a name is in scope, either at top level or in a goal                                                       |
