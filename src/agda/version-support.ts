@@ -5,7 +5,12 @@
 // Centralizes knowledge of which Agda versions introduced (or removed)
 // specific features so that the server can gate capabilities at runtime
 // rather than failing opaquely when an unsupported feature is used.
+//
+// Static data tables (extension list, feature-flag list) live in JSON
+// files under src/agda/data/ and are loaded + validated at module init.
+// Logic (version comparison, capability derivation) stays in TypeScript.
 
+import { z } from "zod";
 import {
   atLeastMajorMinor,
   type AgdaVersion,
@@ -13,24 +18,33 @@ import {
   versionAtLeast,
   formatVersion,
 } from "./agda-version.js";
+import { loadJsonData } from "../json-data.js";
 
 // ── Literate format support ─────────────────────────────────────────
+
+const agdaSourceExtensionSchema = z.object({
+  suffix: z.string().min(1),
+  minVersion: z.string().optional(),
+});
+
+type AgdaSourceExtensionEntry = { suffix: string; minVersion?: AgdaVersion };
 
 /**
  * All recognised Agda source file extensions and the minimum Agda
  * version that introduced each one. `.agda` predates the version
  * numbers we track, so its `minVersion` is absent (always supported).
+ *
+ * Loaded from `src/agda/data/agda-source-extensions.json` so the
+ * table is a JSON-backed SSOT decoupled from this logic module.
  */
-const AGDA_SOURCE_EXTENSIONS: ReadonlyArray<{ suffix: string; minVersion?: AgdaVersion }> = [
-  { suffix: ".agda" },
-  { suffix: ".lagda",       minVersion: parseAgdaVersion("2.5.1") },
-  { suffix: ".lagda.tex",   minVersion: parseAgdaVersion("2.5.3") },
-  { suffix: ".lagda.md",    minVersion: parseAgdaVersion("2.5.3") },
-  { suffix: ".lagda.rst",   minVersion: parseAgdaVersion("2.5.3") },
-  { suffix: ".lagda.org",   minVersion: parseAgdaVersion("2.6.1") },
-  { suffix: ".lagda.tree",  minVersion: parseAgdaVersion("2.7.0") },
-  { suffix: ".lagda.typ",   minVersion: parseAgdaVersion("2.7.0") },
-];
+const AGDA_SOURCE_EXTENSIONS: ReadonlyArray<AgdaSourceExtensionEntry> = loadJsonData(
+  "./data/agda-source-extensions.json",
+  z.array(agdaSourceExtensionSchema),
+  import.meta.url,
+).map((entry) => ({
+  suffix: entry.suffix,
+  minVersion: entry.minVersion ? parseAgdaVersion(entry.minVersion) : undefined,
+}));
 
 /**
  * Returns true if the filename has a recognised Agda source extension.
@@ -62,22 +76,32 @@ export function supportedSourceExtensions(agdaVersion?: AgdaVersion): string[] {
     .map((ext) => ext.suffix);
 }
 
+/** Returns all known Agda source extensions regardless of version. */
+export function allSourceExtensionSuffixes(): string[] {
+  return AGDA_SOURCE_EXTENSIONS.map((ext) => ext.suffix);
+}
+
 // ── Feature flags ───────────────────────────────────────────────────
+
+const agdaFeatureFlagSchema = z.object({
+  flag: z.string().min(1),
+  minVersion: z.string().min(1),
+});
 
 /**
  * Agda feature flags and the version that introduced them.
  * Used to warn or skip when a feature is not available.
+ *
+ * Loaded from `src/agda/data/agda-feature-flags.json` so the
+ * table is a JSON-backed SSOT decoupled from this logic module.
  */
-const FEATURE_FLAGS: ReadonlyMap<string, AgdaVersion> = new Map([
-  ["--cubical",       parseAgdaVersion("2.6.0")],
-  ["--cumulativity",  parseAgdaVersion("2.6.0")],
-  ["--sized-types",   parseAgdaVersion("2.2.0")],
-  ["--rewriting",     parseAgdaVersion("2.4.2.4")],
-  ["--with-K",        parseAgdaVersion("2.4.2.4")],
-  ["--guarded",       parseAgdaVersion("2.6.2")],
-  ["--erasure",       parseAgdaVersion("2.6.4")],
-  ["--two-level",     parseAgdaVersion("2.6.2")],
-]);
+const FEATURE_FLAGS: ReadonlyMap<string, AgdaVersion> = new Map(
+  loadJsonData(
+    "./data/agda-feature-flags.json",
+    z.array(agdaFeatureFlagSchema),
+    import.meta.url,
+  ).map((entry) => [entry.flag, parseAgdaVersion(entry.minVersion)] as const),
+);
 
 /** Returns true if the given feature flag is supported by this Agda version. */
 export function supportsFeatureFlag(
@@ -99,6 +123,11 @@ export function supportedFeatureFlags(agdaVersion: AgdaVersion): string[] {
   return [...FEATURE_FLAGS.entries()]
     .filter(([, minVersion]) => versionAtLeast(agdaVersion, minVersion))
     .map(([flag]) => flag);
+}
+
+/** Returns all known feature flag names regardless of version. */
+export function allFeatureFlagNames(): string[] {
+  return [...FEATURE_FLAGS.keys()];
 }
 
 // ── Protocol changes ────────────────────────────────────────────────

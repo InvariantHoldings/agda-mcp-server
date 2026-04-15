@@ -1,0 +1,10 @@
+[
+  { "suffix": ".agda" },
+  { "suffix": ".lagda",      "minVersion": "2.5.1" },
+  { "suffix": ".lagda.tex",  "minVersion": "2.5.3" },
+  { "suffix": ".lagda.md",   "minVersion": "2.5.3" },
+  { "suffix": ".lagda.rst",  "minVersion": "2.5.3" },
+  { "suffix": ".lagda.org",  "minVersion": "2.6.1" },
+  { "suffix": ".lagda.tree", "minVersion": "2.7.0" },
+  { "suffix": ".lagda.typ",  "minVersion": "2.7.0" }
+]
