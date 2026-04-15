@@ -17,12 +17,14 @@ import { relative } from "node:path";
 
 import { AgdaSession, filePathDescription } from "../agda-process.js";
 import { bustAgdaiCache } from "../agda/agdai-cache.js";
+import { extractSuggestedRename, rewriteCompilerPlaceholders } from "../agda/agent-ux.js";
 import {
   errorDiagnostic,
   infoDiagnostic,
   makeToolResult,
   okEnvelope,
   registerStructuredTool,
+  type ToolDiagnostic,
   warningDiagnostic,
 } from "../tools/tool-helpers.js";
 import { loadDataSchema, renderLoadLikeText } from "./tool-presentation.js";
@@ -114,9 +116,17 @@ export function registerAgdaLoad(
 
         const result = await session.load(filePath, { profileOptions });
         const relPath = relative(repoRoot, requestedFilePath);
-        const diagnostics = [
-          ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),
-          ...result.warnings.map((message) => warningDiagnostic(message, "agda-warning")),
+        const normalizedErrors = result.errors.map(rewriteCompilerPlaceholders);
+        const normalizedWarnings = result.warnings.map(rewriteCompilerPlaceholders);
+        const diagnostics: ToolDiagnostic[] = [
+          ...normalizedErrors.map((message) => ({
+            ...errorDiagnostic(message, "agda-error"),
+            ...(extractSuggestedRename(message) ? { suggestedRename: extractSuggestedRename(message) ?? undefined } : {}),
+          })),
+          ...normalizedWarnings.map((message) => ({
+            ...warningDiagnostic(message, "agda-warning"),
+            ...(extractSuggestedRename(message) ? { suggestedRename: extractSuggestedRename(message) ?? undefined } : {}),
+          })),
         ];
 
         if (result.hasHoles) {
@@ -191,8 +201,8 @@ export function registerAgdaLoad(
           goalIds: result.goals.map((goal) => goal.goalId),
           goalCount: result.goalCount,
           invisibleGoalCount: result.invisibleGoalCount,
-          errors: result.errors,
-          warnings: result.warnings,
+          errors: normalizedErrors,
+          warnings: normalizedWarnings,
           reloaded: isReload,
           staleBeforeLoad: wasStale,
           extraLead: textLead,
@@ -218,8 +228,8 @@ export function registerAgdaLoad(
               hasHoles: result.hasHoles,
               isComplete: result.isComplete,
               classification: result.classification,
-              errors: result.errors,
-              warnings: result.warnings,
+              errors: normalizedErrors,
+              warnings: normalizedWarnings,
               reloaded: isReload,
               staleBeforeLoad: wasStale,
               profiling: result.profiling,

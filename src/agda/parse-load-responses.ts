@@ -6,6 +6,7 @@
 
 import type { AgdaResponse, AgdaGoal, LoadResult } from "./types.js";
 import { classifyCompleteness } from "./completeness.js";
+import { rewriteCompilerPlaceholders } from "./agent-ux.js";
 import {
   displayInfoResponseSchema,
   parseResponseWithSchema,
@@ -146,6 +147,9 @@ export function parseLoadResponses(
     }
   }
 
+  const normalizedErrors = errors.map(rewriteCompilerPlaceholders);
+  const normalizedWarnings = warnings.map(rewriteCompilerPlaceholders);
+
   const completeness = classifyCompleteness({
     success,
     goals,
@@ -158,13 +162,13 @@ export function parseLoadResponses(
   // case: a postulate check failure logged as a non-fatal diagnostic,
   // letting `success` stay true while the file's actual holes past the
   // failure point were never registered as metas).
-  const lastCheckedLine = extractEarliestErrorLine([...errors, ...warnings]);
+  const lastCheckedLine = extractEarliestErrorLine([...normalizedErrors, ...normalizedWarnings]);
   const profiling = extractProfilingOutput(responses, options);
 
   return {
     success,
-    errors,
-    warnings,
+    errors: normalizedErrors,
+    warnings: normalizedWarnings,
     goals,
     goalIds,
     allGoalsText,

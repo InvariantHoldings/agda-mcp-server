@@ -106,6 +106,25 @@ test("warnings extracted from AllGoalsWarnings.warnings", () => {
   expect(result.warnings[0].includes("unreachable")).toBeTruthy();
 });
 
+test("error/warning placeholder extensions are rewritten for MCP consumers", () => {
+  const result = parseLoadResponses([
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [],
+        invisibleGoals: [],
+        errors: [{ range: {}, message: "where .AGDA denotes a legal extension" }],
+        warnings: [{ range: {}, message: "try .LAGDA.MD instead" }],
+      },
+    },
+  ]);
+  expect(result.errors[0]).toContain("<ext>");
+  expect(result.errors[0]).not.toContain(".AGDA");
+  expect(result.warnings[0]).toContain("<ext>");
+  expect(result.warnings[0]).not.toContain(".LAGDA.MD");
+});
+
 test("visibleGoals cross-fills goals missing from InteractionPoints", () => {
   const result = parseLoadResponses([
     { kind: "InteractionPoints", interactionPoints: [] },

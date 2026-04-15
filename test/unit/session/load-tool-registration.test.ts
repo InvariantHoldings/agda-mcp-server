@@ -245,6 +245,68 @@ test("agda_load surfaces regression diagnostic when reload drops from ok-complet
   }
 });
 
+test("agda_load surfaces structured suggestedRename in diagnostics when Agda provides did-you-mean text", async () => {
+  clearToolManifest();
+  const server = createCapturingServer();
+
+  const root = realpathSync(mkdtempSync(resolve(tmpdir(), "agda-mcp-rename-diag-")));
+  const fileName = "Probe.agda";
+  const absPath = resolve(root, fileName);
+  writeFileSync(absPath, "module Probe where\n", "utf8");
+
+  const session = {
+    getAgdaVersion: () => null,
+    getLoadedFile() {
+      return null;
+    },
+    getGoalIds() {
+      return [];
+    },
+    isFileStale() {
+      return false;
+    },
+    load: async () => ({
+      success: false,
+      errors: ["Module Foo doesn't export proj1. Did you mean `proj₁`?"],
+      warnings: [],
+      goals: [],
+      allGoalsText: "",
+      invisibleGoalCount: 0,
+      goalCount: 0,
+      hasHoles: false,
+      isComplete: false,
+      classification: "type-error",
+      profiling: null,
+      lastCheckedLine: null,
+    }),
+    loadNoMetas: async () => ({
+      success: false,
+      errors: [],
+      warnings: [],
+      goals: [],
+      allGoalsText: "",
+      invisibleGoalCount: 0,
+      goalCount: 0,
+      hasHoles: false,
+      isComplete: false,
+      classification: "type-error",
+      profiling: null,
+      lastCheckedLine: null,
+    }),
+  };
+
+  try {
+    registerSessionLoadTools(server as unknown as McpServer, session as any, root);
+    const result = await server.get("agda_load")!.callback({ file: fileName });
+    const renameDiag = result.structuredContent.diagnostics.find(
+      (diag: { suggestedRename?: string }) => diag.suggestedRename === "proj₁",
+    );
+    expect(renameDiag).toBeDefined();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // §1.4: a nominally-clean load that carries a diagnostic location
 // should emit the scope-check-extent info diagnostic so the caller
 // knows hasHoles/goalCount may be under-reported.
