@@ -36,8 +36,7 @@ const arbCategory: fc.Arbitrary<ToolCategory> = fc.constantFrom(
   "highlighting", "backend", "analysis", "reporting",
 );
 
-const arbToolName = fc.string({ minLength: 3, maxLength: 20 })
-  .filter((s) => /^[a-z_]+$/u.test(s));
+const arbToolName = fc.stringMatching(/^[a-z_]{3,20}$/u);
 
 const arbParityStatus = fc.constantFrom("end-to-end", "verified", "mapped", "known-gap");
 const arbCoverageLevel = fc.constantFrom("none", "unit", "integration", "mcp");

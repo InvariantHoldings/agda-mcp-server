@@ -25,8 +25,7 @@ const arbCategory: fc.Arbitrary<ToolCategory> = fc.constantFrom(
   "highlighting", "backend", "analysis", "reporting",
 );
 
-const arbToolName = fc.string({ minLength: 3, maxLength: 20 })
-  .filter((s) => /^[a-z_]+$/.test(s));
+const arbToolName = fc.stringMatching(/^[a-z_]{3,20}$/u);
 
 test("every manifest entry has a corresponding schema entry", async () => {
   await fc.assert(

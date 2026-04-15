@@ -76,9 +76,12 @@ export function supportedSourceExtensions(agdaVersion?: AgdaVersion): string[] {
     .map((ext) => ext.suffix);
 }
 
+/** All known Agda source extension suffixes, pre-computed once at module init. */
+const ALL_SOURCE_EXTENSION_SUFFIXES: ReadonlyArray<string> = AGDA_SOURCE_EXTENSIONS.map((ext) => ext.suffix);
+
 /** Returns all known Agda source extensions regardless of version. */
 export function allSourceExtensionSuffixes(): string[] {
-  return AGDA_SOURCE_EXTENSIONS.map((ext) => ext.suffix);
+  return [...ALL_SOURCE_EXTENSION_SUFFIXES];
 }
 
 // ── Feature flags ───────────────────────────────────────────────────
@@ -125,9 +128,12 @@ export function supportedFeatureFlags(agdaVersion: AgdaVersion): string[] {
     .map(([flag]) => flag);
 }
 
+/** All known feature flag names, pre-computed once at module init. */
+const ALL_FEATURE_FLAG_NAMES: ReadonlyArray<string> = [...FEATURE_FLAGS.keys()];
+
 /** Returns all known feature flag names regardless of version. */
 export function allFeatureFlagNames(): string[] {
-  return [...FEATURE_FLAGS.keys()];
+  return [...ALL_FEATURE_FLAG_NAMES];
 }
 
 // ── Protocol changes ────────────────────────────────────────────────
