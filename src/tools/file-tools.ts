@@ -249,14 +249,16 @@ export function register(
         }
 
         // Check whether the postulate keyword has an inline declaration on the
-        // same line, e.g. `postulate ax : Set`.  If there is content after the
-        // keyword, treat it as the (only) declared name; otherwise collect the
-        // indented lines that follow as the block body.
+        // same line, e.g. `postulate ax : Set` or `postulate p q : Set`.
+        // If there is content after the keyword, parse it; otherwise collect
+        // the indented lines that follow as the block body.
         const inlineMatch = /^postulate\s+(\S.*)$/.exec(trimmed);
         if (inlineMatch) {
-          // Inline form: postulate ax : Set
-          const declName = inlineMatch[1].split(":")[0].trim();
-          blocks.push({ line: i + 1, declarations: declName ? [declName] : [] });
+          // Inline form: split on `:` and tokenise LHS to get all names
+          // (handles `postulate p q : Set` → ["p", "q"])
+          const lhs = inlineMatch[1].split(":")[0].trim();
+          const declNames = lhs.split(/\s+/u).filter((t) => t.length > 0 && !t.startsWith("--"));
+          blocks.push({ line: i + 1, declarations: declNames });
           continue;
         }
 
@@ -267,8 +269,8 @@ export function register(
         while (j < lines.length) {
           const bodyLine = lines[j];
           const bodyTrimmed = bodyLine.trim();
-          // Skip blank lines within the block
-          if (bodyTrimmed === "") {
+          // Skip blank lines and comment-only lines within the block
+          if (bodyTrimmed === "" || bodyTrimmed.startsWith("--")) {
             j++;
             continue;
           }
@@ -278,11 +280,10 @@ export function register(
           if (bodyIndent <= keywordIndent) {
             break;
           }
-          // Extract the identifier name (text before the first `:`)
-          const declName = bodyTrimmed.split(":")[0].trim();
-          if (declName) {
-            declarations.push(declName);
-          }
+          // Split on `:` and tokenise LHS — handles `p q : Set` (multiple names)
+          const lhs = bodyTrimmed.split(":")[0].trim();
+          const names = lhs.split(/\s+/u).filter((t) => t.length > 0 && !t.startsWith("--"));
+          declarations.push(...names);
           j++;
         }
         blocks.push({ line: i + 1, declarations });

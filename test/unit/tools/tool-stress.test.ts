@@ -31,7 +31,10 @@ function createCapturingServer() {
     async call(name: string, args: unknown = {}) {
       const cb = reg.get(name);
       if (!cb) throw new Error(`Tool not registered: ${name}`);
-      return cb(args) as Promise<{ isError?: boolean; content: Array<{ text: string }>; structuredContent?: { data: Record<string, unknown> } }>;
+      // Return as `any` — the actual shape is a full ToolEnvelope which varies
+      // per tool; casting to a partial type here hides real shape mismatches.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return cb(args) as Promise<any>;
     },
   };
 }
@@ -424,4 +427,50 @@ test("agda_cache_info: fresh file with no agda-lib has zero artifacts", async ()
   expect(result.isError).toBeFalsy();
   const data = result.structuredContent!.data;
   expect(data.artifactCount).toBe(0);
+});
+
+// ── agda_check_postulates — multi-name and comment-skip fixes ─────
+
+test("agda_check_postulates: inline multi-name declaration is split correctly", async () => {
+  // `postulate p q r : Set` — all three names must be reported
+  writeFileSync(
+    resolve(sandbox, "MultiName.agda"),
+    "module MultiName where\npostulate p q r : Set\n",
+  );
+  const result = await server.call("agda_check_postulates", { file: "MultiName.agda" });
+  expect(result.isError).toBeFalsy();
+  const text = result.content[0].text;
+  expect(text).toContain("p");
+  expect(text).toContain("q");
+  expect(text).toContain("r");
+  expect(text).toContain("3 identifiers");
+});
+
+test("agda_check_postulates: block multi-name declaration is split correctly", async () => {
+  writeFileSync(
+    resolve(sandbox, "BlockMulti.agda"),
+    "module BlockMulti where\npostulate\n  a b : Set\n  c : Set → Set\n",
+  );
+  const result = await server.call("agda_check_postulates", { file: "BlockMulti.agda" });
+  expect(result.isError).toBeFalsy();
+  const text = result.content[0].text;
+  expect(text).toContain("a");
+  expect(text).toContain("b");
+  expect(text).toContain("c");
+  // Total identifiers: a, b, c = 3
+  expect(text).toContain("3 identifiers");
+});
+
+test("agda_check_postulates: comment-only lines inside block are not treated as declarations", async () => {
+  writeFileSync(
+    resolve(sandbox, "WithComment.agda"),
+    "module WithComment where\npostulate\n  -- This is a comment\n  real : Set\n",
+  );
+  const result = await server.call("agda_check_postulates", { file: "WithComment.agda" });
+  expect(result.isError).toBeFalsy();
+  const text = result.content[0].text;
+  expect(text).toContain("real");
+  // Comment should not appear as a declaration
+  expect(text).not.toContain("This is a comment");
+  expect(text).toContain("1 identifier");
 });

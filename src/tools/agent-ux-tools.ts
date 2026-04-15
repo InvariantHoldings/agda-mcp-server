@@ -28,6 +28,7 @@ import { filePathDescription, isAgdaSourceFile } from "../agda/version-support.j
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import {
   errorDiagnostic,
+  errorEnvelope,
   makeToolResult,
   okEnvelope,
   registerStructuredTool,
@@ -124,15 +125,22 @@ function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// All supported Agda source extensions including all literate variants.
+// The union covers: .agda, .lagda, .lagda.tex, .lagda.md, .lagda.rst,
+// .lagda.org, .lagda.tree, .lagda.typ
+const AGDA_SOURCE_SUFFIX_RE = /\.(?:agda|lagda(?:\.(?:md|rst|tex|org|typ|tree))?)$/iu;
+const AGDA_SOURCE_PATH_RE = /([A-Za-z0-9_./-]+\.(?:agda|lagda(?:\.(?:md|rst|tex|org|typ|tree))?))/iu;
+
 function extractPathFromDiagnostic(message: string): string | null {
   const rewritten = rewriteCompilerPlaceholders(message);
-  const match = /([A-Za-z0-9_./-]+\.(?:agda|lagda(?:\.md|\.rst|\.tex|\.org)?))/iu.exec(rewritten);
+  const match = AGDA_SOURCE_PATH_RE.exec(rewritten);
   return match?.[1] ?? null;
 }
 
 function moduleNameFromPath(relPath: string): string {
   return relPath
-    .replace(/\.(?:agda|lagda(?:\.md|\.rst|\.tex|\.org)?)$/iu, "")
+    .replace(AGDA_SOURCE_SUFFIX_RE, "")
+    .replaceAll("\\", "/")
     .replace(/\//g, ".")
     .replace(/^agda\./, "");
 }
@@ -185,9 +193,11 @@ function scoreImportCandidate(existingImports: Set<string>, moduleName: string):
 }
 
 function computeSubdirectoryLabel(baseDir: string, relFile: string): string {
-  const relToDir = relative(baseDir, relFile);
-  const first = relToDir.split("/")[0];
-  return first || ".";
+  const relToDir = relative(baseDir, relFile).replaceAll("\\", "/");
+  const segments = relToDir.split("/").filter((s) => s.length > 0);
+  // File is directly under baseDir (no subdirectory) — use stable root bucket label
+  if (segments.length < 2) return ".";
+  return segments[0] ?? ".";
 }
 
 export function register(
@@ -392,7 +402,7 @@ export function register(
       } catch (err) {
         if (err instanceof PathSandboxError) {
           return makeToolResult(
-            okEnvelope({
+            errorEnvelope({
               tool: "agda_apply_rename",
               summary: `Invalid path: ${file}`,
               classification: "invalid-path",
@@ -413,7 +423,7 @@ export function register(
       }
       if (!existsSync(requested)) {
         return makeToolResult(
-          okEnvelope({
+          errorEnvelope({
             tool: "agda_apply_rename",
             summary: `File not found: ${file}`,
             classification: "not-found",
@@ -535,7 +545,7 @@ export function register(
       symbol: z.string(),
       localBindings: z.array(z.object({ line: z.number(), typeSignature: z.boolean() })),
       importedBindings: z.array(z.object({ module: z.string(), file: z.string(), line: z.number(), importLine: z.number().nullable() })),
-      clashSource: z.object({ module: z.string(), importLine: z.number() }).nullable(),
+      clashSource: z.object({ module: z.string(), importLine: z.number().nullable() }).nullable(),
     }),
     callback: async ({ symbol, file }: { symbol: string; file: string }) => {
       const filePath = resolveExistingPathWithinRoot(repoRoot, resolveFileWithinRoot(repoRoot, file));
@@ -565,9 +575,11 @@ export function register(
         }
       }
 
-      const clashSource = importedBindings.length > 0
-        ? { module: importedBindings[0].module, importLine: importedBindings[0].importLine ?? 0 }
-        : null;
+      const clashSource = importedBindings.length > 0 && importedBindings[0].importLine != null
+        ? { module: importedBindings[0].module, importLine: importedBindings[0].importLine }
+        : importedBindings.length > 0
+          ? { module: importedBindings[0].module, importLine: null }
+          : null;
       const textParts: string[] = [];
       textParts.push(`## Clash source for \`${symbol}\``);
       textParts.push("");
@@ -592,7 +604,9 @@ export function register(
         okEnvelope({
           tool: "agda_find_clash_source",
           summary: clashSource
-            ? `Likely clash source: open import ${clashSource.module} (line ${clashSource.importLine}).`
+            ? clashSource.importLine != null
+              ? `Likely clash source: open import ${clashSource.module} (line ${clashSource.importLine}).`
+              : `Likely clash source: open import ${clashSource.module} (import line unknown).`
             : `No imported clash source found for ${symbol}.`,
           classification: clashSource ? "ok" : "no-results",
           data: {
@@ -1055,6 +1069,9 @@ export function register(
 
       const clustersMap = new Map<string, string[]>();
       for (const status of statuses) {
+        // Only cluster files that failed — clean and holes files are not errors
+        // and their inclusion skews the cluster view for agents consuming this data.
+        if (status.status !== "error") continue;
         const root = status.rootCauseFile ?? status.file;
         const list = clustersMap.get(root) ?? [];
         list.push(status.file);

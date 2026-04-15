@@ -143,3 +143,43 @@ describe("buildAutoSearchPayload", () => {
   });
 });
 
+
+describe("extractPostulateSites — multi-name and comment-skip", () => {
+  test("splits multi-name inline declaration: postulate p q r : Set", () => {
+    const source = "postulate p q r : Set\n";
+    const sites = extractPostulateSites(source);
+    expect(sites).toHaveLength(1);
+    expect(sites[0].declarations).toEqual(["p", "q", "r"]);
+  });
+
+  test("splits multi-name block declaration: a b : Set", () => {
+    const source = "postulate\n  a b : Set\n  c : Set → Set\n";
+    const sites = extractPostulateSites(source);
+    expect(sites).toHaveLength(1);
+    expect(sites[0].declarations).toEqual(["a", "b", "c"]);
+  });
+
+  test("skips comment-only lines inside a block", () => {
+    const source = "postulate\n  -- just a comment\n  real : Set\n";
+    const sites = extractPostulateSites(source);
+    expect(sites).toHaveLength(1);
+    expect(sites[0].declarations).toEqual(["real"]);
+    expect(sites[0].declarations).not.toContain("just");
+    expect(sites[0].declarations).not.toContain("a");
+    expect(sites[0].declarations).not.toContain("comment");
+  });
+
+  test("inline single name still works after the fix", () => {
+    const source = "postulate myAxiom : Set\n";
+    const sites = extractPostulateSites(source);
+    expect(sites).toHaveLength(1);
+    expect(sites[0].declarations).toEqual(["myAxiom"]);
+  });
+
+  test("block with blank lines between declarations", () => {
+    const source = "postulate\n  first : Set\n\n  second : Set\n";
+    const sites = extractPostulateSites(source);
+    expect(sites).toHaveLength(1);
+    expect(sites[0].declarations).toEqual(["first", "second"]);
+  });
+});

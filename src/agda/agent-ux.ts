@@ -374,8 +374,10 @@ export function extractPostulateSites(source: string): PostulateSite[] {
 
     const inline = /^postulate\s+(.+)$/u.exec(trimmed);
     if (inline) {
-      const name = inline[1].split(":")[0]?.trim() ?? "";
-      sites.push({ line: i + 1, declarations: name ? [name] : [] });
+      // Split on `:` and tokenise LHS — handles `postulate p q : Set`
+      const lhs = inline[1].split(":")[0].trim();
+      const names = lhs.split(/\s+/u).filter((t) => t.length > 0 && !t.startsWith("--"));
+      sites.push({ line: i + 1, declarations: names });
       continue;
     }
 
@@ -385,14 +387,17 @@ export function extractPostulateSites(source: string): PostulateSite[] {
     while (j < lines.length) {
       const body = lines[j];
       const bodyTrimmed = body.trim();
-      if (bodyTrimmed.length === 0) {
+      // Skip blank and comment-only lines within the block
+      if (bodyTrimmed.length === 0 || bodyTrimmed.startsWith("--")) {
         j += 1;
         continue;
       }
       const bodyIndent = body.match(/^(\s*)/u)?.[1].length ?? 0;
       if (bodyIndent <= indent) break;
-      const name = bodyTrimmed.split(":")[0]?.trim() ?? "";
-      if (name) declarations.push(name);
+      // Split on `:` and tokenise LHS — handles `p q : Set` (multiple names)
+      const lhs = bodyTrimmed.split(":")[0].trim();
+      const names = lhs.split(/\s+/u).filter((t) => t.length > 0 && !t.startsWith("--"));
+      declarations.push(...names);
       j += 1;
     }
     sites.push({ line: i + 1, declarations });

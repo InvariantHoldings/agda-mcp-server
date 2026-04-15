@@ -179,9 +179,8 @@ export function register(
       scope: z.enum(["local", "module", "imported"]).optional().describe("Search scope: local context only, module-wide, or imported definitions"),
       offset: z.number().int().min(0).optional().describe("0-based pagination offset"),
       limit: z.number().int().min(1).max(200).optional().describe("Maximum results to return"),
-      maxApplications: z.number().int().min(1).max(8).optional().describe("Preferred upper bound for application chain suggestions"),
     },
-    callback: async ({ goalId, targetType, scope, offset, limit, maxApplications }) => {
+    callback: async ({ goalId, targetType, scope, offset, limit }) => {
       const info = await session.goal.typeContext(goalId);
       const target = (targetType as string) || info.type;
       const contextEntries = info.context.map(parseContextEntry);
@@ -251,9 +250,6 @@ export function register(
       }
       if (target.includes("→")) {
         output += `\n**Hint:** Goal is a function type. Consider \`refine\` or \`intro\` to introduce arguments.\n`;
-      }
-      if (maxApplications !== undefined) {
-        output += `\n**Application chain mode:** prefer candidate chains requiring ≤ ${maxApplications} application(s).\n`;
       }
 
       return output;
