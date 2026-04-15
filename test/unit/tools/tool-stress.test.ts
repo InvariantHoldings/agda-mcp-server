@@ -334,6 +334,22 @@ test("agda_search_definitions: query finds matching identifier", async () => {
   expect(result.content[0].text).not.toContain("B.agda");
 });
 
+test("agda_search_definitions: typePattern finds matching signature shape", async () => {
+  writeAgdaRoot("A.agda", "module A where\nlemma : Nat -> Nat -> Nat\nlemma x y = x\n");
+  writeAgdaRoot("B.agda", "module B where\nother : Bool\nother = Bool\n");
+  const result = await server.call("agda_search_definitions", { typePattern: "_ -> _ -> _" });
+  expect(result.isError).toBeFalsy();
+  expect(result.content[0].text).toContain("A.agda");
+  expect(result.content[0].text).not.toContain("B.agda");
+});
+
+test("agda_search_definitions: missing query and typePattern returns invalid-input error", async () => {
+  writeAgdaRoot("A.agda", "module A where\nx : Set\nx = Set\n");
+  const result = await server.call("agda_search_definitions", {});
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent.classification).toBe("invalid-input");
+});
+
 test("agda_search_definitions: path traversal in tier is sandboxed", async () => {
   const result = await server.call("agda_search_definitions", { query: "foo", tier: "../../" });
   expect(result.isError).toBe(true);
@@ -409,4 +425,3 @@ test("agda_cache_info: fresh file with no agda-lib has zero artifacts", async ()
   const data = result.structuredContent!.data;
   expect(data.artifactCount).toBe(0);
 });
-

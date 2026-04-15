@@ -9,6 +9,7 @@ import { resolve, relative, join } from "node:path";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import type { AgdaSession } from "../agda-process.js";
 import { isAgdaSourceFile, filePathDescription } from "../agda/version-support.js";
+import { matchesTypePattern } from "../agda/agent-ux.js";
 import { logger } from "../agda/logger.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import { missingPathToolError, ToolInvocationError, registerTextTool } from "./tool-helpers.js";
@@ -318,10 +319,27 @@ export function register(
     description: "Search for a definition, theorem, or type name across Agda modules.",
     category: "navigation",
     inputSchema: {
-      query: z.string().describe("The name or pattern to search for"),
+      query: z.string().optional().describe("The name or pattern to search for"),
+      typePattern: z.string().optional().describe("Type-shape query (wildcard `_` supported), e.g. `_ ≤ _ + _`"),
       tier: z.string().optional().describe("Optional tier to limit search (Kernel, Foundation, etc.)"),
     },
-    callback: async ({ query, tier }: { query: string; tier?: string }) => {
+    callback: async ({ query, typePattern, tier }: { query?: string; typePattern?: string; tier?: string }) => {
+      const mode: "name" | "type-pattern" = typePattern ? "type-pattern" : "name";
+      const actualQuery = (typePattern ?? query ?? "").trim();
+      if (actualQuery.length === 0) {
+        throw new ToolInvocationError({
+          message: "Provide either `query` or `typePattern`.",
+          classification: "invalid-input",
+          diagnostics: [
+            {
+              severity: "error",
+              message: "Provide either `query` or `typePattern`.",
+              code: "invalid-input",
+            },
+          ],
+          data: { query: actualQuery, tier },
+        });
+      }
       const requestedSearchRoot = tier
         ? resolveFileWithinRoot(repoRoot, join("agda", tier))
         : resolveFileWithinRoot(repoRoot, "agda");
@@ -375,9 +393,16 @@ export function register(
               continue;
             }
             for (let i = 0; i < fileLines.length; i++) {
-              if (fileLines[i].includes(query)) {
-                matches.push({ file: nextDisplayPath, line: i + 1, text: fileLines[i].trim() });
+              const line = fileLines[i];
+              if (mode === "name") {
+                if (!line.includes(actualQuery)) continue;
+                matches.push({ file: nextDisplayPath, line: i + 1, text: line.trim() });
+                continue;
               }
+              if (!line.includes(":")) continue;
+              const typePart = line.split(":").slice(1).join(":").trim();
+              if (!matchesTypePattern(typePart, actualQuery)) continue;
+              matches.push({ file: nextDisplayPath, line: i + 1, text: line.trim() });
             }
           }
         }
@@ -389,10 +414,12 @@ export function register(
       );
       let output: string;
       if (matches.length === 0) {
-        output = `No matches for "${query}" in ${tier ?? "agda/"}`;
+        output = mode === "name"
+          ? `No matches for "${actualQuery}" in ${tier ?? "agda/"}`
+          : `No type-pattern matches for "${actualQuery}" in ${tier ?? "agda/"}`;
       } else {
         const capped = matches.slice(0, 50);
-        output = `## Search: "${query}" (${matches.length} matches${matches.length > 50 ? ", showing first 50" : ""})\n\n`;
+        output = `## Search (${mode}): "${actualQuery}" (${matches.length} matches${matches.length > 50 ? ", showing first 50" : ""})\n\n`;
         for (const m of capped) output += `- **${m.file}:${m.line}** \`${m.text}\`\n`;
       }
       if (unreadableDirs.length > 0 || unreadableFiles.length > 0) {
