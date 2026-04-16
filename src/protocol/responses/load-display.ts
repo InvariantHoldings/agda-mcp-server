@@ -81,7 +81,7 @@ export function decodeLoadDisplayResponses(
       }
     }
 
-    invisibleGoalCount = payload.invisibleGoals.length;
+    invisibleGoalCount = Math.max(invisibleGoalCount, payload.invisibleGoals.length);
 
     warnings.push(
       ...payload.warnings

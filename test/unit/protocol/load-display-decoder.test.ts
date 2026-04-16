@@ -63,3 +63,33 @@ test("decodeLoadDisplayResponses accepts visible goals with object constraint id
 
   expect(decoded.visibleGoals).toEqual([{ goalId: 9, type: "Nat" }]);
 });
+
+test("decodeLoadDisplayResponses preserves the largest invisible-goal count across multiple AllGoalsWarnings events", () => {
+  const decoded = decodeLoadDisplayResponses([
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [],
+        invisibleGoals: [
+          { constraintObj: 4, type: "Hidden₁" },
+          { constraintObj: 5, type: "Hidden₂" },
+        ],
+        errors: [],
+        warnings: [],
+      },
+    },
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [],
+        invisibleGoals: [],
+        errors: [],
+        warnings: [],
+      },
+    },
+  ]);
+
+  expect(decoded.invisibleGoalCount).toBe(2);
+});

@@ -12,7 +12,7 @@
 // and writable here because they're module-internal, not a public
 // API surface for consumers.
 
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { AgdaSession } from "./session.js";
@@ -23,6 +23,7 @@ import { throwOnFatalProtocolStderr } from "./protocol-errors.js";
 import { mergeGoals } from "./goal-merging.js";
 import { logger } from "./logger.js";
 import { command, quoted, profileOptionsList } from "../protocol/command-builder.js";
+import { findGoalPositions } from "../session/goal-positions.js";
 import {
   validateProfileOptions,
   toProfileArgs,
@@ -88,6 +89,19 @@ function classifyParsedLoad(parsed: {
   return { hasHoles, isComplete, classification };
 }
 
+function countExplicitSourceHoles(absPath: string): number {
+  try {
+    const source = readFileSync(absPath, "utf8");
+    return findGoalPositions(source).length;
+  } catch (err) {
+    logger.warn("explicit hole scan failed", {
+      file: absPath,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return 0;
+  }
+}
+
 export async function runLoad(
   session: AgdaSession,
   filePath: string,
@@ -134,7 +148,8 @@ export async function runLoad(
     }
   }
 
-  const goalCount = goals.length;
+  const explicitHoleCount = countExplicitSourceHoles(absPath);
+  const goalCount = Math.max(goals.length, explicitHoleCount);
   const { hasHoles, isComplete, classification } = classifyParsedLoad(parsed, goalCount);
 
   session.goalIds = goalIds;
@@ -179,26 +194,41 @@ export async function runLoadNoMetas(
   );
   throwOnFatalProtocolStderr(responses);
   const parsed = parseLoadResponses(responses, { profilingEnabled: false });
+  const explicitHoleCount = countExplicitSourceHoles(absPath);
+  const goalCount = Math.max(parsed.goalCount, explicitHoleCount);
+  const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0;
+  const strictFallbackTriggered = parsed.success && explicitHoleCount > 0;
+  const success = strictFallbackTriggered ? false : parsed.success;
+  const classification = success
+    ? hasHoles
+      ? "ok-with-holes"
+      : "ok-complete"
+    : "type-error";
+  const isComplete = success && !hasHoles;
+  const strictFallbackError = `Detected ${explicitHoleCount} explicit hole marker(s) in source file; strict load requires zero unresolved metas.`;
+  const errors = strictFallbackTriggered
+    ? [...parsed.errors, strictFallbackError]
+    : parsed.errors;
 
   // Set session state atomically AFTER command completes.
   session.currentFile = absPath;
   session.goalIds = parsed.goalIds;
   session.lastLoadedMtime = statSync(absPath).mtimeMs;
-  session.lastClassification = parsed.classification;
+  session.lastClassification = classification;
   session.lastLoadedAt = Date.now();
   session.lastInvisibleGoalCount = parsed.invisibleGoalCount;
 
   return {
-    success: parsed.success,
-    errors: parsed.errors,
+    success,
+    errors,
     warnings: parsed.warnings,
     goals: parsed.goals,
     allGoalsText: parsed.allGoalsText,
     invisibleGoalCount: parsed.invisibleGoalCount,
-    goalCount: parsed.goalCount,
-    hasHoles: parsed.hasHoles,
-    isComplete: parsed.isComplete,
-    classification: parsed.classification,
+    goalCount,
+    hasHoles,
+    isComplete,
+    classification,
     profiling: parsed.profiling,
     lastCheckedLine: parsed.lastCheckedLine ?? null,
   };
