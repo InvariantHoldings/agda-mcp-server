@@ -1,0 +1,81 @@
+{
+  "description": "Cross-version notes on the Agda IOTCM --interaction-json protocol, derived from reading the official Haskell sources in agda/agda.",
+  "sourceFiles": [
+    "src/full/Agda/Interaction/Response/Base.hs",
+    "src/full/Agda/Interaction/JSONTop.hs"
+  ],
+  "versionsConsulted": ["v2.7.0.1", "v2.8.0", "master (pre-2.9.0)"],
+  "lastUpdated": "2026-04-16",
+
+  "loadResponseSequence": {
+    "description": "After Cmd_load, Agda emits InteractionPoints, then one or more DisplayInfo/AllGoalsWarnings, then Status. The order is stable across all consulted versions.",
+    "responses": [
+      {
+        "kind": "InteractionPoints",
+        "fields": { "interactionPoints": "[number]" },
+        "notes": "Numeric InteractionId values. These are the visible interaction points (holes) the user wrote."
+      },
+      {
+        "kind": "DisplayInfo",
+        "infoKind": "AllGoalsWarnings",
+        "fields": {
+          "visibleGoals": "[OutputConstraint]",
+          "invisibleGoals": "[OutputConstraint]",
+          "warnings": "[TCWarning]",
+          "errors": "[TCWarning]"
+        },
+        "notes": "visibleGoals are OutputConstraint entries keyed by InteractionId (user-written holes). invisibleGoals are OutputConstraint entries keyed by NamedMeta (unsolved metavariables Agda created internally). May be emitted multiple times per load."
+      },
+      {
+        "kind": "Status",
+        "fields": {
+          "showImplicitArguments": "boolean",
+          "showIrrelevantArguments": "boolean",
+          "checked": "boolean"
+        },
+        "notes": "checked=true means the module was successfully type-checked."
+      }
+    ]
+  },
+
+  "goalsTypology": {
+    "visibleGoals": {
+      "haskellType": "OutputConstraint_boot tcErr A.Expr InteractionId",
+      "haskellComment": "visible metas (goals)",
+      "jsonKey": "constraintObj",
+      "description": "User-written interaction points ({!!}, {! expr !}, ?). Each has a stable InteractionId for interactive commands (give, refine, case-split).",
+      "stableAcrossVersions": true
+    },
+    "invisibleGoals": {
+      "haskellType": "OutputConstraint_boot tcErr A.Expr NamedMeta",
+      "haskellComment": "hidden (unsolved) metas",
+      "jsonKey": "constraintObj",
+      "description": "Metavariables Agda created during elaboration but could not solve. Includes implicit arguments that remain open and — critically — holes inside abstract blocks, which have no InteractionId. Keyed by NamedMeta; in JSON this is represented as a {name, range} object, where the name string encodes the meta identity rather than exposing separate id/module fields.",
+      "stableAcrossVersions": true
+    },
+    "postulates": {
+      "description": "Postulates are accepted as complete definitions. They do not appear in visibleGoals or invisibleGoals. A file with only postulates and no holes/metas is ok-complete.",
+      "stableAcrossVersions": true
+    }
+  },
+
+  "versionDifferences": {
+    "v2.7.0.1_to_v2.8.0": [
+      "Resp_JumpToError position type changed from Int32 to Word32.",
+      "GoalAndElaboration payload changed from I.Term to A.Expr (internal, JSON encoding unchanged).",
+      "Info_CompilationError changed from [tcWarning] to (Set tcWarning)."
+    ],
+    "v2.8.0_to_master": [
+      "Resp_RunningInfo message changed from String to DocTree (may affect JSON encoding of running info messages).",
+      "Goal_HelperFunction constraint changed from OutputConstraint' A.Expr A.Expr to OutputConstraint' A.Expr C.Name.",
+      "New import: Agda.Syntax.Common.Pretty (DocTree)."
+    ],
+    "stableAcrossAll": [
+      "AllGoalsWarnings JSON shape: { kind, visibleGoals, invisibleGoals, warnings, errors }.",
+      "InteractionPoints JSON shape: { kind, interactionPoints }.",
+      "Goals_boot type alias: (visible metas/goals, hidden unsolved metas).",
+      "OutputConstraint encoding via encodeOC with constraintObj and type fields.",
+      "GiveResult encoding: {str: s} or {paren: bool}."
+    ]
+  }
+}

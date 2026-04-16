@@ -12,7 +12,8 @@ test("decodeLoadDisplayResponses extracts visible goals, warnings, and errors", 
           { constraintObj: 2, type: "Nat" },
           { constraintObj: 3, type: "Bool" },
         ],
-        invisibleGoals: [{ constraintObj: 4, type: "Hidden" }],
+        // IOTCM sends NamedMeta: { name: string, range: Range }
+        invisibleGoals: [{ constraintObj: { name: "_4", range: [] }, type: "Hidden" }],
         errors: [{ message: "type mismatch" }],
         warnings: [{ message: "unreachable clause" }],
       },
@@ -24,6 +25,7 @@ test("decodeLoadDisplayResponses extracts visible goals, warnings, and errors", 
     { goalId: 3, type: "Bool" },
   ]);
   expect(decoded.invisibleGoalCount).toBe(1);
+  expect(decoded.invisibleGoals).toEqual([{ name: "_4", type: "Hidden" }]);
   expect(decoded.errors).toEqual(["type mismatch"]);
   expect(decoded.warnings).toEqual(["unreachable clause"]);
 });
@@ -62,4 +64,39 @@ test("decodeLoadDisplayResponses accepts visible goals with object constraint id
   ]);
 
   expect(decoded.visibleGoals).toEqual([{ goalId: 9, type: "Nat" }]);
+});
+
+test("decodeLoadDisplayResponses preserves the largest invisible-goal set across multiple AllGoalsWarnings events", () => {
+  const decoded = decodeLoadDisplayResponses([
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [],
+        // IOTCM NamedMeta entries: { name: string, range: Range }
+        invisibleGoals: [
+          { constraintObj: { name: "_4", range: [] }, type: "Hidden₁" },
+          { constraintObj: { name: "_5", range: [] }, type: "Hidden₂" },
+        ],
+        errors: [],
+        warnings: [],
+      },
+    },
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [],
+        invisibleGoals: [],
+        errors: [],
+        warnings: [],
+      },
+    },
+  ]);
+
+  expect(decoded.invisibleGoalCount).toBe(2);
+  expect(decoded.invisibleGoals).toEqual([
+    { name: "_4", type: "Hidden₁" },
+    { name: "_5", type: "Hidden₂" },
+  ]);
 });

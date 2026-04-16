@@ -52,16 +52,70 @@ export interface AgdaGoal {
   context: string[];
 }
 
+/**
+ * Result of loading an Agda file via `Cmd_load` or `Cmd_load_no_metas`.
+ *
+ * ## IOTCM protocol mapping
+ *
+ * The Agda IOTCM `--interaction-json` protocol reports three kinds of
+ * "unfinished" items. Our fields map to those as follows:
+ *
+ * | Protocol concept       | IOTCM response field                       | LoadResult field         |
+ * |------------------------|--------------------------------------------|--------------------------|
+ * | Interaction points     | `InteractionPoints` + `visibleGoals`       | `goals`, `goalCount`     |
+ * | Unsolved metavariables | `AllGoalsWarnings.invisibleGoals`          | `invisibleGoalCount`     |
+ * | Source-level holes     | *(fallback scan when protocol reports 0/0)*| feeds `hasHoles` only    |
+ *
+ * `goalCount` always equals `goals.length` so consumers can safely
+ * index into the array. The source-level hole count is *not* added
+ * to `goalCount` — it only affects `hasHoles` and `classification`.
+ *
+ * Postulates are accepted by Agda as complete definitions; they do
+ * not count as holes or unsolved metas.
+ */
 export interface LoadResult {
   success: boolean;
   errors: string[];
   warnings: string[];
+  /**
+   * Visible goals (interaction points) the user can interact with.
+   * Each corresponds to an explicit hole marker (`{!!}`, `?`, etc.)
+   * that Agda assigned an `InteractionId`. Populated from
+   * `InteractionPoints` + `AllGoalsWarnings.visibleGoals`.
+   */
   goals: AgdaGoal[];
   allGoalsText: string;
+  /**
+   * Count of unsolved metavariables Agda could not resolve. These
+   * include implicit arguments that remain open and — crucially —
+   * holes inside `abstract` blocks, which Agda does *not* report as
+   * interaction points. Sourced from `AllGoalsWarnings.invisibleGoals`.
+   *
+   * Preserved as the maximum across multiple `AllGoalsWarnings` events
+   * within a single load to prevent undercount when a later event has
+   * fewer entries.
+   */
   invisibleGoalCount: number;
+  /**
+   * Number of visible goals. Always equals `goals.length` so callers
+   * can safely index into `goals[]`. Does *not* include source-level
+   * hole markers discovered by the fallback scan — those only feed
+   * into `hasHoles`.
+   */
   goalCount: number;
+  /**
+   * True when the file has any remaining work: visible goals (interaction
+   * points), invisible goals (unsolved metas), or source-level hole
+   * markers detected by the fallback scan.
+   */
   hasHoles: boolean;
   isComplete: boolean;
+  /**
+   * `"ok-complete"` — success with no holes/metas.
+   * `"ok-with-holes"` — success but holes/metas remain.
+   * `"type-error"` — Agda reported errors (or, for `Cmd_load_no_metas`,
+   * the strict contract was violated by remaining holes/metas).
+   */
   classification: string;
   /** Profiling output from Agda when --profile options are active. */
   profiling: string | null;
