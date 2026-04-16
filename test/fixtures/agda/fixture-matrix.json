@@ -587,5 +587,23 @@
     "minHoleCount": 1,
     "expectedStrictSuccess": false,
     "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "MixedHoleStyles.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 3,
+    "minHoleCount": 3,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "HoleInStringComment.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
   }
 ]

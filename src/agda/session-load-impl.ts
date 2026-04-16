@@ -148,9 +148,25 @@ export async function runLoad(
     }
   }
 
-  const explicitHoleCount = countExplicitSourceHoles(absPath);
-  const goalCount = Math.max(goals.length, explicitHoleCount);
-  const { hasHoles, isComplete, classification } = classifyParsedLoad(parsed, goalCount);
+  // Only scan the source for explicit hole markers when the protocol
+  // reports a nominally-clean result (no goals, no invisible metas).
+  // This avoids redundant I/O on large modules where the protocol
+  // already correctly reports holes.
+  const needsExplicitHoleScan =
+    parsed.success && goals.length === 0 && parsed.invisibleGoalCount === 0;
+  const sourceHoleCount = needsExplicitHoleScan ? countExplicitSourceHoles(absPath) : 0;
+
+  // goalCount must match the actual goals array length so consumers
+  // can safely index into it.  sourceHoleCount feeds into hasHoles
+  // for classification only.
+  const goalCount = goals.length;
+  const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0 || sourceHoleCount > 0;
+  const isComplete = parsed.success && !hasHoles;
+  const classification = parsed.success
+    ? hasHoles
+      ? "ok-with-holes"
+      : "ok-complete"
+    : "type-error";
 
   session.goalIds = goalIds;
   session.lastClassification = classification;
@@ -194,9 +210,17 @@ export async function runLoadNoMetas(
   );
   throwOnFatalProtocolStderr(responses);
   const parsed = parseLoadResponses(responses, { profilingEnabled: false });
-  const explicitHoleCount = countExplicitSourceHoles(absPath);
-  const goalCount = Math.max(parsed.goalCount, explicitHoleCount);
-  const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0;
+
+  // Only scan source when protocol reports clean — avoid extra I/O
+  // when protocol already correctly reports holes.
+  const needsExplicitHoleScan =
+    parsed.success && parsed.goalCount === 0 && parsed.invisibleGoalCount === 0;
+  const sourceHoleCount = needsExplicitHoleScan ? countExplicitSourceHoles(absPath) : 0;
+
+  // goalCount must match the actual goals array so consumers can
+  // safely index into goals[].  sourceHoleCount feeds hasHoles only.
+  const goalCount = parsed.goalCount;
+  const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0 || sourceHoleCount > 0;
   const strictFallbackTriggered = parsed.success && hasHoles;
   const success = strictFallbackTriggered ? false : parsed.success;
   const classification = success
@@ -205,9 +229,9 @@ export async function runLoadNoMetas(
       : "ok-complete"
     : "type-error";
   const isComplete = success && !hasHoles;
-  const strictRequirement = "strict load requires zero unresolved metas and zero holes.";
-  const strictFallbackError = explicitHoleCount > 0
-    ? `Detected ${explicitHoleCount} explicit hole marker(s) in source file; ${strictRequirement}`
+  const strictRequirement = "Strict load requires zero unresolved metas and zero holes.";
+  const strictFallbackError = sourceHoleCount > 0
+    ? `Detected ${sourceHoleCount} explicit hole marker(s) in source file; ${strictRequirement}`
     : `Strict load reported unresolved metas/holes; ${strictRequirement}`;
   const errors = strictFallbackTriggered
     ? [...parsed.errors, strictFallbackError]

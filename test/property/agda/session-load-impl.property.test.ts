@@ -51,14 +51,16 @@ test("runLoad classifies explicit holes as ok-with-holes", async () => {
         fc.constantFrom("{!!}", "{! x !}", "?"),
         async (holeCount, marker) => {
           const body = Array.from({ length: holeCount }, (_, i) => `x${i} : Set\nx${i} = ${marker}`).join("\n\n");
-        writeFileSync(abs, `module Probe where\n\n${body}\n`, "utf8");
+          writeFileSync(abs, `module Probe where\n\n${body}\n`, "utf8");
 
-        const result = await runLoad(session, file);
-        expect(result.success).toBe(true);
-        expect(result.classification).toBe("ok-with-holes");
-        expect(result.hasHoles).toBe(true);
-        expect(result.isComplete).toBe(false);
-        expect(result.goalCount >= holeCount).toBe(true);
+          const result = await runLoad(session, file);
+          expect(result.success).toBe(true);
+          expect(result.classification).toBe("ok-with-holes");
+          expect(result.hasHoles).toBe(true);
+          expect(result.isComplete).toBe(false);
+          // goalCount matches protocol (0 here); hasHoles is true
+          // because the source-level hole scan found markers.
+          expect(result.goalCount).toBe(0);
         },
       ),
     );
@@ -91,14 +93,16 @@ test("runLoadNoMetas fails with type-error when explicit holes exist", async () 
         fc.constantFrom("{!!}", "{! x !}", "?"),
         async (holeCount, marker) => {
           const body = Array.from({ length: holeCount }, (_, i) => `x${i} : Set\nx${i} = ${marker}`).join("\n\n");
-        writeFileSync(abs, `module ProbeStrict where\n\n${body}\n`, "utf8");
+          writeFileSync(abs, `module ProbeStrict where\n\n${body}\n`, "utf8");
 
-        const result = await runLoadNoMetas(session, file);
-        expect(result.success).toBe(false);
-        expect(result.classification).toBe("type-error");
-        expect(result.hasHoles).toBe(true);
-        expect(result.isComplete).toBe(false);
-        expect(result.goalCount >= holeCount).toBe(true);
+          const result = await runLoadNoMetas(session, file);
+          expect(result.success).toBe(false);
+          expect(result.classification).toBe("type-error");
+          expect(result.hasHoles).toBe(true);
+          expect(result.isComplete).toBe(false);
+          // goalCount matches protocol (0 here); hasHoles is true
+          // because the source-level hole scan found markers.
+          expect(result.goalCount).toBe(0);
         },
       ),
     );

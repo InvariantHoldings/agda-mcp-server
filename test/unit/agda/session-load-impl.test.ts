@@ -87,7 +87,9 @@ test("runLoad classifies explicit hole as ok-with-holes despite empty protocol g
     expect(result.hasHoles).toBe(true);
     expect(result.isComplete).toBe(false);
     expect(result.classification).toBe("ok-with-holes");
-    expect(result.goalCount >= 1).toBe(true);
+    // goalCount reflects actual protocol goals (0 here), but hasHoles
+    // is true because the source scan found explicit hole markers.
+    expect(result.goalCount).toBe(0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -117,7 +119,8 @@ test("runLoadNoMetas fails with type-error when explicit holes exist", async () 
     expect(result.isComplete).toBe(false);
     expect(result.classification).toBe("type-error");
     expect(result.errors.length >= 1).toBe(true);
-    expect(result.goalCount >= 1).toBe(true);
+    // goalCount matches protocol (0), but hasHoles is true from source scan.
+    expect(result.goalCount).toBe(0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
