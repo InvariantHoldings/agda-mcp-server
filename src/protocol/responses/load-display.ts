@@ -38,8 +38,15 @@ export interface DecodedLoadDisplay {
   /**
    * Invisible goals — IOTCM `AllGoalsWarnings.invisibleGoals`.
    * Each entry is a decoded unsolved metavariable with its
-   * NamedMeta name and type. Preserved as the largest set across
-   * multiple `AllGoalsWarnings` events to prevent undercount.
+   * NamedMeta name and type.
+   *
+   * When multiple `AllGoalsWarnings` events arrive in one load,
+   * we keep the array with the most entries (max-by-length).
+   * In practice Agda's later events have fewer-or-equal entries
+   * (as metas get solved), so this matches the original
+   * `Math.max(count)` behaviour while preserving structure.
+   * A union is not used because later events represent the
+   * current state, not an additive accumulation.
    */
   invisibleGoals: DecodedInvisibleGoal[];
   /** Count shorthand — always equals `invisibleGoals.length`. */
