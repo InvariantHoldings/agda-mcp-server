@@ -52,7 +52,8 @@ function loadResponsesWithInvisibleGoal() {
       info: {
         kind: "AllGoalsWarnings",
         visibleGoals: [],
-        invisibleGoals: [{ constraintObj: 1, type: "Set" }],
+        // IOTCM NamedMeta: { name: string, range: Range }
+        invisibleGoals: [{ constraintObj: { name: "_1", range: [] }, type: "Set" }],
         errors: [],
         warnings: [],
       },

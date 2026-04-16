@@ -153,7 +153,7 @@ test("invisibleGoals (abstract blocks) tracked", () => {
       info: {
         kind: "AllGoalsWarnings",
         visibleGoals: [],
-        invisibleGoals: [{ constraintObj: 3, type: "Nat → Nat" }],
+        invisibleGoals: [{ constraintObj: { name: "_3", range: [] }, type: "Nat → Nat" }],
         errors: [],
         warnings: [],
       },

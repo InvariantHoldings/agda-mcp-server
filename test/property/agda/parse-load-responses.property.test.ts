@@ -123,9 +123,16 @@ test("parseLoadResponses never throws for any array of {kind: string}", async ()
 // ── invisibleGoalCount ───────────────────────────────────
 
 test("invisibleGoalCount matches invisibleGoals array length", async () => {
+  // IOTCM sends invisible goals with NamedMeta constraintObj: { name: string, range: Range }
   await fc.assert(
     fc.property(
-      fc.array(fc.record({ constraintObj: fc.integer(), type: fc.string() }), { maxLength: 5 }),
+      fc.array(
+        fc.record({
+          constraintObj: fc.record({ name: fc.string({ minLength: 1 }) }),
+          type: fc.string(),
+        }),
+        { maxLength: 5 },
+      ),
       (invisGoals) => {
         const result = parseLoadResponses([
           { kind: "InteractionPoints", interactionPoints: [] },

@@ -36,6 +36,8 @@ export const contextEntrySchema = z.object({
   binding: z.string().optional(),
 }).passthrough();
 
+// InteractionId on the wire: toJSON gives a plain number;
+// encodeTCM gives { id: number, range: Range }.
 const interactionIdSchema = z.union([
   z.number(),
   z.object({
@@ -43,8 +45,25 @@ const interactionIdSchema = z.union([
   }).passthrough(),
 ]);
 
+// Visible goal entry — OutputConstraint keyed by InteractionId.
+// Agda JSONTop.hs: encodeOC encodeTCM encodePrettyTCM for OfType
+//   → { kind: "OfType", constraintObj: InteractionId, type: string }
 export const goalConstraintEntrySchema = z.object({
   constraintObj: interactionIdSchema.optional(),
+  type: z.string().optional(),
+}).passthrough();
+
+// NamedMeta on the wire (invisible-goal key):
+// Agda JSONTop.hs: encodeTCM NamedMeta → { name: string, range: Range }
+const namedMetaSchema = z.object({
+  name: z.string(),
+}).passthrough();
+
+// Invisible goal entry — OutputConstraint keyed by NamedMeta.
+// Agda JSONTop.hs: encodeOC encodeTCM encodePrettyTCM for OfType
+//   → { kind: "OfType", constraintObj: NamedMeta, type: string }
+export const invisibleGoalConstraintEntrySchema = z.object({
+  constraintObj: namedMetaSchema.optional(),
   type: z.string().optional(),
 }).passthrough();
 

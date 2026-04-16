@@ -70,18 +70,88 @@ function buildLoadOptionsList(profileOptions: string[] | undefined):
   };
 }
 
-function classifyParsedLoad(parsed: {
+// ── IOTCM protocol semantics ────────────────────────────────────────
+//
+// Source of truth: the Agda Haskell sources (consulted across
+// v2.7.0.1, v2.8.0, and master/pre-2.9.0):
+//
+//   Response/Base.hs  — Response_boot, Goals_boot, DisplayInfo_boot
+//   JSONTop.hs        — JSON serialisation (EncodeTCM instances)
+//
+// See also: tooling/protocol/data/official-cross-version-notes.json
+//
+// The `--interaction-json` protocol distinguishes three kinds of
+// "unfinished" items. Our classification must respect all three.
+//
+// 1. **Visible goals (interaction points)**
+//
+//    Haskell type: OutputConstraint_boot tcErr A.Expr InteractionId
+//    Haskell comment: "visible metas (goals)"
+//    JSON responses: `InteractionPoints.interactionPoints` (numeric IDs)
+//                    `AllGoalsWarnings.visibleGoals` (with type info)
+//
+//    These are user-written holes (`{!!}`, `{! expr !}`, `?`). Each
+//    gets an `InteractionId` and can be targeted by give / refine /
+//    case-split / auto. The shape is stable across v2.7.0.1–2.8.0.
+//
+// 2. **Invisible goals (unsolved metavariables)**
+//
+//    Haskell type: OutputConstraint_boot tcErr A.Expr NamedMeta
+//    Haskell comment: "hidden (unsolved) metas"
+//    JSON response: `AllGoalsWarnings.invisibleGoals`
+//
+//    Metavariables Agda created during elaboration but could not
+//    solve — e.g. unsolved implicit arguments, or inferred types
+//    blocked on a user hole.
+//
+//    Key subtlety: holes inside `abstract` blocks are *not* reported
+//    as interaction points (they have no stable InteractionId).
+//    Instead they surface only as invisible goals. So a file can have
+//    `invisibleGoalCount > 0` *and* `goalCount = 0` even though the
+//    source clearly contains `{!!}`.
+//
+// 3. **Source-level hole markers (our fallback detection)**
+//
+//    Not from the protocol. When IOTCM reports zero goals *and* zero
+//    invisible goals, but the source contains explicit hole markers,
+//    the file is not truly complete. This guards against edge cases
+//    where Agda optimises away a hole's interaction point. Gated
+//    behind `(success && goalCount === 0 && invisibleGoalCount === 0)`
+//    to avoid redundant I/O in the common path.
+//
+// Postulates are *not* holes. They are accepted as complete
+// definitions and never appear in visibleGoals or invisibleGoals.
+//
+// `Cmd_load_no_metas` is strictly stronger than `Cmd_load`: it
+// requires zero unresolved metavariables, so any remaining
+// interaction points, invisible goals, or source-level hole markers
+// force a type-error classification.
+
+/**
+ * Classify a load result considering protocol-reported goals,
+ * invisible goals (unsolved metas), and source-level hole markers.
+ *
+ * `goalCount` must equal the actual `goals[]` array length so callers
+ * can safely index into it. `sourceHoleCount` is the number of hole
+ * markers found by scanning the source; it feeds into `hasHoles` for
+ * classification but does not inflate `goalCount`.
+ */
+function classifyLoadResult(input: {
   success: boolean;
-  goals: unknown[];
+  goalCount: number;
   invisibleGoalCount: number;
-}, goalCount: number): {
+  sourceHoleCount: number;
+}): {
   hasHoles: boolean;
   isComplete: boolean;
   classification: string;
 } {
-  const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0;
-  const isComplete = parsed.success && !hasHoles;
-  const classification = parsed.success
+  const hasHoles =
+    input.goalCount > 0 ||
+    input.invisibleGoalCount > 0 ||
+    input.sourceHoleCount > 0;
+  const isComplete = input.success && !hasHoles;
+  const classification = input.success
     ? hasHoles
       ? "ok-with-holes"
       : "ok-complete"
@@ -160,13 +230,12 @@ export async function runLoad(
   // can safely index into it.  sourceHoleCount feeds into hasHoles
   // for classification only.
   const goalCount = goals.length;
-  const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0 || sourceHoleCount > 0;
-  const isComplete = parsed.success && !hasHoles;
-  const classification = parsed.success
-    ? hasHoles
-      ? "ok-with-holes"
-      : "ok-complete"
-    : "type-error";
+  const { hasHoles, isComplete, classification } = classifyLoadResult({
+    success: parsed.success,
+    goalCount,
+    invisibleGoalCount: parsed.invisibleGoalCount,
+    sourceHoleCount,
+  });
 
   session.goalIds = goalIds;
   session.lastClassification = classification;
@@ -220,7 +289,16 @@ export async function runLoadNoMetas(
   // goalCount must match the actual goals array so consumers can
   // safely index into goals[].  sourceHoleCount feeds hasHoles only.
   const goalCount = parsed.goalCount;
-  const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0 || sourceHoleCount > 0;
+  const { hasHoles } = classifyLoadResult({
+    success: parsed.success,
+    goalCount,
+    invisibleGoalCount: parsed.invisibleGoalCount,
+    sourceHoleCount,
+  });
+
+  // Cmd_load_no_metas is strictly stronger: any remaining interaction
+  // points, invisible goals (unsolved metas), or source-level hole
+  // markers force a failure. See the IOTCM protocol notes above.
   const strictFallbackTriggered = parsed.success && hasHoles;
   const success = strictFallbackTriggered ? false : parsed.success;
   const classification = success
@@ -231,7 +309,7 @@ export async function runLoadNoMetas(
   const isComplete = success && !hasHoles;
   const strictRequirement = "Strict load requires zero unresolved metas and zero holes.";
   const strictFallbackError = sourceHoleCount > 0
-    ? `Detected ${sourceHoleCount} explicit hole marker(s) in source file; ${strictRequirement}`
+    ? `Detected ${sourceHoleCount} hole marker(s) in source file; ${strictRequirement}`
     : `Strict load reported unresolved metas/holes; ${strictRequirement}`;
   const errors = strictFallbackTriggered
     ? [...parsed.errors, strictFallbackError]

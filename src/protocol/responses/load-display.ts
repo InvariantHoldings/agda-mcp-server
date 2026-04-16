@@ -3,18 +3,46 @@ import {
   allGoalsWarningsInfoSchema,
   diagnosticEntrySchema,
   goalConstraintEntrySchema,
+  invisibleGoalConstraintEntrySchema,
   parseResponseWithSchema,
 } from "../response-schemas.js";
 import { decodeDisplayInfoEvents } from "./display-info.js";
 
+/**
+ * A decoded visible goal (interaction point).
+ *
+ * Maps to an IOTCM `OutputConstraint Expr InteractionId` entry
+ * from `AllGoalsWarnings.visibleGoals`.
+ */
 export interface DecodedGoalConstraint {
   goalId: number;
   type: string;
 }
 
+/**
+ * A decoded invisible goal (unsolved metavariable).
+ *
+ * Maps to an IOTCM `OutputConstraint Expr NamedMeta` entry
+ * from `AllGoalsWarnings.invisibleGoals`. The `name` field comes
+ * from the Agda NamedMeta's `encodeTCM` instance (e.g. `"_42"`).
+ */
+export interface DecodedInvisibleGoal {
+  name: string;
+  type: string;
+}
+
 export interface DecodedLoadDisplay {
   text: string;
+  /** Visible goals — IOTCM `AllGoalsWarnings.visibleGoals`. */
   visibleGoals: DecodedGoalConstraint[];
+  /**
+   * Invisible goals — IOTCM `AllGoalsWarnings.invisibleGoals`.
+   * Each entry is a decoded unsolved metavariable with its
+   * NamedMeta name and type. Preserved as the largest set across
+   * multiple `AllGoalsWarnings` events to prevent undercount.
+   */
+  invisibleGoals: DecodedInvisibleGoal[];
+  /** Count shorthand — always equals `invisibleGoals.length`. */
   invisibleGoalCount: number;
   warnings: string[];
   errors: string[];
@@ -51,6 +79,23 @@ function decodeGoalConstraint(entry: unknown): DecodedGoalConstraint | null {
   };
 }
 
+/**
+ * Decode an invisible-goal `OutputConstraint Expr NamedMeta` entry.
+ *
+ * Per Agda JSONTop.hs, NamedMeta encodes as `{name: string, range: Range}`.
+ * We extract the meta name and the pretty-printed type.
+ */
+function decodeInvisibleGoalConstraint(entry: unknown): DecodedInvisibleGoal | null {
+  const parsed = invisibleGoalConstraintEntrySchema.safeParse(entry);
+  if (!parsed.success || parsed.data.constraintObj === undefined) {
+    return null;
+  }
+  return {
+    name: parsed.data.constraintObj.name,
+    type: parsed.data.type ?? "?",
+  };
+}
+
 export function decodeLoadDisplayResponses(
   responses: AgdaResponse[],
 ): DecodedLoadDisplay {
@@ -58,7 +103,7 @@ export function decodeLoadDisplayResponses(
   const visibleGoals: DecodedGoalConstraint[] = [];
   const warnings: string[] = [];
   const errors: string[] = [];
-  let invisibleGoalCount = 0;
+  let invisibleGoals: DecodedInvisibleGoal[] = [];
 
   for (const event of decodeDisplayInfoEvents(responses)) {
     if (event.infoKind !== "AllGoalsWarnings") {
@@ -81,7 +126,19 @@ export function decodeLoadDisplayResponses(
       }
     }
 
-    invisibleGoalCount = Math.max(invisibleGoalCount, payload.invisibleGoals.length);
+    // Preserve the largest invisible-goals set across multiple
+    // AllGoalsWarnings events to prevent undercount when a later
+    // event has fewer entries.
+    const eventInvisible: DecodedInvisibleGoal[] = [];
+    for (const entry of payload.invisibleGoals) {
+      const decoded = decodeInvisibleGoalConstraint(entry);
+      if (decoded) {
+        eventInvisible.push(decoded);
+      }
+    }
+    if (eventInvisible.length > invisibleGoals.length) {
+      invisibleGoals = eventInvisible;
+    }
 
     warnings.push(
       ...payload.warnings
@@ -98,7 +155,8 @@ export function decodeLoadDisplayResponses(
   return {
     text: allGoalTexts.at(-1) ?? "",
     visibleGoals,
-    invisibleGoalCount,
+    invisibleGoals,
+    invisibleGoalCount: invisibleGoals.length,
     warnings,
     errors,
   };
