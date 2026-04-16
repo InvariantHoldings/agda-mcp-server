@@ -55,8 +55,10 @@ export const goalConstraintEntrySchema = z.object({
 
 // NamedMeta on the wire (invisible-goal key):
 // Agda JSONTop.hs: encodeTCM NamedMeta → { name: string, range: Range }
+// Range encodes as a JSON array of interval objects ([] for noRange).
 const namedMetaSchema = z.object({
   name: z.string(),
+  range: z.unknown().optional(),
 }).passthrough();
 
 // Invisible goal entry — OutputConstraint keyed by NamedMeta.

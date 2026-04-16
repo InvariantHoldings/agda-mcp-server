@@ -50,7 +50,7 @@
       "haskellType": "OutputConstraint_boot tcErr A.Expr NamedMeta",
       "haskellComment": "hidden (unsolved) metas",
       "jsonKey": "constraintObj",
-      "description": "Metavariables Agda created during elaboration but could not solve. Includes implicit arguments that remain open and — critically — holes inside abstract blocks, which have no InteractionId. Keyed by NamedMeta (has id and module fields).",
+      "description": "Metavariables Agda created during elaboration but could not solve. Includes implicit arguments that remain open and — critically — holes inside abstract blocks, which have no InteractionId. Keyed by NamedMeta; in JSON this is represented as a {name, range} object, where the name string encodes the meta identity rather than exposing separate id/module fields.",
       "stableAcrossVersions": true
     },
     "postulates": {

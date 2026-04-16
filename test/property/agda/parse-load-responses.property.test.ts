@@ -128,7 +128,10 @@ test("invisibleGoalCount matches invisibleGoals array length", async () => {
     fc.property(
       fc.array(
         fc.record({
-          constraintObj: fc.record({ name: fc.string({ minLength: 1 }) }),
+          constraintObj: fc.record({
+            name: fc.string({ minLength: 1 }),
+            range: fc.constant({}),
+          }),
           type: fc.string(),
         }),
         { maxLength: 5 },
