@@ -24,7 +24,7 @@ function cleanLoadResponses() {
   ];
 }
 
-test("runLoad never reports ok-complete when source contains at least one explicit hole marker", async () => {
+test("runLoad classifies explicit holes as ok-with-holes", async () => {
   const root = mkdtempSync(join(tmpdir(), "agda-load-property-"));
   const file = "Probe.agda";
   const abs = resolve(root, file);
@@ -46,8 +46,11 @@ test("runLoad never reports ok-complete when source contains at least one explic
 
   try {
     await fc.assert(
-      fc.asyncProperty(fc.integer({ min: 1, max: 8 }), async (holeCount) => {
-        const body = Array.from({ length: holeCount }, (_, i) => `x${i} : Set\nx${i} = {!!}`).join("\n\n");
+      fc.asyncProperty(
+        fc.integer({ min: 1, max: 8 }),
+        fc.constantFrom("{!!}", "{! x !}", "?"),
+        async (holeCount, marker) => {
+          const body = Array.from({ length: holeCount }, (_, i) => `x${i} : Set\nx${i} = ${marker}`).join("\n\n");
         writeFileSync(abs, `module Probe where\n\n${body}\n`, "utf8");
 
         const result = await runLoad(session, file);
@@ -56,14 +59,15 @@ test("runLoad never reports ok-complete when source contains at least one explic
         expect(result.hasHoles).toBe(true);
         expect(result.isComplete).toBe(false);
         expect(result.goalCount >= holeCount).toBe(true);
-      }),
+        },
+      ),
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("runLoadNoMetas never reports ok-complete when source contains explicit hole markers", async () => {
+test("runLoadNoMetas fails with type-error when explicit holes exist", async () => {
   const root = mkdtempSync(join(tmpdir(), "agda-load-no-metas-property-"));
   const file = "ProbeStrict.agda";
   const abs = resolve(root, file);
@@ -82,8 +86,11 @@ test("runLoadNoMetas never reports ok-complete when source contains explicit hol
 
   try {
     await fc.assert(
-      fc.asyncProperty(fc.integer({ min: 1, max: 8 }), async (holeCount) => {
-        const body = Array.from({ length: holeCount }, (_, i) => `x${i} : Set\nx${i} = {!!}`).join("\n\n");
+      fc.asyncProperty(
+        fc.integer({ min: 1, max: 8 }),
+        fc.constantFrom("{!!}", "{! x !}", "?"),
+        async (holeCount, marker) => {
+          const body = Array.from({ length: holeCount }, (_, i) => `x${i} : Set\nx${i} = ${marker}`).join("\n\n");
         writeFileSync(abs, `module ProbeStrict where\n\n${body}\n`, "utf8");
 
         const result = await runLoadNoMetas(session, file);
@@ -92,7 +99,8 @@ test("runLoadNoMetas never reports ok-complete when source contains explicit hol
         expect(result.hasHoles).toBe(true);
         expect(result.isComplete).toBe(false);
         expect(result.goalCount >= holeCount).toBe(true);
-      }),
+        },
+      ),
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

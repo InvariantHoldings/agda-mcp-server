@@ -27,7 +27,41 @@ function cleanLoadResponses() {
   ];
 }
 
-test("runLoad: explicit {!!} hole in source must not classify as ok-complete when protocol reports no goals", async () => {
+function loadResponsesWithVisibleGoal() {
+  return [
+    { kind: "InteractionPoints", interactionPoints: [0] },
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [{ constraintObj: 0, type: "Set" }],
+        invisibleGoals: [],
+        errors: [],
+        warnings: [],
+      },
+    },
+    { kind: "Status", checked: true },
+  ];
+}
+
+function loadResponsesWithInvisibleGoal() {
+  return [
+    { kind: "InteractionPoints", interactionPoints: [] },
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [],
+        invisibleGoals: [{ constraintObj: 1, type: "Set" }],
+        errors: [],
+        warnings: [],
+      },
+    },
+    { kind: "Status", checked: true },
+  ];
+}
+
+test("runLoad classifies explicit hole as ok-with-holes despite empty protocol goals", async () => {
   const root = makeTempRepo();
   const file = "Hole.agda";
   writeFileSync(resolve(root, file), "module Hole where\n\nx : Set\nx = {!!}\n", "utf8");
@@ -59,7 +93,7 @@ test("runLoad: explicit {!!} hole in source must not classify as ok-complete whe
   }
 });
 
-test("runLoadNoMetas: explicit {!!} hole in source must fail strict load even if protocol reports no goals", async () => {
+test("runLoadNoMetas fails with type-error when explicit holes exist", async () => {
   const root = makeTempRepo();
   const file = "StrictHole.agda";
   writeFileSync(resolve(root, file), "module StrictHole where\n\nx : Set\nx = {!!}\n", "utf8");
@@ -84,6 +118,62 @@ test("runLoadNoMetas: explicit {!!} hole in source must fail strict load even if
     expect(result.classification).toBe("type-error");
     expect(result.errors.length >= 1).toBe(true);
     expect(result.goalCount >= 1).toBe(true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoadNoMetas fails when protocol reports visible goals (unresolved metas)", async () => {
+  const root = makeTempRepo();
+  const file = "VisibleMeta.agda";
+  writeFileSync(resolve(root, file), "module VisibleMeta where\nx : Set\nx = Set\n", "utf8");
+
+  const session = {
+    repoRoot: root,
+    currentFile: null,
+    goalIds: [],
+    lastLoadedMtime: 0,
+    lastClassification: null,
+    lastLoadedAt: null,
+    lastInvisibleGoalCount: 0,
+    sendCommand: async () => loadResponsesWithVisibleGoal(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoadNoMetas(session, file);
+    expect(result.success).toBe(false);
+    expect(result.classification).toBe("type-error");
+    expect(result.hasHoles).toBe(true);
+    expect(result.goalCount).toBeGreaterThan(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoadNoMetas fails when protocol reports invisible goals (unresolved metas)", async () => {
+  const root = makeTempRepo();
+  const file = "InvisibleMeta.agda";
+  writeFileSync(resolve(root, file), "module InvisibleMeta where\nx : Set\nx = Set\n", "utf8");
+
+  const session = {
+    repoRoot: root,
+    currentFile: null,
+    goalIds: [],
+    lastLoadedMtime: 0,
+    lastClassification: null,
+    lastLoadedAt: null,
+    lastInvisibleGoalCount: 0,
+    sendCommand: async () => loadResponsesWithInvisibleGoal(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoadNoMetas(session, file);
+    expect(result.success).toBe(false);
+    expect(result.classification).toBe("type-error");
+    expect(result.hasHoles).toBe(true);
+    expect(result.invisibleGoalCount).toBeGreaterThan(0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

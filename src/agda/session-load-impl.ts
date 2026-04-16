@@ -197,7 +197,7 @@ export async function runLoadNoMetas(
   const explicitHoleCount = countExplicitSourceHoles(absPath);
   const goalCount = Math.max(parsed.goalCount, explicitHoleCount);
   const hasHoles = goalCount > 0 || parsed.invisibleGoalCount > 0;
-  const strictFallbackTriggered = parsed.success && explicitHoleCount > 0;
+  const strictFallbackTriggered = parsed.success && hasHoles;
   const success = strictFallbackTriggered ? false : parsed.success;
   const classification = success
     ? hasHoles
@@ -205,7 +205,10 @@ export async function runLoadNoMetas(
       : "ok-complete"
     : "type-error";
   const isComplete = success && !hasHoles;
-  const strictFallbackError = `Detected ${explicitHoleCount} explicit hole marker(s) in source file; strict load requires zero unresolved metas.`;
+  const strictRequirement = "strict load requires zero unresolved metas and zero holes.";
+  const strictFallbackError = explicitHoleCount > 0
+    ? `Detected ${explicitHoleCount} explicit hole marker(s) in source file; ${strictRequirement}`
+    : `Strict load reported unresolved metas/holes; ${strictRequirement}`;
   const errors = strictFallbackTriggered
     ? [...parsed.errors, strictFallbackError]
     : parsed.errors;
