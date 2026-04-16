@@ -301,12 +301,12 @@ export async function runLoadNoMetas(
   // markers force a failure. See the IOTCM protocol notes above.
   const strictFallbackTriggered = parsed.success && hasHoles;
   const success = strictFallbackTriggered ? false : parsed.success;
-  const classification = success
-    ? hasHoles
-      ? "ok-with-holes"
-      : "ok-complete"
-    : "type-error";
-  const isComplete = success && !hasHoles;
+  // In strict mode, success=true implies hasHoles=false (because
+  // strictFallbackTriggered would have forced success=false otherwise).
+  // So "ok-with-holes" is unreachable here — simplify to the two
+  // reachable states.
+  const classification = success ? "ok-complete" : "type-error";
+  const isComplete = success;
   const strictRequirement = "Strict load requires zero unresolved metas and zero holes.";
   const strictFallbackError = sourceHoleCount > 0
     ? `Detected ${sourceHoleCount} hole marker(s) in source file; ${strictRequirement}`

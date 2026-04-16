@@ -605,5 +605,59 @@
     "minHoleCount": 0,
     "expectedStrictSuccess": true,
     "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "AbstractHoleMultiple.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 3,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "MixedVisibleInvisible.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "PostulateAndHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 1,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "NestedAbstractHole.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-with-holes",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 1,
+    "expectedStrictSuccess": false,
+    "expectedStrictClassification": "type-error"
+  },
+  {
+    "name": "MultiPostulateComplete.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
+  },
+  {
+    "name": "AbstractComplete.agda",
+    "expectedSuccess": true,
+    "expectedClassification": "ok-complete",
+    "minVisibleGoalCount": 0,
+    "minHoleCount": 0,
+    "expectedStrictSuccess": true,
+    "expectedStrictClassification": "ok-complete"
   }
 ]

@@ -7,6 +7,58 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-04-16
+
+### Fixed
+
+- **False `ok-complete` on loads with source holes** — `agda_load` and
+  `agda_load_no_metas` could report `ok-complete` when explicit hole markers
+  (`{!!}`, `?`, `{! expr !}`) existed in the source but the Agda protocol
+  under-reported goals (e.g. holes inside `abstract` blocks reported as
+  invisible goals only). A gated source-level hole scan now detects these
+  markers and prevents false-positive `ok-complete` classification.
+- **`invisibleGoalCount` undercount** — when multiple `AllGoalsWarnings`
+  display events occur during a single load, the invisible goal count is now
+  preserved as the maximum across events (not the last event's count).
+- **Strict-load enforcement** — `agda_load_no_metas` now forces `type-error`
+  classification whenever any holes or metas remain (visible goals, invisible
+  goals, or source-level hole markers). Previously it could succeed despite
+  source holes when the protocol reported zero goals.
+
+### Added
+
+- **IOTCM protocol parity — invisible goal decoding** — invisible goals
+  (unsolved metavariables) are now structurally decoded from the real `NamedMeta`
+  wire format (`{name: string, range: Range}`), matching the official Agda
+  Haskell `encodeTCM NamedMeta` instance across v2.7.0.1, v2.8.0, and master.
+  They are exposed as `DecodedInvisibleGoal` entries (name + type) in
+  `DecodedLoadDisplay`, instead of being discarded and kept as a count only.
+- **Cross-version protocol reference** — added
+  `tooling/protocol/data/official-cross-version-notes.json` documenting the
+  stable JSON field mapping for `AllGoalsWarnings`, `InteractionId`, and
+  `NamedMeta` across representative Agda versions, sourced from the official
+  Agda Haskell sources.
+- **New Agda fixtures** — `MixedHoleStyles.agda`, `HoleInStringComment.agda`,
+  `AbstractHoleMultiple.agda`, `MixedVisibleInvisible.agda`,
+  `PostulateAndHole.agda`, `NestedAbstractHole.agda`,
+  `MultiPostulateComplete.agda`, `AbstractComplete.agda` — all registered in
+  the fixture matrix for integration testing.
+- **Protocol conformance stress tests** — new fixtures stress-testing edge
+  cases: multiple holes in abstract blocks (invisible-goal-only reporting),
+  mixed visible + invisible holes, postulate + hole coexistence, nested abstract
+  modules with holes, multi-postulate completeness, and abstract-complete
+  (no-hole abstract blocks).
+
+### Changed
+
+- **Classification consolidation** — removed dead `classifyParsedLoad()` helper
+  and consolidated into a shared `classifyLoadResult()` function that accounts
+  for protocol goals, invisible goals, and source-level hole markers in one
+  place.
+- **Strict-load classification simplification** — `runLoadNoMetas` classification
+  now uses only `"ok-complete"` / `"type-error"` (removed unreachable
+  `"ok-with-holes"` branch).
+
 ## [0.6.5] - 2026-04-14
 
 ### Added
