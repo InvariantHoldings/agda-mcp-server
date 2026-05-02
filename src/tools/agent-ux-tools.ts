@@ -26,6 +26,7 @@ import { buildImportGraph, computeImpact } from "../agda/import-graph.js";
 import { createLibraryRegistration } from "../agda/library-registration.js";
 import { filePathDescription, isAgdaSourceFile } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
+import { loadProjectConfig } from "../session/project-config.js";
 import {
   errorDiagnostic,
   errorEnvelope,
@@ -815,14 +816,14 @@ export function register(
       file: z.string(),
       options: z.array(z.object({
         option: z.string(),
-        source: z.enum(["file-pragma", "agda-lib", "wrapper-script", "mcp-default"]),
+        source: z.enum(["file-pragma", "agda-lib", "wrapper-script", "mcp-default", "project-config"]),
       })),
       deduplicated: z.array(z.string()),
     }),
     callback: async ({ file }: { file: string }) => {
       const filePath = resolveExistingPathWithinRoot(repoRoot, resolveFileWithinRoot(repoRoot, file));
       const source = readFileSync(filePath, "utf8");
-      const options: Array<{ option: string; source: "file-pragma" | "agda-lib" | "wrapper-script" | "mcp-default" }> = [];
+      const options: Array<{ option: string; source: "file-pragma" | "agda-lib" | "wrapper-script" | "mcp-default" | "project-config" }> = [];
       for (const opt of parseOptionsPragmas(source)) {
         options.push({ option: opt, source: "file-pragma" });
       }
@@ -833,6 +834,13 @@ export function register(
         const libText = readFileSync(resolve(repoRoot, entry.name), "utf8");
         for (const flag of parseAgdaLibFlags(libText)) {
           options.push({ option: flag, source: "agda-lib" });
+        }
+      }
+
+      const projectConfig = loadProjectConfig(repoRoot);
+      if (projectConfig.commandLineOptions) {
+        for (const opt of projectConfig.commandLineOptions) {
+          options.push({ option: opt, source: "project-config" });
         }
       }
 

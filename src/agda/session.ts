@@ -330,10 +330,12 @@ export class AgdaSession {
    * @param options.profileOptions  Agda profile options (e.g.
    *   ["modules", "sharing"]). These are passed as `--profile=xxx` in
    *   the Cmd_load options list.
+   * @param options.commandLineOptions  Arbitrary Agda command-line flags
+   *   (e.g. ["--Werror", "--safe"]). Merged with project config defaults.
    */
   async load(
     filePath: string,
-    options?: { profileOptions?: string[] },
+    options?: { profileOptions?: string[]; commandLineOptions?: string[] },
   ): Promise<LoadResult> {
     return runLoad(this, filePath, options);
   }
