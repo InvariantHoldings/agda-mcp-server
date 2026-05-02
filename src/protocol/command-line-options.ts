@@ -148,7 +148,6 @@ export const COMMON_AGDA_FLAGS: readonly string[] = [
   "--no-auto-inline",
   "--no-fast-reduce",
   "--call-by-name",
-  "--no-forcing",
   "--injective-type-constructors",
   "--warning",
   "-W",
