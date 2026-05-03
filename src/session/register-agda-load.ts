@@ -42,6 +42,7 @@ import {
   processErrorResult,
   resolveRequestedFilePath,
   validateProfileOptionsOrError,
+  validateCommandLineOptionsOrError,
   type PathResolver,
 } from "./load-tool-shared.js";
 
@@ -84,12 +85,21 @@ export function registerAgdaLoad(
       );
       if (profileError) return profileError;
 
-      // Merge per-call options with project-level defaults
+      // Merge per-call options with project-level defaults and env var
       const projectConfig = loadProjectConfig(repoRoot);
       const mergedOptions = mergeCommandLineOptions(
         projectConfig.commandLineOptions,
         commandLineOptions,
       );
+
+      // Validate merged command-line options at tool boundary (consistent
+      // with profileOptions: invalid input → errorEnvelope, not okEnvelope).
+      const cmdLineError = validateCommandLineOptionsOrError(
+        "agda_load",
+        file,
+        mergedOptions.length > 0 ? mergedOptions : undefined,
+      );
+      if (cmdLineError) return cmdLineError;
 
       let requestedFilePath: string;
       try {

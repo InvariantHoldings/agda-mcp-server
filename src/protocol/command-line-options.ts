@@ -6,6 +6,11 @@
 // second argument: `Cmd_load "<file>" ["--flag1", "--flag2", ...]`.
 // This module validates and normalizes those flags.
 //
+// Reference:
+//   - Agda IOTCM protocol: https://agda.readthedocs.io/en/latest/tools/emacs-mode.html
+//   - Agda command-line options: https://agda.readthedocs.io/en/latest/tools/command-line-options.html
+//   - Agda Interaction.Options (source): https://github.com/agda/agda/blob/master/src/full/Agda/Interaction/Options.hs
+//
 // Unlike profile options (which have a closed set of valid values),
 // command-line options are an open set matching Agda's full CLI.
 // We validate structure (must start with `-`) and reject known
@@ -14,21 +19,30 @@
 /**
  * Flags that must never be passed in the Cmd_load options list because
  * they conflict with the MCP server's own session management.
+ *
+ * Stored in lowercase for case-insensitive matching. Short flags like
+ * "-V" are matched case-sensitively via BLOCKED_FLAGS_CASE_SENSITIVE.
  */
-const BLOCKED_FLAGS = new Set([
+const BLOCKED_FLAGS_CASE_INSENSITIVE = new Set([
   "--interaction",
   "--interaction-json",
   "--interaction-exit-on-error",
-  // Mode flags that don't make sense inside an interactive session
   "--version",
-  "-V",
   "--help",
-  "-?",
   "--print-agda-dir",
 ]);
 
 /**
- * Prefixes that indicate a blocked family of flags.
+ * Short flags that must be matched case-sensitively (e.g. "-V" is
+ * Agda's short --version, but "-v" is a verbosity flag).
+ */
+const BLOCKED_FLAGS_CASE_SENSITIVE = new Set([
+  "-V",
+  "-?",
+]);
+
+/**
+ * Prefixes that indicate a blocked family of flags (case-insensitive).
  */
 const BLOCKED_PREFIXES: string[] = [
   "--interaction",
@@ -42,10 +56,13 @@ export interface CommandLineOptionsValidation {
 }
 
 function isBlockedFlag(flag: string): boolean {
-  const normalized = flag.toLowerCase();
-  if (BLOCKED_FLAGS.has(normalized)) return true;
+  // Case-sensitive check for short flags
+  if (BLOCKED_FLAGS_CASE_SENSITIVE.has(flag)) return true;
+  // Case-insensitive check for long flags
+  const lower = flag.toLowerCase();
+  if (BLOCKED_FLAGS_CASE_INSENSITIVE.has(lower)) return true;
   for (const prefix of BLOCKED_PREFIXES) {
-    if (normalized.startsWith(prefix)) return true;
+    if (lower.startsWith(prefix)) return true;
   }
   return false;
 }
@@ -58,6 +75,11 @@ function isBlockedFlag(flag: string): boolean {
  * - Options that conflict with the MCP server's session mode are rejected.
  * - Empty strings are silently skipped.
  * - Duplicates are deduplicated (preserving order).
+ *
+ * Reference: Agda's Cmd_load accepts `FilePath [String]` where the list
+ * contains command-line options passed to the type-checker, such as
+ * `["--safe", "--Werror"]`. See:
+ * https://github.com/agda/agda/blob/master/src/full/Agda/Interaction/BasicOps.hs
  */
 export function validateCommandLineOptions(
   input: readonly string[],
@@ -97,6 +119,8 @@ export function validateCommandLineOptions(
 /**
  * Well-known Agda command-line options for documentation/autocomplete.
  * This is not exhaustive — Agda accepts many more flags.
+ *
+ * Reference: https://agda.readthedocs.io/en/latest/tools/command-line-options.html
  */
 export const COMMON_AGDA_FLAGS: readonly string[] = [
   "--safe",

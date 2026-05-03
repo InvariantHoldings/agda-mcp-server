@@ -11,6 +11,7 @@
 
 import { errorDiagnostic, errorEnvelope, makeToolResult } from "../tools/tool-helpers.js";
 import { PathSandboxError } from "../repo-root.js";
+import { validateCommandLineOptions } from "../protocol/command-line-options.js";
 
 export type LoadToolName = "agda_load" | "agda_load_no_metas" | "agda_typecheck";
 
@@ -130,6 +131,41 @@ export function validateProfileOptionsOrError(
       },
       diagnostics: validation.errors.map((msg) =>
         errorDiagnostic(msg, "invalid-profile-option"),
+      ),
+    }),
+  );
+}
+
+/**
+ * Run command-line option validation at the tool boundary.
+ * Returns a pre-built error ToolResult (ok=false) if any option is
+ * invalid or blocked, or null if validation passes (or options are absent).
+ *
+ * This mirrors validateProfileOptionsOrError so that invalid CLI flags
+ * are rejected consistently with invalid profile options — as a tool
+ * error, not embedded in an okEnvelope with a classification.
+ */
+export function validateCommandLineOptionsOrError(
+  tool: LoadToolName,
+  file: string,
+  commandLineOptions: string[] | undefined,
+) {
+  if (!commandLineOptions || commandLineOptions.length === 0) return null;
+  const validation = validateCommandLineOptions(commandLineOptions);
+  if (validation.valid) return null;
+  const message = `Invalid command-line options: ${validation.errors.join("; ")}`;
+  return makeToolResult(
+    errorEnvelope({
+      tool,
+      summary: message,
+      classification: "invalid-command-line-options",
+      data: {
+        ...baseErrorData(file, message, "invalid-command-line-options"),
+        ...reloadFields(tool),
+        errors: validation.errors,
+      },
+      diagnostics: validation.errors.map((msg) =>
+        errorDiagnostic(msg, "invalid-command-line-option"),
       ),
     }),
   );

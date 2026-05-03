@@ -2,15 +2,18 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { test, expect, afterEach } from "vitest";
+import { test, expect, afterEach, beforeEach } from "vitest";
 
 import {
   loadProjectConfig,
   mergeCommandLineOptions,
+  invalidateProjectConfigCache,
   PROJECT_CONFIG_FILENAME,
+  ENV_DEFAULT_FLAGS,
 } from "../../../src/session/project-config.js";
 
 let tempDirs: string[] = [];
+let originalEnv: string | undefined;
 
 function makeTempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "agda-mcp-config-"));
@@ -18,11 +21,23 @@ function makeTempDir(): string {
   return dir;
 }
 
+beforeEach(() => {
+  originalEnv = process.env[ENV_DEFAULT_FLAGS];
+  delete process.env[ENV_DEFAULT_FLAGS];
+  invalidateProjectConfigCache();
+});
+
 afterEach(() => {
   for (const dir of tempDirs) {
     rmSync(dir, { recursive: true, force: true });
   }
   tempDirs = [];
+  if (originalEnv !== undefined) {
+    process.env[ENV_DEFAULT_FLAGS] = originalEnv;
+  } else {
+    delete process.env[ENV_DEFAULT_FLAGS];
+  }
+  invalidateProjectConfigCache();
 });
 
 // ── loadProjectConfig ────────────────────────────────────────────────
@@ -75,6 +90,72 @@ test("ignores commandLineOptions with non-string elements", () => {
   );
   const config = loadProjectConfig(dir);
   expect(config.commandLineOptions).toBeUndefined();
+});
+
+// ── Caching ──────────────────────────────────────────────────────────
+
+test("caches config and returns same result on repeated calls", () => {
+  const dir = makeTempDir();
+  writeFileSync(
+    join(dir, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--safe"] }),
+  );
+  const first = loadProjectConfig(dir);
+  const second = loadProjectConfig(dir);
+  expect(first).toEqual(second);
+  expect(first.commandLineOptions).toEqual(["--safe"]);
+});
+
+test("invalidateProjectConfigCache clears the cache", () => {
+  const dir = makeTempDir();
+  writeFileSync(
+    join(dir, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--safe"] }),
+  );
+  loadProjectConfig(dir);
+  // Update file content
+  writeFileSync(
+    join(dir, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--Werror"] }),
+  );
+  // Force invalidation (normally mtime change would trigger)
+  invalidateProjectConfigCache(dir);
+  const config = loadProjectConfig(dir);
+  expect(config.commandLineOptions).toEqual(["--Werror"]);
+});
+
+// ── AGDA_MCP_DEFAULT_FLAGS env var ───────────────────────────────────
+
+test("reads flags from AGDA_MCP_DEFAULT_FLAGS env var", () => {
+  const dir = makeTempDir();
+  process.env[ENV_DEFAULT_FLAGS] = "--Werror --safe";
+  const config = loadProjectConfig(dir);
+  expect(config.commandLineOptions).toEqual(["--Werror", "--safe"]);
+});
+
+test("merges env var flags with file-based config", () => {
+  const dir = makeTempDir();
+  writeFileSync(
+    join(dir, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--without-K"] }),
+  );
+  process.env[ENV_DEFAULT_FLAGS] = "--Werror";
+  const config = loadProjectConfig(dir);
+  expect(config.commandLineOptions).toEqual(["--without-K", "--Werror"]);
+});
+
+test("env var with extra whitespace is parsed correctly", () => {
+  const dir = makeTempDir();
+  process.env[ENV_DEFAULT_FLAGS] = "  --safe   --Werror  ";
+  const config = loadProjectConfig(dir);
+  expect(config.commandLineOptions).toEqual(["--safe", "--Werror"]);
+});
+
+test("empty env var produces no flags", () => {
+  const dir = makeTempDir();
+  process.env[ENV_DEFAULT_FLAGS] = "";
+  const config = loadProjectConfig(dir);
+  expect(config).toEqual({});
 });
 
 // ── mergeCommandLineOptions ──────────────────────────────────────────

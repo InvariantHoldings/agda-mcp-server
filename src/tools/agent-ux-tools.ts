@@ -26,7 +26,7 @@ import { buildImportGraph, computeImpact } from "../agda/import-graph.js";
 import { createLibraryRegistration } from "../agda/library-registration.js";
 import { filePathDescription, isAgdaSourceFile } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
-import { loadProjectConfig } from "../session/project-config.js";
+import { loadProjectConfig, ENV_DEFAULT_FLAGS } from "../session/project-config.js";
 import {
   errorDiagnostic,
   errorEnvelope,
@@ -816,14 +816,14 @@ export function register(
       file: z.string(),
       options: z.array(z.object({
         option: z.string(),
-        source: z.enum(["file-pragma", "agda-lib", "wrapper-script", "mcp-default", "project-config"]),
+        source: z.enum(["file-pragma", "agda-lib", "wrapper-script", "mcp-default", "project-config", "env-var"]),
       })),
       deduplicated: z.array(z.string()),
     }),
     callback: async ({ file }: { file: string }) => {
       const filePath = resolveExistingPathWithinRoot(repoRoot, resolveFileWithinRoot(repoRoot, file));
       const source = readFileSync(filePath, "utf8");
-      const options: Array<{ option: string; source: "file-pragma" | "agda-lib" | "wrapper-script" | "mcp-default" | "project-config" }> = [];
+      const options: Array<{ option: string; source: "file-pragma" | "agda-lib" | "wrapper-script" | "mcp-default" | "project-config" | "env-var" }> = [];
       for (const opt of parseOptionsPragmas(source)) {
         options.push({ option: opt, source: "file-pragma" });
       }
@@ -837,10 +837,16 @@ export function register(
         }
       }
 
+      // Report project config file flags and env var flags separately
       const projectConfig = loadProjectConfig(repoRoot);
       if (projectConfig.commandLineOptions) {
+        // Distinguish env-var flags from file-config flags
+        const envRaw = process.env[ENV_DEFAULT_FLAGS];
+        const envFlags = new Set(
+          envRaw ? envRaw.split(/\s+/u).map((s) => s.trim()).filter(Boolean) : [],
+        );
         for (const opt of projectConfig.commandLineOptions) {
-          options.push({ option: opt, source: "project-config" });
+          options.push({ option: opt, source: envFlags.has(opt) ? "env-var" : "project-config" });
         }
       }
 

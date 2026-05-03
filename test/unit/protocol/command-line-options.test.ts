@@ -76,6 +76,18 @@ test("blocked --version flag is rejected", () => {
   expect(result.errors[0]).toContain("conflicts with the MCP server");
 });
 
+test("blocked -V short flag is rejected (case-sensitive)", () => {
+  const result = validateCommandLineOptions(["-V"]);
+  expect(result.valid).toBe(false);
+  expect(result.errors[0]).toContain("conflicts with the MCP server");
+});
+
+test("-v (lowercase) is NOT blocked (it's a verbosity flag, not --version)", () => {
+  const result = validateCommandLineOptions(["-v"]);
+  expect(result.valid).toBe(true);
+  expect(result.options).toEqual(["-v"]);
+});
+
 // ── COMMON_AGDA_FLAGS ────────────────────────────────────────────────
 
 test("COMMON_AGDA_FLAGS contains well-known flags", () => {

@@ -2,21 +2,35 @@
 //
 // Project-level configuration for the MCP server.
 //
-// Supports `.agda-mcp.json` at the project root. This file lets users
-// configure default Agda flags that apply to every load without
-// requiring per-call `commandLineOptions` arguments.
+// Configuration sources (in priority order, highest last):
+//   1. `.agda-mcp.json` at PROJECT_ROOT (file-based project defaults)
+//   2. `AGDA_MCP_DEFAULT_FLAGS` env var (space-separated flags)
+//   3. Per-call `commandLineOptions` (passed to agda_load/agda_typecheck)
+//
+// The merged result is passed as the [String] argument to Cmd_load:
+//   IOTCM "<file>" NonInteractive Direct (Cmd_load "<file>" ["--flag1", ...])
+//
+// Reference:
+//   - Agda IOTCM Cmd_load: https://github.com/agda/agda/blob/master/src/full/Agda/Interaction/BasicOps.hs
+//   - Agda CLI options: https://agda.readthedocs.io/en/latest/tools/command-line-options.html
 //
 // Example `.agda-mcp.json`:
 // {
 //   "commandLineOptions": ["--Werror", "--safe"]
 // }
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../agda/logger.js";
 
 /** The config file name looked up at PROJECT_ROOT. */
 export const PROJECT_CONFIG_FILENAME = ".agda-mcp.json";
+
+/**
+ * Environment variable for space-separated default Agda flags.
+ * Example: AGDA_MCP_DEFAULT_FLAGS="--Werror --safe --without-K"
+ */
+export const ENV_DEFAULT_FLAGS = "AGDA_MCP_DEFAULT_FLAGS";
 
 export interface ProjectConfig {
   /**
@@ -26,18 +40,89 @@ export interface ProjectConfig {
   commandLineOptions?: string[];
 }
 
+// ── Config caching ───────────────────────────────────────────────────
+//
+// The project config is read from disk on every load call. To avoid
+// redundant I/O on large projects with many sequential loads, we cache
+// the parsed config keyed by (projectRoot, mtime). The cache is
+// invalidated when the file's mtime changes.
+
+interface CacheEntry {
+  config: ProjectConfig;
+  mtimeMs: number;
+}
+
+const configCache = new Map<string, CacheEntry>();
+
+/**
+ * Invalidate the cached config for a project root.
+ * Exposed for testing; production code relies on mtime-based staleness.
+ */
+export function invalidateProjectConfigCache(projectRoot?: string): void {
+  if (projectRoot) {
+    configCache.delete(projectRoot);
+  } else {
+    configCache.clear();
+  }
+}
+
 /**
  * Load project configuration from `.agda-mcp.json` at the given root.
  *
- * Returns an empty config if the file doesn't exist or is malformed
- * (with a warning logged for parse failures).
+ * Results are cached by (projectRoot, file mtime). Returns an empty
+ * config if the file doesn't exist or is malformed (with a warning
+ * logged for parse failures).
+ *
+ * Additionally reads `AGDA_MCP_DEFAULT_FLAGS` env var and merges those
+ * flags into the config (env var flags come after file-based flags but
+ * before per-call options).
  */
 export function loadProjectConfig(projectRoot: string): ProjectConfig {
   const configPath = join(projectRoot, PROJECT_CONFIG_FILENAME);
-  if (!existsSync(configPath)) {
-    return {};
+
+  let fileConfig: ProjectConfig = {};
+
+  if (existsSync(configPath)) {
+    // Check mtime-based cache
+    try {
+      const currentMtime = statSync(configPath).mtimeMs;
+      const cached = configCache.get(projectRoot);
+      if (cached && cached.mtimeMs === currentMtime) {
+        fileConfig = cached.config;
+      } else {
+        fileConfig = parseConfigFile(configPath);
+        configCache.set(projectRoot, { config: fileConfig, mtimeMs: currentMtime });
+      }
+    } catch {
+      fileConfig = parseConfigFile(configPath);
+    }
+  } else {
+    // No config file — clear any stale cache entry
+    configCache.delete(projectRoot);
   }
 
+  // Merge env var flags
+  const envFlags = parseEnvFlags();
+  if (envFlags.length === 0) {
+    return fileConfig;
+  }
+
+  // Combine file-based options with env var options
+  const combined = [...(fileConfig.commandLineOptions ?? []), ...envFlags];
+  return { ...fileConfig, commandLineOptions: combined };
+}
+
+/**
+ * Parse `AGDA_MCP_DEFAULT_FLAGS` env var into an array of flags.
+ * Splits on whitespace, trims, and filters empty strings.
+ */
+function parseEnvFlags(): string[] {
+  const raw = process.env[ENV_DEFAULT_FLAGS];
+  if (!raw) return [];
+  return raw.split(/\s+/u).map((s) => s.trim()).filter(Boolean);
+}
+
+function parseConfigFile(configPath: string): ProjectConfig {
   try {
     const raw = readFileSync(configPath, "utf8");
     const parsed: unknown = JSON.parse(raw);
