@@ -150,12 +150,24 @@ export function registerStructuredTool(args: {
     annotations: args.annotations,
   });
 
-  // Wrap the callback to automatically measure wall-clock time.
+  // Wrap the callback to automatically measure wall-clock time AND
+  // catch any uncaught exception from the body. Without the catch,
+  // a stray `readFileSync` or `JSON.parse` on user-controlled input
+  // throws straight up to the MCP framework and the caller sees an
+  // unstructured RPC error instead of a `ToolResult`. With the catch,
+  // every tool call returns a structured envelope — `ok=false` plus
+  // a tool-error diagnostic with a `nextAction` recovery hint —
+  // even when the callback forgets its own try/catch.
   // If the callback already sets elapsedMs on the envelope, that value
   // is preserved. Otherwise elapsedMs is filled in automatically.
   const timedCallback = async (toolArgs: any) => {
     const startMs = performance.now();
-    const result = await args.callback(toolArgs);
+    let result: unknown;
+    try {
+      result = await args.callback(toolArgs);
+    } catch (err) {
+      result = makeTextToolErrorResult(args.name, err, {});
+    }
     const elapsed = Math.round(performance.now() - startMs);
     if (
       result &&

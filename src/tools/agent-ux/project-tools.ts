@@ -143,6 +143,13 @@ export function registerProjectTools(
         withHoles: z.number(),
         withPostulates: z.number(),
       })),
+      // Files dropped from the sweep because of read failures or
+      // subprocess errors. Empty on a healthy run; non-empty surfaces
+      // partial-result transparency to an agent.
+      skippedFiles: z.array(z.object({
+        file: z.string(),
+        reason: z.string(),
+      })),
     }),
     callback: async ({ directory }: { directory?: string }) => {
       const requested = directory ?? "agda";
@@ -157,11 +164,35 @@ export function registerProjectTools(
       }
       const totals: Bucket = { files: 0, clean: 0, withErrors: 0, withHoles: 0, withPostulates: 0 };
       const bySubdir = new Map<string, Bucket>();
+      // Files that vanished / became unreadable mid-sweep. Surfaced
+      // in the response so an agent doesn't see "247 files" when the
+      // real number was 250 with 3 silently dropped.
+      const skippedFiles: Array<{ file: string; reason: string }> = [];
 
       for (const abs of files) {
         const rel = relative(repoRoot, abs);
-        const source = readFileSync(abs, "utf8");
-        const load = await session.loadNoMetas(abs);
+        let source: string;
+        try {
+          source = readFileSync(abs, "utf8");
+        } catch (err) {
+          skippedFiles.push({
+            file: rel,
+            reason: err instanceof Error ? err.message : String(err),
+          });
+          continue;
+        }
+        let load: { success: boolean; classification: string };
+        try {
+          load = await session.loadNoMetas(abs);
+        } catch (err) {
+          // A subprocess crash on one file shouldn't abort the sweep;
+          // record it as skipped and keep going.
+          skippedFiles.push({
+            file: rel,
+            reason: `loadNoMetas threw: ${err instanceof Error ? err.message : String(err)}`,
+          });
+          continue;
+        }
         const hasErrors = !load.success || load.classification === "type-error";
         const holes = /\?(?!-|\})/u.test(source);
         const postulates = extractPostulateSites(source).length > 0;
@@ -185,24 +216,34 @@ export function registerProjectTools(
       const perSubdirectory = [...bySubdir.entries()]
         .map(([subdirectory, bucket]) => ({ subdirectory, ...bucket }))
         .sort((a, b) => a.subdirectory.localeCompare(b.subdirectory));
-      const text = [
+      const textLines = [
         `Scanned ${totals.files} file(s) under ${relativeOrIdentity(repoRoot, scanRoot)}.`,
         `Clean: ${totals.clean}`,
         `With errors: ${totals.withErrors}`,
         `With holes: ${totals.withHoles}`,
         `With postulates: ${totals.withPostulates}`,
-      ].join("\n");
+      ];
+      if (skippedFiles.length > 0) {
+        textLines.push(`Skipped (read/load failed): ${skippedFiles.length}`);
+      }
+      const skippedSuffix = skippedFiles.length > 0
+        ? ` (${skippedFiles.length} skipped)`
+        : "";
       return makeToolResult(
         okEnvelope({
           tool: "agda_project_progress",
-          summary: `Scanned ${totals.files} file(s): ${totals.clean} clean, ${totals.withErrors} with errors, ${totals.withHoles} with holes, ${totals.withPostulates} with postulates.`,
+          summary:
+            `Scanned ${totals.files} file(s): ${totals.clean} clean, ` +
+            `${totals.withErrors} with errors, ${totals.withHoles} with holes, ` +
+            `${totals.withPostulates} with postulates${skippedSuffix}.`,
           data: {
             directory: relativeOrIdentity(repoRoot, scanRoot),
             totals,
             perSubdirectory,
+            skippedFiles,
           },
         }),
-        text,
+        textLines.join("\n"),
       );
     },
   });
@@ -248,17 +289,33 @@ export function registerProjectTools(
       }> = [];
 
       const classifyOne = async (abs: string) => {
-        const load = await session.loadNoMetas(abs);
         const rel = relative(repoRoot, abs);
-        statuses.push({
-          file: rel,
-          status: classifyBulkStatus(load),
-          classification: load.classification,
-          rootCauseFile: null,
-          errorCount: load.errors.length,
-          warningCount: load.warnings.length,
-          errors: load.errors,
-        });
+        try {
+          const load = await session.loadNoMetas(abs);
+          statuses.push({
+            file: rel,
+            status: classifyBulkStatus(load),
+            classification: load.classification,
+            rootCauseFile: null,
+            errorCount: load.errors.length,
+            warningCount: load.warnings.length,
+            errors: load.errors,
+          });
+        } catch (err) {
+          // Subprocess crash on this file — record as `error` with a
+          // classification that an agent can recognize, so the rest of
+          // the sweep continues. Without the catch, one wedged file
+          // killed the whole tool call.
+          statuses.push({
+            file: rel,
+            status: "error",
+            classification: "process-error",
+            rootCauseFile: null,
+            errorCount: 1,
+            warningCount: 0,
+            errors: [`loadNoMetas threw: ${err instanceof Error ? err.message : String(err)}`],
+          });
+        }
       };
 
       if (parallel) {

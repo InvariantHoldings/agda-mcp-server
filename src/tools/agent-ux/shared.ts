@@ -172,6 +172,11 @@ export function insertClauseAtEndOfFunction(
  * Walk every Agda file under `repoRoot/agda` and report any top-level
  * definitions whose name matches `symbol`. Returns the candidate's
  * dotted module name and the line where the definition starts.
+ *
+ * Per-file failures (unreadable, deleted between walk and read,
+ * non-UTF8) are skipped so a single bad file doesn't abort the
+ * whole sweep — matches the resilience model `walkAgdaFiles` uses
+ * for unreadable directories.
  */
 export function collectImportCandidates(
   repoRoot: string,
@@ -180,7 +185,12 @@ export function collectImportCandidates(
   const files = walkAgdaFiles(resolve(repoRoot, "agda"));
   const out: Array<{ moduleName: string; file: string; line: number }> = [];
   for (const file of files) {
-    const source = readFileSync(file, "utf8");
+    let source: string;
+    try {
+      source = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
     const shape = parseModuleSourceShape(source);
     const moduleName = shape.moduleName ?? moduleNameFromPath(relative(repoRoot, file));
     for (const def of parseTopLevelDefinitions(source)) {

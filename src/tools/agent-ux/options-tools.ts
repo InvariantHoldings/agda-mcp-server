@@ -5,7 +5,7 @@
 // running a load.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { z } from "zod";
 
@@ -81,12 +81,30 @@ export function registerOptionsTools(
         options.push({ option: opt, source: "env-var" });
       }
 
+      // Best-effort wrapper-script flag discovery. AGDA_BIN may point
+      // at a binary (not readable as text), an unreadable file, or an
+      // intentionally-empty path; any of those used to throw straight
+      // out of the tool. Now we try to read it and silently skip on
+      // failure — wrapper-script discovery has never been load-bearing
+      // (`agda_effective_options` returns the file/agda-lib/MCP-default
+      // sources regardless), so a permissions / encoding failure here
+      // shouldn't take down the whole tool. We also cap the read at
+      // 64 KiB because a wrapper script that big is almost certainly
+      // a real binary (which we don't want to grep for `--flag` shapes).
       const agdaBin = process.env.AGDA_BIN;
       if (agdaBin && existsSync(agdaBin)) {
-        const scriptText = readFileSync(agdaBin, "utf8");
-        const discovered = scriptText.match(/--[A-Za-z0-9-]+/gu) ?? [];
-        for (const flag of discovered) {
-          options.push({ option: flag, source: "wrapper-script" });
+        try {
+          const stats = statSync(agdaBin);
+          if (stats.size <= 64 * 1024) {
+            const scriptText = readFileSync(agdaBin, "utf8");
+            const discovered = scriptText.match(/--[A-Za-z0-9-]+/gu) ?? [];
+            for (const flag of discovered) {
+              options.push({ option: flag, source: "wrapper-script" });
+            }
+          }
+        } catch {
+          // AGDA_BIN unreadable / non-text / disappeared between
+          // existsSync and read — drop the wrapper-script signal.
         }
       }
 
