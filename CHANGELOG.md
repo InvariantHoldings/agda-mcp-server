@@ -36,10 +36,26 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - **JSON schema for `.agda-mcp.json`** — published at
   `schemas/agda-mcp.schema.json` (and shipped with the npm package) for
   IDE autocompletion via the standard `$schema` field.
-- **Project-config diagnostics on every load** — `agda_load` and
-  `agda_typecheck` responses now carry warning diagnostics for any
-  config or env-var validation issues, so an agent sees the failure
-  inline with the load that consumed the bad config.
+- **Project-config diagnostics on every load** — `agda_load`,
+  `agda_typecheck`, `agda_reload`, `agda_apply_rename`,
+  `agda_add_missing_clauses`, and every proof-action reload (give,
+  refine, case_split, auto, solve, intro) now surface
+  `LoadResult.projectConfigWarnings` either as structured tool
+  diagnostics or as a `**Project-config warnings:**` markdown section,
+  so an agent sees the failure inline with the load that consumed the
+  bad config — not only when calling `agda_load` explicitly.
+- **"Did you mean ...?" suggestions for typoed flags** — invalid
+  command-line options now get a Levenshtein-matched hint pointing at
+  the closest entry in `COMMON_AGDA_FLAGS`. `Werror` (forgot the
+  dashes) → `Did you mean '--Werror'?`. Same treatment for typoed
+  `.agda-mcp.json` keys: `commandlineoptions` (case typo) →
+  `Did you mean 'commandLineOptions'?`. Conservative thresholds (≤2
+  for flags, ≤3 case-insensitive for keys) avoid second-guessing real
+  but obscure inputs.
+- **`LoadResult.projectConfigWarnings`** — public load-result field
+  so any tool surfacing a load result can render config warnings
+  consistently. Centralises the wire format previously duplicated at
+  each tool boundary.
 - **`agda_effective_options` source attribution** — flags that appeared
   in BOTH `.agda-mcp.json` and `AGDA_MCP_DEFAULT_FLAGS` are partitioned
   at config-load time (`fileFlags` / `envFlags`) so
