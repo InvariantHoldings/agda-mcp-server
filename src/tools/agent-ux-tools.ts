@@ -26,7 +26,11 @@ import { buildImportGraph, computeImpact } from "../agda/import-graph.js";
 import { createLibraryRegistration } from "../agda/library-registration.js";
 import { filePathDescription, isAgdaSourceFile } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
-import { loadProjectConfig, ENV_DEFAULT_FLAGS, parseEnvFlags } from "../session/project-config.js";
+import {
+  ENV_DEFAULT_FLAGS,
+  PROJECT_CONFIG_FILENAME,
+  loadProjectConfig,
+} from "../session/project-config.js";
 import {
   errorDiagnostic,
   errorEnvelope,
@@ -837,14 +841,16 @@ export function register(
         }
       }
 
-      // Report project config file flags and env var flags separately
+      // Report project config file flags and env var flags separately.
+      // Sources are pre-partitioned by `loadProjectConfig`, so a flag
+      // present in BOTH `.agda-mcp.json` and AGDA_MCP_DEFAULT_FLAGS shows
+      // up once per source rather than being misattributed.
       const projectConfig = loadProjectConfig(repoRoot);
-      if (projectConfig.commandLineOptions) {
-        // Distinguish env-var flags from file-config flags
-        const envFlags = new Set(parseEnvFlags());
-        for (const opt of projectConfig.commandLineOptions) {
-          options.push({ option: opt, source: envFlags.has(opt) ? "env-var" : "project-config" });
-        }
+      for (const opt of projectConfig.fileFlags) {
+        options.push({ option: opt, source: "project-config" });
+      }
+      for (const opt of projectConfig.envFlags) {
+        options.push({ option: opt, source: "env-var" });
       }
 
       const agdaBin = process.env.AGDA_BIN;
@@ -879,6 +885,112 @@ export function register(
           },
         }),
         text,
+      );
+    },
+  });
+
+  // agda_project_config — diagnose `.agda-mcp.json` and AGDA_MCP_DEFAULT_FLAGS
+  // without forcing a load. When a load fails because of a typoed key or
+  // flag, the warnings on the load response already explain why; this
+  // tool lets an agent inspect the resolved config in isolation.
+  registerStructuredTool({
+    server,
+    name: "agda_project_config",
+    description:
+      "Inspect the resolved project-level Agda configuration (.agda-mcp.json + AGDA_MCP_DEFAULT_FLAGS) " +
+      "with provenance and validation warnings. Use this when an agent wants to confirm which compiler " +
+      "flags will be applied to subsequent agda_load / agda_typecheck calls before running them.",
+    category: "analysis",
+    inputSchema: {},
+    outputDataSchema: z.object({
+      configFilePath: z.string().nullable(),
+      configFileExists: z.boolean(),
+      envVarName: z.string(),
+      envVarSet: z.boolean(),
+      fileFlags: z.array(z.string()),
+      envFlags: z.array(z.string()),
+      effectiveFlags: z.array(z.string()),
+      warnings: z.array(z.object({
+        source: z.enum(["file", "env", "system"]),
+        message: z.string(),
+        path: z.string().optional(),
+      })),
+    }),
+    callback: async () => {
+      const projectConfig = loadProjectConfig(repoRoot);
+      const configFilePath = projectConfig.configFilePath ?? null;
+      const configFileExists = configFilePath !== null && existsSync(configFilePath);
+      const envVarRaw = process.env[ENV_DEFAULT_FLAGS];
+      const envVarSet = envVarRaw !== undefined && envVarRaw.length > 0;
+
+      // Effective flags = file flags then env flags, deduplicated by
+      // last-wins (so `agda_project_config` reports the same final list a
+      // load with no per-call options would build). Per-call options live
+      // on the tool call itself and aren't visible at config time.
+      const seen = new Set<string>();
+      const effectiveFlags: string[] = [];
+      const allFlags = [...projectConfig.fileFlags, ...projectConfig.envFlags];
+      for (let i = allFlags.length - 1; i >= 0; i--) {
+        const flag = allFlags[i];
+        if (!seen.has(flag)) {
+          seen.add(flag);
+          effectiveFlags.unshift(flag);
+        }
+      }
+
+      const data = {
+        configFilePath: configFilePath ? relative(repoRoot, configFilePath) : null,
+        configFileExists,
+        envVarName: ENV_DEFAULT_FLAGS,
+        envVarSet,
+        fileFlags: projectConfig.fileFlags,
+        envFlags: projectConfig.envFlags,
+        effectiveFlags,
+        warnings: projectConfig.warnings,
+      };
+
+      const lines: string[] = [
+        `${PROJECT_CONFIG_FILENAME}: ${
+          configFileExists
+            ? `present (${data.configFilePath})`
+            : "not present"
+        }`,
+        `${ENV_DEFAULT_FLAGS}: ${envVarSet ? "set" : "unset"}`,
+        projectConfig.fileFlags.length > 0
+          ? `File flags: ${projectConfig.fileFlags.join(" ")}`
+          : "File flags: (none)",
+        projectConfig.envFlags.length > 0
+          ? `Env flags: ${projectConfig.envFlags.join(" ")}`
+          : "Env flags: (none)",
+        effectiveFlags.length > 0
+          ? `Effective flags (deduplicated): ${effectiveFlags.join(" ")}`
+          : "Effective flags: (none)",
+      ];
+      if (projectConfig.warnings.length > 0) {
+        lines.push("");
+        lines.push("Warnings:");
+        for (const w of projectConfig.warnings) {
+          lines.push(`- [${w.source}] ${w.message}`);
+        }
+      }
+
+      const summary = projectConfig.warnings.length === 0
+        ? `Resolved ${effectiveFlags.length} effective project flag(s).`
+        : `Resolved ${effectiveFlags.length} effective project flag(s) with ${projectConfig.warnings.length} warning(s).`;
+
+      return makeToolResult(
+        okEnvelope({
+          tool: "agda_project_config",
+          summary,
+          data,
+          diagnostics: projectConfig.warnings.map((w) =>
+            warningDiagnostic(
+              `${w.source === "env" ? "env" : "config"}: ${w.message}`,
+              `project-config-${w.source}`,
+            ),
+          ),
+        }),
+        lines.join("\n"),
       );
     },
   });

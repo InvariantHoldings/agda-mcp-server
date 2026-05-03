@@ -255,6 +255,12 @@
     "requiresLiveAgda": false
   },
   {
+    "tool": "agda_project_config",
+    "suite": "test/unit/tools/agent-ux-tools.test.ts",
+    "scenario": "project-level config + env-var resolution",
+    "requiresLiveAgda": false
+  },
+  {
     "tool": "agda_project_progress",
     "suite": "test/unit/tools/agent-ux-tools.test.ts",
     "scenario": "project progress static summary",
