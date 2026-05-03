@@ -7,6 +7,7 @@ import { relative } from "node:path";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
 import {
+  errorDiagnostic,
   errorEnvelope,
   groupDiagnosticsByFile,
   infoDiagnostic,
@@ -153,6 +154,13 @@ export function register(
               errorsByFile: [],
               warningsByFile: [],
             },
+            diagnostics: [errorDiagnostic(
+              message,
+              "metas-error",
+              "Confirm a file is loaded with `agda_session_status`. " +
+              "If none, call `agda_load`. If load failed, the meta query " +
+              "can't run until the load is fixed.",
+            )],
           }),
           message,
         );

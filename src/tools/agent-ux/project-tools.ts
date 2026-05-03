@@ -383,20 +383,35 @@ export function registerProjectTools(
       const cleanCount = statuses.filter((entry) => entry.status === "clean").length;
       const holesCount = statuses.filter((entry) => entry.status === "holes").length;
       const errorsCount = statuses.filter((entry) => entry.status === "error").length;
+      // Process-error files are subprocess crashes (not real type
+      // errors). They count as `error` for bucket purposes but
+      // distinguishing them in the summary helps agents tell
+      // "Agda rejected this file" from "the loader crashed on this
+      // file" at a glance.
+      const processErrorsCount = statuses.filter(
+        (entry) => entry.classification === "process-error",
+      ).length;
       const dirLabel = relativeOrIdentity(repoRoot, scanRoot);
 
       // 1-line summary is for agents that read the envelope by hand;
       // the multi-line text body adds the per-bucket breakdown that
       // would clutter the summary line.
+      const procSuffix = processErrorsCount > 0
+        ? ` (${processErrorsCount} process-error)`
+        : "";
       const summary =
         `Scanned ${statuses.length} file(s) under ${dirLabel}: ` +
-        `${cleanCount} clean, ${holesCount} with holes, ${errorsCount} errors.`;
-      const text = [
+        `${cleanCount} clean, ${holesCount} with holes, ${errorsCount} errors${procSuffix}.`;
+      const textLines = [
         `Scanned ${statuses.length} file(s) under ${dirLabel}.`,
         `Clean: ${cleanCount}`,
         `With holes: ${holesCount}`,
         `Errors: ${errorsCount}`,
-      ].join("\n");
+      ];
+      if (processErrorsCount > 0) {
+        textLines.push(`Process errors (subprocess crashes): ${processErrorsCount}`);
+      }
+      const text = textLines.join("\n");
 
       return makeToolResult(
         okEnvelope({

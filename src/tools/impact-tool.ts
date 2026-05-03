@@ -22,6 +22,7 @@ import { canonicalizeOrFallback } from "./path-utils.js";
 import { filePathDescription } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import {
+  errorDiagnostic,
   errorEnvelope,
   makeToolResult,
   okEnvelope,
@@ -74,7 +75,11 @@ export function register(
               summary: `Invalid file path: ${file}`,
               classification: "invalid-path",
               data: emptyImpactData(file),
-              diagnostics: [{ severity: "error", message: `Invalid file path: ${file}`, code: "invalid-path" }],
+              diagnostics: [errorDiagnostic(
+                `Invalid file path: ${file}`,
+                "invalid-path",
+                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
+              )],
             }),
           );
         }
@@ -87,7 +92,11 @@ export function register(
             summary: `File not found: ${file}`,
             classification: "not-found",
             data: emptyImpactData(file),
-            diagnostics: [{ severity: "error", message: `File not found: ${requestedFilePath}`, code: "not-found" }],
+            diagnostics: [errorDiagnostic(
+              `File not found: ${requestedFilePath}`,
+              "not-found",
+              "Confirm the path is relative to PROJECT_ROOT. Use `agda_file_list` or `agda_search` to discover available files.",
+            )],
           }),
         );
       }
@@ -103,7 +112,11 @@ export function register(
               summary: `Invalid file path: ${file}`,
               classification: "invalid-path",
               data: emptyImpactData(file),
-              diagnostics: [{ severity: "error", message: `Invalid file path: ${file}`, code: "invalid-path" }],
+              diagnostics: [errorDiagnostic(
+                `Invalid file path: ${file}`,
+                "invalid-path",
+                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
+              )],
             }),
           );
         }
@@ -137,11 +150,11 @@ export function register(
             summary: `File is not part of the Agda import graph: ${notInGraphRel}`,
             classification: "not-in-graph",
             data: emptyImpactData(notInGraphRel),
-            diagnostics: [{
-              severity: "error",
-              message: `File exists but is not part of the scanned Agda import graph for ${notInGraphRel}; it may have been filtered out, may not be a recognized Agda source file, or no module declaration was parsed.`,
-              code: "not-in-graph",
-            }],
+            diagnostics: [errorDiagnostic(
+              `File exists but is not part of the scanned Agda import graph for ${notInGraphRel}; it may have been filtered out, may not be a recognized Agda source file, or no module declaration was parsed.`,
+              "not-in-graph",
+              "Verify the file has a recognised Agda extension and a `module Foo where` declaration. If both are present, run `agda_load` on the file to confirm Agda parses it.",
+            )],
           }),
         );
       }

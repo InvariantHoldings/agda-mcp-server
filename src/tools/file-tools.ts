@@ -122,6 +122,9 @@ export function register(
               severity: "error",
               message: `Tier directory not found: agda/${tier}`,
               code: "not-found",
+              nextAction:
+                "Pass an existing top-level directory under agda/ (e.g. MathLib, Foundation, Kernel, Research, Extensions, TrustedCompute). " +
+                "Use `agda_file_list` with no `tier` to see the available top-level directories in this project.",
             },
             {
               severity: "info",
@@ -338,6 +341,8 @@ export function register(
               severity: "error",
               message: "Provide either `query` or `typePattern`.",
               code: "invalid-input",
+              nextAction:
+                "Pass `query` for a substring search across module / definition names, or `typePattern` for a token-pattern match against type signatures (e.g. `Nat → _ → Nat`).",
             },
           ],
           data: { query: actualQuery, tier },
