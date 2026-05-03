@@ -40,17 +40,11 @@ and this project follows [Semantic Versioning](https://semver.org/).
   `agda_typecheck` responses now carry warning diagnostics for any
   config or env-var validation issues, so an agent sees the failure
   inline with the load that consumed the bad config.
-
-### Fixed
-
 - **`agda_effective_options` source attribution** — flags that appeared
-  in BOTH `.agda-mcp.json` and `AGDA_MCP_DEFAULT_FLAGS` were being
-  misattributed: every occurrence got tagged as `env-var` because the
-  set membership test could not distinguish file-sourced from
-  env-sourced. Sources are now partitioned at config-load time
-  (`fileFlags` / `envFlags`) so `agda_effective_options` reports each
-  source unambiguously, including the case where the same flag appears
-  in both.
+  in BOTH `.agda-mcp.json` and `AGDA_MCP_DEFAULT_FLAGS` are partitioned
+  at config-load time (`fileFlags` / `envFlags`) so
+  `agda_effective_options` reports each source unambiguously,
+  including the case where the same flag appears in both.
 - **`-V` blocking case-sensitivity** — the previous lower-casing pass
   meant `-V` (Agda's short `--version`) and `-v` (verbosity) collapsed
   to the same key, blocking the verbosity flag too. Short flags now use
