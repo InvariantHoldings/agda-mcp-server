@@ -45,11 +45,31 @@ and this project follows [Semantic Versioning](https://semver.org/).
   non-empty line and truncates over 200 chars. `agda_bulk_status`
   switched from `summary === text` (4-line breakdown duplicated
   whole) to a 1-line digest.
-- **Migration maps now live in JSON-backed data files** (advances
-  #15). `src/tools/agent-ux/data/{stdlib,builtin}-migrations.json`
-  validated at module load via Zod and shipped via the existing
-  `copy-json-assets.mjs` post-build step. Logic stays in TypeScript;
-  pure metadata is in JSON.
+- **Pure-metadata extraction to JSON-backed data files (closes #15)** —
+  every static curated table is now a JSON file under
+  `src/<area>/data/`, validated at module init via Zod and shipped
+  via the existing `copy-json-assets.mjs` post-build step. Logic
+  stays in TypeScript; pure metadata is in JSON. Migrated tables:
+  - `src/tools/agent-ux/data/stdlib-migrations.json` (cross-version
+    rename map; previously inline `STDLIB_MIGRATION_MAP`).
+  - `src/tools/agent-ux/data/builtin-migrations.json` (builtin →
+    module records; previously inline `BUILTIN_MIGRATION_MAP`).
+  - `src/protocol/data/command-line-options.json` (blocked-flag
+    sets + `COMMON_AGDA_FLAGS` for "did you mean" suggestions;
+    previously a 50-line inline array plus three blocklists).
+  - `src/agda/data/imported-fixities.json` (curated stdlib
+    operator precedences for fixity-conflict detection; previously
+    inline `DEFAULT_IMPORTED_FIXITIES`).
+  Plus a drift-elimination pass: three duplicate Agda-source-extension
+  arrays in `src/agda/agdai-cache.ts`,
+  `src/session/register-agda-apply-edit.ts`, and
+  `src/agda/version-support.ts` now all read from the single
+  `agda-source-extensions.json` via
+  `version-support.allSourceExtensionSuffixes()`. Adding a literate
+  variant means editing one JSON file, not three call sites.
+  New tests pin the JSON-data invariants (validator round-trip,
+  blocked-flag regression guards, imported-fixity precedence
+  values) so future edits to the JSON can't silently drop entries.
 
 - **Configurable Agda CLI flags for `Cmd_load`** (#49) — `agda_load` and
   `agda_typecheck` accept a new `commandLineOptions` array that is passed

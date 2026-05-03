@@ -7,7 +7,7 @@ touching `src/`.
 
 ## Top-level layering
 
-```
+```text
                        ┌──────────────┐
                   ┌────│ MCP transport │     stdio JSON-RPC
                   │    └──────────────┘
@@ -76,6 +76,7 @@ gatekeep flag arrays going into `Cmd_load`. No side effects, no Agda
 subprocess.
 
 Key files:
+
 - `command-builder.ts` — `command()`, `goalCommand()`, `quoted()`,
   `stringList()`, `boolLiteral()`. Single source of truth for IOTCM
   string assembly; no other module hand-builds command strings.
@@ -151,6 +152,7 @@ Each tool registration is a thin adapter that:
    `diagnostics`, and `provenance`.
 
 Key files:
+
 - `tool-envelope.ts` — `ToolDiagnostic` /
   `ToolResult` shape definitions, the envelope builders
   (`okEnvelope`, `errorEnvelope`, `makeToolResult`), and the
@@ -213,12 +215,22 @@ init via `loadJsonData()` from `src/json-data.ts`. The build's
 and derived tables stay in TypeScript.
 
 Examples in tree:
+
 - `src/agda/data/agda-source-extensions.json`,
-  `src/agda/data/agda-feature-flags.json`.
+  `src/agda/data/agda-feature-flags.json`,
+  `src/agda/data/imported-fixities.json`.
 - `src/protocol/data/protocol-command-registry.json`,
-  `src/protocol/data/protocol-parity-overrides.json`.
+  `src/protocol/data/protocol-parity-overrides.json`,
+  `src/protocol/data/command-line-options.json`.
 - `src/tools/agent-ux/data/stdlib-migrations.json`,
   `src/tools/agent-ux/data/builtin-migrations.json`.
+
+The Agda-source-extension list specifically is the SSOT for THREE
+formerly-duplicated lists (in `agdai-cache.ts`,
+`register-agda-apply-edit.ts`, `version-support.ts`). All three now
+read from `version-support.allSourceExtensionSuffixes()`, so adding a
+literate format means editing one JSON file rather than three call
+sites.
 
 ## Where to find the rest
 

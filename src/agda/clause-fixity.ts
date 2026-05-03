@@ -5,7 +5,14 @@
 // would bind tighter than expected against a curated list of imported
 // stdlib operators). Both are pure and operate on already-loaded
 // source strings.
+//
+// The curated stdlib precedence map is pure metadata, so it lives in
+// `data/imported-fixities.json` and is loaded + validated at module
+// init via Zod (issue #15).
 
+import { z } from "zod";
+
+import { loadJsonData } from "../json-data.js";
 import { splitWords } from "./refactor-helpers.js";
 
 export interface FixityConflict {
@@ -16,23 +23,22 @@ export interface FixityConflict {
   suggestedFixity: string;
 }
 
+const importedFixitiesFileSchema = z.object({
+  $comment: z.string().optional(),
+  fixities: z.record(z.string(), z.number().int().min(0)),
+});
+
 /**
  * Curated precedence map for common stdlib operators. Used as the
- * default reference set for `inferFixityConflicts`. Numbers match the
- * declarations in `Data.Nat.Properties`, `Data.Bool`, etc., so a
- * user-defined operator without a fixity declaration that binds
- * against any of these will trigger a conflict warning.
+ * default reference set for `inferFixityConflicts`. Loaded from
+ * `data/imported-fixities.json` so the table is a JSON-backed SSOT
+ * decoupled from this logic module.
  */
-const DEFAULT_IMPORTED_FIXITIES: Readonly<Record<string, number>> = {
-  "_+_": 6,
-  "_-_": 6,
-  "_*_": 7,
-  "_≤_": 4,
-  "_<_": 4,
-  "_≡_": 4,
-  "_∧_": 3,
-  "_∨_": 2,
-};
+const DEFAULT_IMPORTED_FIXITIES: Readonly<Record<string, number>> = loadJsonData(
+  "./data/imported-fixities.json",
+  importedFixitiesFileSchema,
+  import.meta.url,
+).fixities;
 
 /**
  * Best-effort arity inference for a function name. Tries existing

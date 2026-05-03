@@ -15,6 +15,29 @@
 // command-line options are an open set matching Agda's full CLI.
 // We validate structure (must start with `-`) and reject known
 // dangerous patterns but do not whitelist every possible flag.
+//
+// The blocked/common flag lists are curated metadata, not logic, so
+// they live in `data/command-line-options.json` and are loaded +
+// validated at module init via Zod (issue #15).
+
+import { z } from "zod";
+import { loadJsonData } from "../json-data.js";
+
+const commandLineOptionsDataSchema = z.object({
+  $comment: z.string().optional(),
+  blocked: z.object({
+    caseInsensitive: z.array(z.string()),
+    caseSensitive: z.array(z.string()),
+    prefixes: z.array(z.string()),
+  }),
+  common: z.array(z.string()),
+});
+
+const COMMAND_LINE_OPTIONS_DATA = loadJsonData(
+  "./data/command-line-options.json",
+  commandLineOptionsDataSchema,
+  import.meta.url,
+);
 
 /**
  * Maximum length of an individual flag string. Agda's longest
@@ -63,34 +86,15 @@ function safePreview(raw: string): string {
 /**
  * Flags that must never be passed in the Cmd_load options list because
  * they conflict with the MCP server's own session management.
- *
- * Stored in lowercase for case-insensitive matching. Short flags like
- * "-V" are matched case-sensitively via BLOCKED_FLAGS_CASE_SENSITIVE.
+ * Long flags are matched case-insensitively; short flags
+ * case-sensitively (so `-V` is Agda's `--version` short form, blocked,
+ * while `-v` is the verbosity flag and stays allowed).
  */
-const BLOCKED_FLAGS_CASE_INSENSITIVE = new Set([
-  "--interaction",
-  "--interaction-json",
-  "--interaction-exit-on-error",
-  "--version",
-  "--help",
-  "--print-agda-dir",
-]);
+const BLOCKED_FLAGS_CASE_INSENSITIVE = new Set(COMMAND_LINE_OPTIONS_DATA.blocked.caseInsensitive);
+const BLOCKED_FLAGS_CASE_SENSITIVE = new Set(COMMAND_LINE_OPTIONS_DATA.blocked.caseSensitive);
 
-/**
- * Short flags that must be matched case-sensitively (e.g. "-V" is
- * Agda's short --version, but "-v" is a verbosity flag).
- */
-const BLOCKED_FLAGS_CASE_SENSITIVE = new Set([
-  "-V",
-  "-?",
-]);
-
-/**
- * Prefixes that indicate a blocked family of flags (case-insensitive).
- */
-const BLOCKED_PREFIXES: string[] = [
-  "--interaction",
-];
+/** Prefixes that indicate a blocked family of flags (case-insensitive). */
+const BLOCKED_PREFIXES: ReadonlyArray<string> = COMMAND_LINE_OPTIONS_DATA.blocked.prefixes;
 
 export interface CommandLineOptionsValidation {
   valid: boolean;
@@ -187,57 +191,4 @@ export function validateCommandLineOptions(
  *
  * Reference: https://agda.readthedocs.io/en/latest/tools/command-line-options.html
  */
-export const COMMON_AGDA_FLAGS: readonly string[] = [
-  "--safe",
-  "--Werror",
-  "--no-universe-polymorphism",
-  "--omega-in-omega",
-  "--no-sized-types",
-  "--no-guardedness",
-  "--cubical",
-  "--cubical-compatible",
-  "--erasure",
-  "--erased-cubical",
-  "--without-K",
-  "--with-K",
-  "--copatterns",
-  "--no-copatterns",
-  "--no-eta-equality",
-  "--exact-split",
-  "--no-exact-split",
-  "--no-forcing",
-  "--no-projection-like",
-  "--allow-unsolved-metas",
-  "--allow-incomplete-matches",
-  "--no-positivity-check",
-  "--no-termination-check",
-  "--type-in-type",
-  "--prop",
-  "--no-prop",
-  "--two-level",
-  "--cumulativity",
-  "--no-import-sorts",
-  "--local-confluence-check",
-  "--confluence-check",
-  "--flat-split",
-  "--cohesion",
-  "--no-load-primitives",
-  "--no-pattern-matching",
-  "--rewriting",
-  "--postfix-projections",
-  "--keep-pattern-variables",
-  "--instance-search-depth",
-  "--inversion-max-depth",
-  "--termination-depth",
-  "--show-implicit",
-  "--show-irrelevant",
-  "--no-unicode",
-  "--count-clusters",
-  "--auto-inline",
-  "--no-auto-inline",
-  "--no-fast-reduce",
-  "--call-by-name",
-  "--injective-type-constructors",
-  "--warning",
-  "-W",
-];
+export const COMMON_AGDA_FLAGS: readonly string[] = COMMAND_LINE_OPTIONS_DATA.common;
