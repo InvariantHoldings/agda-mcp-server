@@ -7,6 +7,62 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable Agda CLI flags for `Cmd_load`** (#49) — `agda_load` and
+  `agda_typecheck` accept a new `commandLineOptions` array that is passed
+  through to Agda's `Cmd_load` `[String]` argument. Validated at the
+  tool boundary (consistent with existing `profileOptions` semantics):
+  invalid or session-conflicting flags (`--interaction*`, `--version`,
+  `-V`, `-?`, etc.) are rejected with an `errorEnvelope` before the
+  subprocess sees them. Case-sensitive matching for short flags
+  (`-V` blocked, `-v` allowed); case-insensitive for long flags.
+- **`.agda-mcp.json` project config** — a JSON config file at PROJECT_ROOT
+  sets persistent `commandLineOptions` defaults. Loaded once per
+  `agda_load` and cached by file mtime + size for repeated calls.
+  UTF-8 BOMs are stripped; oversize files (>256 KiB) are refused with
+  a warning rather than read into memory; unknown top-level keys produce
+  a warning so typoed config keys (e.g. `commandlineoptions`) are not
+  silently ignored.
+- **`AGDA_MCP_DEFAULT_FLAGS` env var** — space-separated default flags
+  alternative to the JSON config. Validated the same as file flags;
+  invalid env entries surface as warnings on every load instead of
+  silently corrupting the option list.
+- **`agda_project_config` tool** — agent-facing introspection tool that
+  returns the resolved project config (file flags, env flags, effective
+  deduplicated flags) along with any validation warnings (unknown keys,
+  invalid flag syntax, oversize file). Lets an agent confirm which flags
+  will apply to subsequent loads without having to run a load first.
+- **JSON schema for `.agda-mcp.json`** — published at
+  `schemas/agda-mcp.schema.json` (and shipped with the npm package) for
+  IDE autocompletion via the standard `$schema` field.
+- **Project-config diagnostics on every load** — `agda_load` and
+  `agda_typecheck` responses now carry warning diagnostics for any
+  config or env-var validation issues, so an agent sees the failure
+  inline with the load that consumed the bad config.
+
+### Fixed
+
+- **`agda_effective_options` source attribution** — flags that appeared
+  in BOTH `.agda-mcp.json` and `AGDA_MCP_DEFAULT_FLAGS` were being
+  misattributed: every occurrence got tagged as `env-var` because the
+  set membership test could not distinguish file-sourced from
+  env-sourced. Sources are now partitioned at config-load time
+  (`fileFlags` / `envFlags`) so `agda_effective_options` reports each
+  source unambiguously, including the case where the same flag appears
+  in both.
+- **`-V` blocking case-sensitivity** — the previous lower-casing pass
+  meant `-V` (Agda's short `--version`) and `-v` (verbosity) collapsed
+  to the same key, blocking the verbosity flag too. Short flags now use
+  case-sensitive matching (`-V`, `-?` blocked), long flags case-insensitive.
+
+### Changed
+
+- **`ProjectConfig` shape** — internal API change: `commandLineOptions`
+  field replaced by separate `fileFlags` / `envFlags` arrays plus a
+  `warnings` array of validation issues. External callers can use
+  `effectiveProjectFlags(config)` to get the combined list.
+
 ## [0.6.6] - 2026-04-16
 
 ### Fixed
