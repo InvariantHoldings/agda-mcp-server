@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync, statSync, utimesSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -227,6 +227,25 @@ test("strips UTF-8 BOM before parsing", () => {
   const config = loadProjectConfig(dir);
   expect(config.fileFlags).toEqual(["--Werror"]);
   expect(config.warnings).toEqual([]);
+});
+
+test("readFileSync failure (e.g. .agda-mcp.json is a directory) emits a system-source warning", () => {
+  // Inducing a real `EACCES` portably is hard, so use the next-best
+  // failure mode: make `.agda-mcp.json` a directory. `existsSync`
+  // returns true, `statSync` succeeds (returns a directory stat),
+  // but `readFileSync` errors with `EISDIR`. The warning must be
+  // tagged `system` — the JSON isn't malformed, the filesystem is.
+  const dir = makeTempDir();
+  const configPath = join(dir, PROJECT_CONFIG_FILENAME);
+  mkdirSync(configPath);
+  const config = loadProjectConfig(dir);
+  const systemWarnings = config.warnings.filter((w) => w.source === "system");
+  expect(systemWarnings.length).toBeGreaterThanOrEqual(1);
+  expect(systemWarnings[0].message).toContain(".agda-mcp.json");
+  // No `file` source warning was added — content errors and system
+  // errors are routed separately.
+  const fileWarnings = config.warnings.filter((w) => w.source === "file");
+  expect(fileWarnings.length).toBe(0);
 });
 
 test("oversize config produces a warning and zero fileFlags", () => {

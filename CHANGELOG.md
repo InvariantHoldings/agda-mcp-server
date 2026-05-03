@@ -56,6 +56,33 @@ and this project follows [Semantic Versioning](https://semver.org/).
   so any tool surfacing a load result can render config warnings
   consistently. Centralises the wire format previously duplicated at
   each tool boundary.
+- **Per-element validation of `commandLineOptions` arrays** — a
+  config like `["--safe", 42, "--Werror"]` now keeps the two valid
+  flags and emits one warning per offending entry (with index and
+  type label: `commandLineOptions[1] is not a string (got number)`),
+  instead of dropping the whole array on the first non-string.
+- **Control-character + length defenses on flags** — a flag
+  containing a newline / NUL / tab / DEL is now rejected with a
+  `control character` error (would otherwise corrupt IOTCM
+  transport, which serialises commands one-per-line). Flags longer
+  than 1024 chars are rejected with a truncated-preview error; the
+  longest real Agda flag is well under this and a multi-KB string
+  is almost certainly an accidental paste of a binary blob.
+
+### Fixed
+
+- **`projectConfigDiagnostics()` mis-labelled `system`-source warnings
+  as `config:`** — the binary `env` / `config` ternary swallowed the
+  `system` source even though the diagnostic kind was correctly
+  `project-config-system`. The visible message text now matches the
+  kind via a `prefixForWarningSource()` mapping; the
+  `agda_project_config` tool's inline duplicate of the same logic now
+  routes through the shared formatter.
+- **System-level config-read failures are now tagged `system`, not `file`**
+  — `statSync` / `readFileSync` failures (permission denied, deletion
+  race) are infrastructure problems, not "your config content is
+  wrong". An agent can now distinguish `the disk says no` from `the
+  JSON is malformed` by looking at the warning source.
 - **`agda_effective_options` source attribution** — flags that appeared
   in BOTH `.agda-mcp.json` and `AGDA_MCP_DEFAULT_FLAGS` are partitioned
   at config-load time (`fileFlags` / `envFlags`) so

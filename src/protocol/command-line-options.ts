@@ -17,6 +17,26 @@
 // dangerous patterns but do not whitelist every possible flag.
 
 /**
+ * Maximum length of an individual flag string. Agda's longest
+ * documented flag (`--no-projection-like` etc) is well under 50
+ * characters; values like `--include-directory=/very/long/path` are
+ * the realistic upper bound. 1024 is generous on the upper side and
+ * defends against accidental DoS via, e.g., a flag containing a
+ * pasted file. Anything longer is almost certainly a mistake.
+ */
+const MAX_FLAG_LENGTH = 1024;
+
+/**
+ * C0 control characters and DEL — these have no place inside an Agda
+ * flag and letting them through would either break IOTCM transport
+ * (we serialise commands one-per-line; an embedded newline corrupts
+ * the stream) or indicate the caller pasted a binary blob instead of
+ * a single argument. Tab is rejected too — no real Agda flag uses it.
+ */
+// eslint-disable-next-line no-control-regex
+const FLAG_FORBIDDEN_CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
+
+/**
  * Flags that must never be passed in the Cmd_load options list because
  * they conflict with the MCP server's own session management.
  *
@@ -91,6 +111,25 @@ export function validateCommandLineOptions(
   for (const raw of input) {
     const trimmed = raw.trim();
     if (trimmed.length === 0) continue;
+
+    if (trimmed.length > MAX_FLAG_LENGTH) {
+      errors.push(
+        `Command-line option exceeds the ${MAX_FLAG_LENGTH}-character limit ` +
+        `(got ${trimmed.length}). Real Agda flags are well under this; this ` +
+        "looks like an accidentally-pasted blob. Truncating to keep the log " +
+        "useful: '" + trimmed.slice(0, 32) + "…'.",
+      );
+      continue;
+    }
+
+    if (FLAG_FORBIDDEN_CONTROL_CHARS.test(trimmed)) {
+      errors.push(
+        "Command-line option contains a control character " +
+        "(newline, NUL, tab, etc.) which would corrupt IOTCM transport. " +
+        "Pass each flag as a single line of printable characters.",
+      );
+      continue;
+    }
 
     if (!trimmed.startsWith("-")) {
       errors.push(

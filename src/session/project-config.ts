@@ -163,10 +163,15 @@ function readFileLayer(
   try {
     stat = statSync(configPath);
   } catch (err) {
+    // `existsSync` returned true a moment ago, so a `statSync` failure
+    // here is an infrastructure-level race (file deleted between calls,
+    // or `EACCES` on a directory that became unreadable). Tagged
+    // `system` rather than `file` to distinguish "your file's content
+    // is wrong" from "your filesystem rejected the read".
     return {
       fileFlags: [],
       warnings: [{
-        source: "file",
+        source: "system",
         message: `Failed to stat .agda-mcp.json: ${err instanceof Error ? err.message : String(err)}`,
         path: configPath,
       }],
@@ -284,12 +289,18 @@ function parseConfigFile(
   const warn = (message: string) => {
     result.warnings.push({ source: "file", message, path: configPath });
   };
+  // System-level failure (read or stat raced with deletion / permission
+  // change) — distinct from `file` content errors so an agent can tell
+  // "the disk says no" from "the JSON is malformed".
+  const warnSystem = (message: string) => {
+    result.warnings.push({ source: "system", message, path: configPath });
+  };
 
   let raw: string;
   try {
     raw = readFileSync(configPath, "utf8");
   } catch (err) {
-    warn(`Failed to read .agda-mcp.json: ${err instanceof Error ? err.message : String(err)}`);
+    warnSystem(`Failed to read .agda-mcp.json: ${err instanceof Error ? err.message : String(err)}`);
     return result;
   }
 
