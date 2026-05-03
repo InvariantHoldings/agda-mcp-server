@@ -45,7 +45,15 @@ export function missingPathToolError(kind: "file" | "directory", path: string): 
     message,
     classification: "not-found",
     diagnostics: [
-      errorDiagnostic(message, "not-found"),
+      errorDiagnostic(
+        message,
+        "not-found",
+        kind === "file"
+          ? "Confirm the path is relative to PROJECT_ROOT (or absolute and within it). " +
+            "Use `agda_file_list` or `agda_search` to discover available files."
+          : "Confirm the directory exists relative to PROJECT_ROOT. " +
+            "Use `agda_file_list` to see what's available.",
+      ),
       infoDiagnostic(
         "Check the file path relative to the project root.",
         "path-hint",
@@ -64,7 +72,12 @@ export function toToolInvocationError(err: unknown): ToolInvocationError {
     return new ToolInvocationError({
       message: err.message,
       classification: "invalid-path",
-      diagnostics: [errorDiagnostic(err.message, "invalid-path")],
+      diagnostics: [errorDiagnostic(
+        err.message,
+        "invalid-path",
+        "The path resolved outside the project sandbox (PROJECT_ROOT / AGDA_MCP_ROOT). " +
+        "Pass a relative path or an absolute path inside the project root.",
+      )],
       data: { path: err.targetPath },
     });
   }
@@ -73,7 +86,12 @@ export function toToolInvocationError(err: unknown): ToolInvocationError {
   return new ToolInvocationError({
     message: `Error: ${message}`,
     classification: "tool-error",
-    diagnostics: [errorDiagnostic(`Error: ${message}`, "unexpected-error")],
+    diagnostics: [errorDiagnostic(
+      `Error: ${message}`,
+      "unexpected-error",
+      "Inspect the error message above. If it references the Agda subprocess, " +
+      "run `agda_show_version` to verify the toolchain is reachable.",
+    )],
   });
 }
 

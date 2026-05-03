@@ -2,9 +2,14 @@
 //
 // Migration-aware reporting and verification tools.
 //
-// These tools wrap two static curated maps:
-//   - STDLIB_MIGRATION_MAP: cross-version stdlib renames (proj1 → proj₁ etc.).
-//   - BUILTIN_MIGRATION_MAP: builtin name → module + cross-version status.
+// These tools wrap two static curated maps loaded from JSON-backed
+// data files (issue #15: pure metadata belongs in JSON, not embedded
+// in TypeScript):
+//
+//   - data/stdlib-migrations.json:  cross-version stdlib renames
+//                                   (proj1 → proj₁ etc.).
+//   - data/builtin-migrations.json: builtin name → module + cross-version
+//                                   rename/removal records.
 //
 // They exist so an agent can ask "what's the canonical name in this
 // version?" without re-deriving the mapping from scratch every session.
@@ -12,6 +17,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import { loadJsonData } from "../../json-data.js";
 import {
   makeToolResult,
   okEnvelope,
@@ -19,36 +25,39 @@ import {
   warningDiagnostic,
 } from "../tool-helpers.js";
 
-interface StdlibMigrationEntry {
-  fromVersion: string;
-  toVersion: string;
-  from: string;
-  to: string;
-}
+const stdlibMigrationEntrySchema = z.object({
+  fromVersion: z.string(),
+  toVersion: z.string(),
+  from: z.string(),
+  to: z.string(),
+});
 
-interface BuiltinMigrationEntry {
-  name: string;
-  module: string;
-  renamedFrom?: string;
-  removedIn?: string;
-  replacement?: string;
-}
+const stdlibMigrationFileSchema = z.object({
+  $comment: z.string().optional(),
+  entries: z.array(stdlibMigrationEntrySchema),
+});
 
-const STDLIB_MIGRATION_MAP: ReadonlyArray<StdlibMigrationEntry> = [
-  { fromVersion: "1.7", toVersion: "2.0", from: "proj1", to: "proj₁" },
-  { fromVersion: "1.7", toVersion: "2.0", from: "proj2", to: "proj₂" },
-  { fromVersion: "1.7", toVersion: "2.0", from: "_,_", to: "_,_" },
-  { fromVersion: "2.0", toVersion: "2.1", from: "Data.Nat.Properties.≤-refl", to: "Data.Nat.Properties.≤-refl" },
-];
+const builtinMigrationEntrySchema = z.object({
+  name: z.string(),
+  module: z.string(),
+  renamedFrom: z.string().optional(),
+  removedIn: z.string().optional(),
+  replacement: z.string().optional(),
+});
 
-const BUILTIN_MIGRATION_MAP: ReadonlyArray<BuiltinMigrationEntry> = [
-  { name: "Nat", module: "Agda.Builtin.Nat" },
-  { name: "List", module: "Agda.Builtin.List" },
-  { name: "Bool", module: "Agda.Builtin.Bool" },
-  { name: "Sigma", module: "Agda.Builtin.Sigma", renamedFrom: "Σ" },
-  { name: "IO", module: "Agda.Builtin.IO" },
-  { name: "Word64", module: "Agda.Builtin.Word", removedIn: "2.9.0", replacement: "Data.Word.Word64" },
-];
+const builtinMigrationFileSchema = z.object({
+  $comment: z.string().optional(),
+  entries: z.array(builtinMigrationEntrySchema),
+});
+
+type StdlibMigrationEntry = z.infer<typeof stdlibMigrationEntrySchema>;
+type BuiltinMigrationEntry = z.infer<typeof builtinMigrationEntrySchema>;
+
+const STDLIB_MIGRATION_MAP: ReadonlyArray<StdlibMigrationEntry> =
+  loadJsonData("./data/stdlib-migrations.json", stdlibMigrationFileSchema, import.meta.url).entries;
+
+const BUILTIN_MIGRATION_MAP: ReadonlyArray<BuiltinMigrationEntry> =
+  loadJsonData("./data/builtin-migrations.json", builtinMigrationFileSchema, import.meta.url).entries;
 
 export function registerMigrationTools(server: McpServer, _repoRoot: string): void {
   registerStructuredTool({

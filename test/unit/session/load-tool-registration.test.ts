@@ -63,6 +63,7 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
         severity: "error",
         message: "Invalid file path: ../../etc/passwd",
         code: "invalid-path",
+        nextAction: expect.stringMatching(/sandbox|PROJECT_ROOT/u),
       },
     ]);
   });
