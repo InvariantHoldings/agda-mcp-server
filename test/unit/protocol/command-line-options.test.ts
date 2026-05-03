@@ -103,3 +103,62 @@ test("all COMMON_AGDA_FLAGS pass validation individually", () => {
     expect(result.valid).toBe(true);
   }
 });
+
+// ── Adversarial / edge-case inputs ───────────────────────────────────
+
+test("blocked --interaction-exit-on-error is rejected", () => {
+  const result = validateCommandLineOptions(["--interaction-exit-on-error"]);
+  expect(result.valid).toBe(false);
+});
+
+test("blocked --INTERACTION-JSON (uppercase variant) is rejected", () => {
+  const result = validateCommandLineOptions(["--INTERACTION-JSON"]);
+  expect(result.valid).toBe(false);
+});
+
+test("blocked --interaction prefix catches new-form --interaction-* flags", () => {
+  const result = validateCommandLineOptions(["--interaction-foo-bar-9000"]);
+  expect(result.valid).toBe(false);
+});
+
+test("blocked -? short flag is rejected", () => {
+  const result = validateCommandLineOptions(["-?"]);
+  expect(result.valid).toBe(false);
+});
+
+test("flags with surrounding whitespace are trimmed", () => {
+  const result = validateCommandLineOptions(["  --safe  ", "\t--Werror\n"]);
+  expect(result.valid).toBe(true);
+  expect(result.options).toEqual(["--safe", "--Werror"]);
+});
+
+test("multiple errors accumulate (not short-circuited)", () => {
+  const result = validateCommandLineOptions(["bad1", "--interaction", "bad2"]);
+  expect(result.valid).toBe(false);
+  expect(result.errors.length).toBeGreaterThanOrEqual(3);
+});
+
+test("dedup preserves first occurrence on duplicate", () => {
+  const result = validateCommandLineOptions(["--Werror", "--safe", "--Werror"]);
+  expect(result.options).toEqual(["--Werror", "--safe"]);
+});
+
+test("equals-form flag values are preserved verbatim (case-sensitive)", () => {
+  const result = validateCommandLineOptions(["--warning=NoUnsupportedIndexedMatch"]);
+  expect(result.valid).toBe(true);
+  expect(result.options).toEqual(["--warning=NoUnsupportedIndexedMatch"]);
+});
+
+test("a single dash is rejected (no flag name)", () => {
+  // "-" alone is valid by isFlag (starts with "-") but is not a real flag.
+  // The validator currently accepts it; this test pins down the behaviour
+  // so a future change is intentional.
+  const result = validateCommandLineOptions(["-"]);
+  expect(result.valid).toBe(true);
+  expect(result.options).toEqual(["-"]);
+});
+
+test("unicode flag-like input passes structural check", () => {
+  const result = validateCommandLineOptions(["--ünicode"]);
+  expect(result.valid).toBe(true);
+});

@@ -30,7 +30,11 @@ import {
   validateProfileOptions,
 } from "../protocol/profile-options.js";
 import { COMMON_AGDA_FLAGS } from "../protocol/command-line-options.js";
-import { loadProjectConfig, mergeCommandLineOptions } from "./project-config.js";
+import {
+  effectiveProjectFlags,
+  loadProjectConfig,
+  mergeCommandLineOptions,
+} from "./project-config.js";
 
 import {
   invalidPathResult,
@@ -81,7 +85,7 @@ export function registerAgdaTypecheck(
       // Merge per-call options with project-level defaults and env var
       const projectConfig = loadProjectConfig(repoRoot);
       const mergedOptions = mergeCommandLineOptions(
-        projectConfig.commandLineOptions,
+        effectiveProjectFlags(projectConfig),
         commandLineOptions,
       );
 
@@ -154,6 +158,12 @@ export function registerAgdaTypecheck(
             diagnostics: [
               ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),
               ...result.warnings.map((message) => warningDiagnostic(message, "agda-warning")),
+              ...projectConfig.warnings.map((w) =>
+                warningDiagnostic(
+                  `${w.source === "env" ? "env" : "config"}: ${w.message}`,
+                  `project-config-${w.source}`,
+                ),
+              ),
             ],
             provenance: { file: filePath, protocolCommands: ["Cmd_load", "Cmd_metas"] },
             elapsedMs,

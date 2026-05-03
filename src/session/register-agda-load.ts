@@ -34,7 +34,12 @@ import {
   validateProfileOptions,
 } from "../protocol/profile-options.js";
 import { COMMON_AGDA_FLAGS } from "../protocol/command-line-options.js";
-import { loadProjectConfig, mergeCommandLineOptions } from "./project-config.js";
+import {
+  effectiveProjectFlags,
+  loadProjectConfig,
+  mergeCommandLineOptions,
+  type ProjectConfigWarning,
+} from "./project-config.js";
 
 import {
   invalidPathResult,
@@ -88,7 +93,7 @@ export function registerAgdaLoad(
       // Merge per-call options with project-level defaults and env var
       const projectConfig = loadProjectConfig(repoRoot);
       const mergedOptions = mergeCommandLineOptions(
-        projectConfig.commandLineOptions,
+        effectiveProjectFlags(projectConfig),
         commandLineOptions,
       );
 
@@ -160,6 +165,7 @@ export function registerAgdaLoad(
               ...(suggestedRename ? { suggestedRename } : {}),
             };
           }),
+          ...projectConfigDiagnostics(projectConfig.warnings),
         ];
 
         if (result.hasHoles) {
@@ -292,4 +298,18 @@ export function registerAgdaLoad(
       }
     },
   });
+}
+
+/**
+ * Surface project-config issues (unknown keys, invalid flags, oversize
+ * config file, env var typos) as warning diagnostics on every load so an
+ * agent can correct them without having to call `agda_project_config`.
+ */
+function projectConfigDiagnostics(warnings: ProjectConfigWarning[]): ToolDiagnostic[] {
+  return warnings.map((w) =>
+    warningDiagnostic(
+      `${w.source === "env" ? "env" : "config"}: ${w.message}`,
+      `project-config-${w.source}`,
+    ),
+  );
 }

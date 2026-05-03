@@ -99,3 +99,42 @@ test("merge result has no duplicates", async () => {
     ),
   );
 });
+
+// ── merge precedence: per-call wins on collision ────────────────────
+
+test("when a flag appears in both inputs, it occupies its per-call position", async () => {
+  await fc.assert(
+    fc.property(
+      fc.constantFrom(...COMMON_AGDA_FLAGS),
+      fc.array(fc.constantFrom(...COMMON_AGDA_FLAGS), { maxLength: 5 }),
+      fc.array(fc.constantFrom(...COMMON_AGDA_FLAGS), { maxLength: 5 }),
+      (shared, defaultsTail, perCallHead) => {
+        const defaults = [shared, ...defaultsTail];
+        const perCall = [...perCallHead, shared];
+        const result = mergeCommandLineOptions(defaults, perCall);
+        expect(result[result.length - 1]).toBe(shared);
+        expect(result.indexOf(shared)).toBe(result.length - 1);
+      },
+    ),
+  );
+});
+
+// ── merge contents are stable under regrouping ───────────────────────
+
+test("merge groupings agree on which flags appear (set equality)", async () => {
+  await fc.assert(
+    fc.property(
+      fc.array(fc.constantFrom(...COMMON_AGDA_FLAGS), { maxLength: 4 }),
+      fc.array(fc.constantFrom(...COMMON_AGDA_FLAGS), { maxLength: 4 }),
+      fc.array(fc.constantFrom(...COMMON_AGDA_FLAGS), { maxLength: 4 }),
+      (a, b, c) => {
+        const left = mergeCommandLineOptions(mergeCommandLineOptions(a, b), c);
+        const right = mergeCommandLineOptions(a, mergeCommandLineOptions(b, c));
+        // Element ordering can differ — last-wins is associative on sets,
+        // not on lists. The invariant we DO want is that both groupings
+        // ship the same set of flags to Agda.
+        expect(new Set(left)).toEqual(new Set(right));
+      },
+    ),
+  );
+});
