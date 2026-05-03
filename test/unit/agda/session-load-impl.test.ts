@@ -214,3 +214,61 @@ test("runLoad: hole-like text inside string literal does not force hole classifi
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("runLoad passes commandLineOptions into the IOTCM options list", async () => {
+  const root = makeTempRepo();
+  const file = join(root, "Test.agda");
+  writeFileSync(file, "module Test where\n");
+
+  let capturedCmd = "";
+  const session = {
+    repoRoot: root,
+    currentFile: null as string | null,
+    goalIds: [] as number[],
+    lastLoadedMtime: null,
+    lastClassification: null,
+    lastLoadedAt: null,
+    lastInvisibleGoalCount: 0,
+    goal: {
+      metas: async () => ({ goals: [] }),
+    },
+    sendCommand: async (cmd: string) => {
+      capturedCmd = cmd;
+      return cleanLoadResponses();
+    },
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, file, { commandLineOptions: ["--Werror", "--safe"] });
+    expect(result.success).toBe(true);
+    // The command string should contain both flags in the options list
+    expect(capturedCmd).toContain('"--Werror"');
+    expect(capturedCmd).toContain('"--safe"');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoad rejects invalid commandLineOptions", async () => {
+  const root = makeTempRepo();
+  const file = join(root, "Test.agda");
+  writeFileSync(file, "module Test where\n");
+
+  const session = {
+    repoRoot: root,
+    currentFile: null as string | null,
+    goalIds: [] as number[],
+    sendCommand: async () => cleanLoadResponses(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, file, { commandLineOptions: ["--interaction-json"] });
+    expect(result.success).toBe(false);
+    expect(result.classification).toBe("invalid-command-line-options");
+    expect(result.errors[0]).toContain("conflicts with the MCP server");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

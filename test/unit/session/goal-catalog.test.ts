@@ -112,6 +112,21 @@ describe("buildGoalCatalog", () => {
     const actions = catalog.goals[0].suggestions.map((s) => s.action);
     expect(actions).toContain("auto");
   });
+
+  it("marks a name as splittable when it has an explicit binding even alongside an implicit one of the same name", () => {
+    // Pinned counterexample from the goal-catalog property suite. The
+    // fuzzer generated a context with the same name appearing both
+    // implicit and explicit ("{call : Set}", "call : Nat"). Real Agda
+    // never produces this (alpha-renaming forbids it), but the catalog
+    // must still report `call` as splittable on the strength of the
+    // explicit binding rather than the first-found implicit one.
+    const catalog = buildGoalCatalog(makeInput({
+      goals: [
+        { goalId: 0, type: "", context: ["{call : Set}", "call : Nat"] },
+      ],
+    }));
+    expect(catalog.goals[0].splittableVariables).toContain("call");
+  });
 });
 
 describe("renderGoalCatalogText", () => {

@@ -27,11 +27,20 @@ import { createLibraryRegistration } from "../agda/library-registration.js";
 import { filePathDescription, isAgdaSourceFile } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import {
+  effectiveProjectFlags,
+  ENV_DEFAULT_FLAGS,
+  PROJECT_CONFIG_FILENAME,
+  loadProjectConfig,
+  mergeCommandLineOptions,
+} from "../session/project-config.js";
+import { projectConfigDiagnostics } from "../session/project-config-diagnostics.js";
+import {
   errorDiagnostic,
   errorEnvelope,
   makeToolResult,
   okEnvelope,
   registerStructuredTool,
+  type ToolDiagnostic,
   warningDiagnostic,
 } from "./tool-helpers.js";
 
@@ -449,12 +458,14 @@ export function register(
       let loadClassification: string | null = null;
       let errors: string[] = [];
       let warnings: string[] = [];
+      let configWarningDiags: ToolDiagnostic[] = [];
       if (!dryRun && renamed.replacements > 0) {
         writeFileSync(filePath, renamed.updated, "utf8");
         const load = await session.load(filePath);
         loadClassification = load.classification;
         errors = load.errors.map(rewriteCompilerPlaceholders);
         warnings = load.warnings.map(rewriteCompilerPlaceholders);
+        configWarningDiags = projectConfigDiagnostics(load.projectConfigWarnings);
       }
 
       const changed = renamed.replacements > 0;
@@ -474,6 +485,7 @@ export function register(
             errors,
             warnings,
           },
+          diagnostics: configWarningDiags.length > 0 ? configWarningDiags : undefined,
         }),
         diff.length > 0 ? `\`\`\`diff\n${diff}\n\`\`\`` : "No changes.",
       );
@@ -710,12 +722,14 @@ export function register(
       const arity = inferMissingClauseArity(source, functionName);
       const clause = buildMissingClause(functionName, arity);
       let loadClassification: string | null = null;
+      let configWarningDiags: ToolDiagnostic[] = [];
       const shouldWrite = writeToFile !== false;
       if (shouldWrite) {
         const next = insertClauseAtEndOfFunction(source, functionName, clause);
         writeFileSync(filePath, next, "utf8");
         const load = await session.load(filePath);
         loadClassification = load.classification;
+        configWarningDiags = projectConfigDiagnostics(load.projectConfigWarnings);
       }
       return makeToolResult(
         okEnvelope({
@@ -728,6 +742,7 @@ export function register(
             arity,
             loadClassification,
           },
+          diagnostics: configWarningDiags.length > 0 ? configWarningDiags : undefined,
         }),
         `\`\`\`agda\n${clause}\n\`\`\``,
       );
@@ -815,14 +830,14 @@ export function register(
       file: z.string(),
       options: z.array(z.object({
         option: z.string(),
-        source: z.enum(["file-pragma", "agda-lib", "wrapper-script", "mcp-default"]),
+        source: z.enum(["file-pragma", "agda-lib", "wrapper-script", "mcp-default", "project-config", "env-var"]),
       })),
       deduplicated: z.array(z.string()),
     }),
     callback: async ({ file }: { file: string }) => {
       const filePath = resolveExistingPathWithinRoot(repoRoot, resolveFileWithinRoot(repoRoot, file));
       const source = readFileSync(filePath, "utf8");
-      const options: Array<{ option: string; source: "file-pragma" | "agda-lib" | "wrapper-script" | "mcp-default" }> = [];
+      const options: Array<{ option: string; source: "file-pragma" | "agda-lib" | "wrapper-script" | "mcp-default" | "project-config" | "env-var" }> = [];
       for (const opt of parseOptionsPragmas(source)) {
         options.push({ option: opt, source: "file-pragma" });
       }
@@ -834,6 +849,18 @@ export function register(
         for (const flag of parseAgdaLibFlags(libText)) {
           options.push({ option: flag, source: "agda-lib" });
         }
+      }
+
+      // Report project config file flags and env var flags separately.
+      // Sources are pre-partitioned by `loadProjectConfig`, so a flag
+      // present in BOTH `.agda-mcp.json` and AGDA_MCP_DEFAULT_FLAGS shows
+      // up once per source rather than being misattributed.
+      const projectConfig = loadProjectConfig(repoRoot);
+      for (const opt of projectConfig.fileFlags) {
+        options.push({ option: opt, source: "project-config" });
+      }
+      for (const opt of projectConfig.envFlags) {
+        options.push({ option: opt, source: "env-var" });
       }
 
       const agdaBin = process.env.AGDA_BIN;
@@ -868,6 +895,107 @@ export function register(
           },
         }),
         text,
+      );
+    },
+  });
+
+  // agda_project_config — diagnose `.agda-mcp.json` and AGDA_MCP_DEFAULT_FLAGS
+  // without forcing a load. When a load fails because of a typoed key or
+  // flag, the warnings on the load response already explain why; this
+  // tool lets an agent inspect the resolved config in isolation.
+  registerStructuredTool({
+    server,
+    name: "agda_project_config",
+    description:
+      "Inspect the resolved project-level Agda configuration (.agda-mcp.json + AGDA_MCP_DEFAULT_FLAGS) " +
+      "with provenance and validation warnings. Use this when an agent wants to confirm which compiler " +
+      "flags will be applied to subsequent agda_load / agda_typecheck calls before running them.",
+    category: "analysis",
+    inputSchema: {},
+    outputDataSchema: z.object({
+      configFilePath: z.string().nullable(),
+      configFileExists: z.boolean(),
+      envVarName: z.string(),
+      envVarSet: z.boolean(),
+      fileFlags: z.array(z.string()),
+      envFlags: z.array(z.string()),
+      effectiveFlags: z.array(z.string()),
+      warnings: z.array(z.object({
+        source: z.enum(["file", "env", "system"]),
+        message: z.string(),
+        path: z.string().optional(),
+      })),
+    }),
+    callback: async () => {
+      const projectConfig = loadProjectConfig(repoRoot);
+      const configFilePath = projectConfig.configFilePath ?? null;
+      const configFileExists = configFilePath !== null && existsSync(configFilePath);
+      const envVarRaw = process.env[ENV_DEFAULT_FLAGS];
+      // `envVarSet` should mirror the *effective* state, so a value of
+      // "   " or "\t\n" — which `parseEnvFlags()` resolves to zero
+      // flags — is reported as unset. Otherwise an agent inspecting the
+      // config sees `envVarSet: true` while `envFlags` is empty, which
+      // looks contradictory.
+      const envVarSet = envVarRaw !== undefined && envVarRaw.trim().length > 0;
+
+      // Effective flags must match what `AgdaSession.load()` would
+      // produce given a no-per-call call site, so route through the
+      // same `effectiveProjectFlags` + `mergeCommandLineOptions`
+      // pipeline. (Per-call options live on the tool call itself and
+      // aren't visible at config time, so we pass `[]`.)
+      const effectiveFlags = mergeCommandLineOptions(
+        effectiveProjectFlags(projectConfig),
+        [],
+      );
+
+      const data = {
+        configFilePath: configFilePath ? relative(repoRoot, configFilePath) : null,
+        configFileExists,
+        envVarName: ENV_DEFAULT_FLAGS,
+        envVarSet,
+        fileFlags: projectConfig.fileFlags,
+        envFlags: projectConfig.envFlags,
+        effectiveFlags,
+        warnings: projectConfig.warnings,
+      };
+
+      const lines: string[] = [
+        `${PROJECT_CONFIG_FILENAME}: ${
+          configFileExists
+            ? `present (${data.configFilePath})`
+            : "not present"
+        }`,
+        `${ENV_DEFAULT_FLAGS}: ${envVarSet ? "set" : "unset"}`,
+        projectConfig.fileFlags.length > 0
+          ? `File flags: ${projectConfig.fileFlags.join(" ")}`
+          : "File flags: (none)",
+        projectConfig.envFlags.length > 0
+          ? `Env flags: ${projectConfig.envFlags.join(" ")}`
+          : "Env flags: (none)",
+        effectiveFlags.length > 0
+          ? `Effective flags (deduplicated): ${effectiveFlags.join(" ")}`
+          : "Effective flags: (none)",
+      ];
+      if (projectConfig.warnings.length > 0) {
+        lines.push("");
+        lines.push("Warnings:");
+        for (const w of projectConfig.warnings) {
+          lines.push(`- [${w.source}] ${w.message}`);
+        }
+      }
+
+      const summary = projectConfig.warnings.length === 0
+        ? `Resolved ${effectiveFlags.length} effective project flag(s).`
+        : `Resolved ${effectiveFlags.length} effective project flag(s) with ${projectConfig.warnings.length} warning(s).`;
+
+      return makeToolResult(
+        okEnvelope({
+          tool: "agda_project_config",
+          summary,
+          data,
+          diagnostics: projectConfigDiagnostics(projectConfig.warnings),
+        }),
+        lines.join("\n"),
       );
     },
   });

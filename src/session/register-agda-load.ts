@@ -33,6 +33,8 @@ import {
   VALID_PROFILE_OPTION_STRINGS,
   validateProfileOptions,
 } from "../protocol/profile-options.js";
+import { COMMON_AGDA_FLAGS } from "../protocol/command-line-options.js";
+import { projectConfigDiagnostics } from "./project-config-diagnostics.js";
 
 import {
   invalidPathResult,
@@ -40,6 +42,7 @@ import {
   processErrorResult,
   resolveRequestedFilePath,
   validateProfileOptionsOrError,
+  validateCommandLineOptionsOrError,
   type PathResolver,
 } from "./load-tool-shared.js";
 
@@ -61,12 +64,17 @@ export function registerAgdaLoad(
         `Agda profiling options. Valid values: ${VALID_PROFILE_OPTION_STRINGS.join(", ")}. ` +
         "Note: internal, modules, and definitions are mutually exclusive.",
       ),
+      commandLineOptions: z.array(z.string()).optional().describe(
+        "Agda command-line flags passed to Cmd_load (e.g. ['--Werror', '--safe', '--without-K']). " +
+        "Merged with project defaults from .agda-mcp.json. " +
+        `Common flags: ${COMMON_AGDA_FLAGS.slice(0, 10).join(", ")}, ...`,
+      ),
       forceRecompile: z.boolean().optional().describe(
         "If true, delete every `.agdai` interface artifact for this source file before sending Cmd_load — both the separated `_build/<version>/agda/<rel>.agdai` form and the local `<source>.agdai` fallback. Use as an escape hatch when an agent suspects a stale cache; the diagnostic on the response will list the paths that were busted.",
       ),
     },
     outputDataSchema: loadDataSchema,
-    callback: async ({ file, profileOptions, forceRecompile }: { file: string; profileOptions?: string[]; forceRecompile?: boolean }) => {
+    callback: async ({ file, profileOptions, commandLineOptions, forceRecompile }: { file: string; profileOptions?: string[]; commandLineOptions?: string[]; forceRecompile?: boolean }) => {
       const startMs = performance.now();
 
       const profileError = validateProfileOptionsOrError(
@@ -76,6 +84,19 @@ export function registerAgdaLoad(
         validateProfileOptions,
       );
       if (profileError) return profileError;
+
+      // Validate ONLY the per-call command-line options at the tool
+      // boundary. Project-config and env-var flags are validated at
+      // config-load time and dropped if invalid (with warnings on the
+      // load response), so we do not need to re-validate them here.
+      // The merge with project defaults happens inside `session.load()`
+      // — see issue #49 review feedback (`session.load()` bypass bug).
+      const cmdLineError = validateCommandLineOptionsOrError(
+        "agda_load",
+        file,
+        commandLineOptions,
+      );
+      if (cmdLineError) return cmdLineError;
 
       let requestedFilePath: string;
       try {
@@ -114,7 +135,10 @@ export function registerAgdaLoad(
         const bustedAgdaiPaths = bustResult.removed;
         const bustFailures = bustResult.failed;
 
-        const result = await session.load(filePath, { profileOptions });
+        const result = await session.load(filePath, {
+          profileOptions,
+          commandLineOptions,
+        });
         const relPath = relative(repoRoot, requestedFilePath);
         const normalizedErrors = result.errors.map(rewriteCompilerPlaceholders);
         const normalizedWarnings = result.warnings.map(rewriteCompilerPlaceholders);
@@ -133,6 +157,7 @@ export function registerAgdaLoad(
               ...(suggestedRename ? { suggestedRename } : {}),
             };
           }),
+          ...projectConfigDiagnostics(result.projectConfigWarnings),
         ];
 
         if (result.hasHoles) {
@@ -266,3 +291,4 @@ export function registerAgdaLoad(
     },
   });
 }
+

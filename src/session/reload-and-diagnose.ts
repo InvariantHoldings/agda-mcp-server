@@ -10,6 +10,7 @@ import type { AgdaSession } from "../agda-process.js";
 import { applyProofEdit, applyBatchHoleReplacements } from "./apply-proof-edit.js";
 import type { ProofEdit, ApplyEditResult, BatchApplyResult } from "./apply-proof-edit.js";
 import type { LoadResult } from "../agda/types.js";
+import { projectConfigWarningsText } from "./project-config-diagnostics.js";
 
 // ── Goal-ID diff ────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ export async function reloadAndDiagnose(
     if (loadResult.warnings.length > 0) {
       output += `**Warnings:** ${loadResult.warnings.join("; ")}\n`;
     }
+    output += projectConfigWarningsText(loadResult.projectConfigWarnings);
     if (goalIdsBefore !== undefined) {
       const diff = diffGoalIds(goalIdsBefore, session.getGoalIds());
       const formatted = formatGoalIdDiff(diff);

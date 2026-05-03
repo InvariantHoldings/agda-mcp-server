@@ -81,10 +81,15 @@ test("splittableVariables are all non-implicit", async () => {
       const catalog = buildGoalCatalog(input);
       for (const goal of catalog.goals) {
         for (const varName of goal.splittableVariables) {
-          const entry = goal.context.find((e) => e.name === varName);
-          if (entry) {
-            expect(entry.isImplicit).toBe(false);
-          }
+          // A name is splittable iff at least one explicit (non-implicit)
+          // context entry binds it. The fuzzer can produce contexts with
+          // the same name appearing both implicit and explicit (which
+          // never happens in real Agda — alpha-renaming forbids it), so
+          // `find()` could return the implicit entry. The actual
+          // invariant is "some entry for this name is explicit".
+          const matchingEntries = goal.context.filter((e) => e.name === varName);
+          expect(matchingEntries.length).toBeGreaterThan(0);
+          expect(matchingEntries.some((e) => !e.isImplicit)).toBe(true);
         }
       }
     }),

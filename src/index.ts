@@ -57,6 +57,14 @@ Environment variables:
                                tooling/scripts/run-pinned-agda.sh.
   AGDA_DIR                     Agda library directory.
                                Default: ~/.agda
+  AGDA_MCP_DEFAULT_FLAGS       Space-separated Agda CLI flags merged
+                               into every load that goes through
+                               AgdaSession.load() — agda_load,
+                               agda_typecheck, and any tool that reloads
+                               a file (e.g. agda_apply_edit). Combined
+                               with .agda-mcp.json and per-call opts;
+                               per-call wins on collision.
+                               Example: "--Werror --safe --without-K"
   AGDA_MCP_EXTENSION_MODULES   Colon-separated list of extension module
                                paths or package specifiers to load on
                                startup.
@@ -65,6 +73,17 @@ Environment variables:
   AGDA_MCP_IDLE_COMPLETION_MS  Idle time before a response is considered
                                complete. Default: 250.
   AGDA_MCP_DEBUG               Set to "1" to enable debug logging.
+
+Project configuration:
+  Place a .agda-mcp.json file at PROJECT_ROOT to set persistent defaults:
+    {
+      "$schema": "https://github.com/InvariantHoldings/agda-mcp-server/raw/main/schemas/agda-mcp.schema.json",
+      "commandLineOptions": ["--Werror", "--safe"]
+    }
+  These are merged with AGDA_MCP_DEFAULT_FLAGS and per-call options.
+  Use the agda_project_config tool to inspect the resolved configuration
+  (file flags + env flags + warnings) at any time.
+  See: https://agda.readthedocs.io/en/latest/tools/command-line-options.html
 
 Documentation: https://github.com/InvariantHoldings/agda-mcp-server
 `);

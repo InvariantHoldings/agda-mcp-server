@@ -22,12 +22,13 @@ import { parseLoadResponses } from "./parse-load-responses.js";
 import { throwOnFatalProtocolStderr } from "./protocol-errors.js";
 import { mergeGoals } from "./goal-merging.js";
 import { logger } from "./logger.js";
-import { command, quoted, profileOptionsList } from "../protocol/command-builder.js";
+import { command, quoted, stringList } from "../protocol/command-builder.js";
 import { findGoalPositions } from "../session/goal-positions.js";
 import {
   validateProfileOptions,
   toProfileArgs,
 } from "../protocol/profile-options.js";
+import { validateCommandLineOptions } from "../protocol/command-line-options.js";
 
 function fileNotFound(absPath: string): LoadResult {
   return {
@@ -36,7 +37,7 @@ function fileNotFound(absPath: string): LoadResult {
   };
 }
 
-function invalidProfileOptions(errors: string[]): LoadResult {
+function invalidOptions(errors: string[], classification: string): LoadResult {
   return {
     success: false,
     errors,
@@ -47,26 +48,43 @@ function invalidProfileOptions(errors: string[]): LoadResult {
     goalCount: 0,
     hasHoles: false,
     isComplete: false,
-    classification: "invalid-profile-options",
+    classification,
     profiling: null,
   };
 }
 
-function buildLoadOptionsList(profileOptions: string[] | undefined):
+export function buildLoadOptionsList(
+  profileOptions: string[] | undefined,
+  commandLineOptions?: string[],
+):
   | { ok: true; optsList: string; profilingEnabled: boolean }
   | { ok: false; result: LoadResult } {
-  if (!profileOptions || profileOptions.length === 0) {
-    return { ok: true, optsList: "[]", profilingEnabled: false };
+  const allArgs: string[] = [];
+  let profilingEnabled = false;
+
+  // Validate and add profile options
+  if (profileOptions && profileOptions.length > 0) {
+    const validation = validateProfileOptions(profileOptions);
+    if (!validation.valid) {
+      return { ok: false, result: invalidOptions(validation.errors, "invalid-profile-options") };
+    }
+    allArgs.push(...toProfileArgs(validation.options));
+    profilingEnabled = true;
   }
-  const validation = validateProfileOptions(profileOptions);
-  if (!validation.valid) {
-    return { ok: false, result: invalidProfileOptions(validation.errors) };
+
+  // Validate and add command-line options
+  if (commandLineOptions && commandLineOptions.length > 0) {
+    const validation = validateCommandLineOptions(commandLineOptions);
+    if (!validation.valid) {
+      return { ok: false, result: invalidOptions(validation.errors, "invalid-command-line-options") };
+    }
+    allArgs.push(...validation.options);
   }
-  const profileArgs = toProfileArgs(validation.options);
+
   return {
     ok: true,
-    optsList: profileOptionsList(profileArgs),
-    profilingEnabled: true,
+    optsList: stringList(allArgs),
+    profilingEnabled,
   };
 }
 
@@ -175,14 +193,14 @@ function countExplicitSourceHoles(absPath: string): number {
 export async function runLoad(
   session: AgdaSession,
   filePath: string,
-  options?: { profileOptions?: string[] },
+  options?: { profileOptions?: string[]; commandLineOptions?: string[] },
 ): Promise<LoadResult> {
   const absPath = resolve(session.repoRoot, filePath);
   if (!existsSync(absPath)) {
     return fileNotFound(absPath);
   }
 
-  const optsBuild = buildLoadOptionsList(options?.profileOptions);
+  const optsBuild = buildLoadOptionsList(options?.profileOptions, options?.commandLineOptions);
   if (!optsBuild.ok) {
     return optsBuild.result;
   }

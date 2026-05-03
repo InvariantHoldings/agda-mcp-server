@@ -7,6 +7,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AgdaSession } from "../../../src/agda-process.js";
 import { clearToolManifest } from "../../../src/tools/manifest.js";
 import { register as registerAgentUxTools } from "../../../src/tools/agent-ux-tools.js";
+import {
+  ENV_DEFAULT_FLAGS,
+  PROJECT_CONFIG_FILENAME,
+  invalidateProjectConfigCache,
+} from "../../../src/session/project-config.js";
 
 function createCapturingServer() {
   const registrations = new Map<string, { callback: (args: any) => any }>();
@@ -68,13 +73,24 @@ function writeAgda(relPath: string, source: string): void {
   writeFileSync(abs, source, "utf8");
 }
 
+let savedEnvDefaultFlags: string | undefined;
+
 beforeEach(() => {
   sandbox = mkdtempSync(join(tmpdir(), "agda-mcp-agent-ux-"));
   clearToolManifest();
+  savedEnvDefaultFlags = process.env[ENV_DEFAULT_FLAGS];
+  delete process.env[ENV_DEFAULT_FLAGS];
+  invalidateProjectConfigCache();
 });
 
 afterEach(() => {
   rmSync(sandbox, { recursive: true, force: true });
+  if (savedEnvDefaultFlags !== undefined) {
+    process.env[ENV_DEFAULT_FLAGS] = savedEnvDefaultFlags;
+  } else {
+    delete process.env[ENV_DEFAULT_FLAGS];
+  }
+  invalidateProjectConfigCache();
 });
 
 test("registers the agent-ux tool set", () => {
@@ -242,4 +258,142 @@ test("agda_bulk_status clusters failures by root cause", async () => {
 
   expect(result.structuredContent.data.files.length).toBe(2);
   expect(result.structuredContent.data.clusters.length).toBeGreaterThan(0);
+});
+
+// ── agda_effective_options: project-config / env-var attribution ─────
+
+test("agda_effective_options attributes file flags to project-config and env flags to env-var", async () => {
+  writeAgda("agda/Main.agda", "{-# OPTIONS --without-K #-}\nmodule Main where\n");
+  writeFileSync(
+    join(sandbox, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--Werror"] }),
+  );
+  process.env[ENV_DEFAULT_FLAGS] = "--safe";
+  invalidateProjectConfigCache();
+
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_effective_options")!.callback({
+    file: "agda/Main.agda",
+  });
+
+  const options: Array<{ option: string; source: string }> = result.structuredContent.data.options;
+  expect(options.some((entry) => entry.option === "--Werror" && entry.source === "project-config")).toBe(true);
+  expect(options.some((entry) => entry.option === "--safe" && entry.source === "env-var")).toBe(true);
+});
+
+test("agda_effective_options reports a flag in BOTH file and env once per source (no misattribution)", async () => {
+  writeAgda("agda/Main.agda", "module Main where\n");
+  writeFileSync(
+    join(sandbox, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--safe"] }),
+  );
+  process.env[ENV_DEFAULT_FLAGS] = "--safe";
+  invalidateProjectConfigCache();
+
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_effective_options")!.callback({
+    file: "agda/Main.agda",
+  });
+
+  const options: Array<{ option: string; source: string }> = result.structuredContent.data.options;
+  const safeFromFile = options.filter((entry) => entry.option === "--safe" && entry.source === "project-config");
+  const safeFromEnv = options.filter((entry) => entry.option === "--safe" && entry.source === "env-var");
+  expect(safeFromFile.length).toBe(1);
+  expect(safeFromEnv.length).toBe(1);
+});
+
+// ── agda_project_config tool ─────────────────────────────────────────
+
+test("agda_project_config reports empty state when no config", async () => {
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_project_config")!.callback({});
+  expect(result.structuredContent.data.configFileExists).toBe(false);
+  expect(result.structuredContent.data.envVarSet).toBe(false);
+  expect(result.structuredContent.data.fileFlags).toEqual([]);
+  expect(result.structuredContent.data.envFlags).toEqual([]);
+  expect(result.structuredContent.data.effectiveFlags).toEqual([]);
+  expect(result.structuredContent.data.warnings).toEqual([]);
+});
+
+test("agda_project_config reports file flags and env flags separately", async () => {
+  writeFileSync(
+    join(sandbox, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--Werror", "--safe"] }),
+  );
+  process.env[ENV_DEFAULT_FLAGS] = "--without-K";
+  invalidateProjectConfigCache();
+
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_project_config")!.callback({});
+  expect(result.structuredContent.data.configFileExists).toBe(true);
+  expect(result.structuredContent.data.envVarSet).toBe(true);
+  expect(result.structuredContent.data.fileFlags).toEqual(["--Werror", "--safe"]);
+  expect(result.structuredContent.data.envFlags).toEqual(["--without-K"]);
+  expect(result.structuredContent.data.effectiveFlags).toEqual(["--Werror", "--safe", "--without-K"]);
+});
+
+test("agda_project_config surfaces warnings for unknown keys and invalid flags", async () => {
+  writeFileSync(
+    join(sandbox, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--Werror", "--interaction"], typo: 1 }),
+  );
+  invalidateProjectConfigCache();
+
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_project_config")!.callback({});
+  const warnings: Array<{ message: string }> = result.structuredContent.data.warnings;
+  expect(warnings.some((w) => w.message.includes("Unknown key 'typo'"))).toBe(true);
+  expect(warnings.some((w) => w.message.includes("conflicts with the MCP server"))).toBe(true);
+  // The bad flag was filtered out; the good one survives.
+  expect(result.structuredContent.data.fileFlags).toEqual(["--Werror"]);
+});
+
+test("agda_project_config dedups effective flags with last-wins precedence", async () => {
+  writeFileSync(
+    join(sandbox, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--safe", "--Werror"] }),
+  );
+  process.env[ENV_DEFAULT_FLAGS] = "--Werror --without-K";
+  invalidateProjectConfigCache();
+
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_project_config")!.callback({});
+  // --Werror is kept at its later (env) position; --safe and --without-K are kept verbatim.
+  expect(result.structuredContent.data.effectiveFlags).toEqual(["--safe", "--Werror", "--without-K"]);
+});
+
+test("agda_project_config tool is registered", () => {
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  expect(server.names()).toContain("agda_project_config");
+});
+
+test("agda_project_config effectiveFlags matches mergeCommandLineOptions(file, env)", async () => {
+  // Pins the contract that `agda_project_config`'s `effectiveFlags`
+  // is exactly what `AgdaSession.load()` would build given the same
+  // file+env layers and no per-call options. Drift here would be a
+  // source of confusion: an agent inspecting the config would see one
+  // set of flags but the actual load would use a different set.
+  const { mergeCommandLineOptions } = await import("../../../src/session/project-config.js");
+  writeFileSync(
+    join(sandbox, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--safe", "--Werror"] }),
+  );
+  process.env[ENV_DEFAULT_FLAGS] = "--Werror --without-K";
+  invalidateProjectConfigCache();
+
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_project_config")!.callback({});
+  const data = result.structuredContent.data;
+  // The ground truth is what mergeCommandLineOptions produces — the
+  // tool must agree with the helper, byte for byte.
+  const expected = mergeCommandLineOptions([...data.fileFlags, ...data.envFlags], []);
+  expect(data.effectiveFlags).toEqual(expected);
 });

@@ -7,6 +7,108 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable Agda CLI flags for `Cmd_load`** (#49) — `agda_load` and
+  `agda_typecheck` accept a new `commandLineOptions` array that is passed
+  through to Agda's `Cmd_load` `[String]` argument. Validated at the
+  tool boundary (consistent with existing `profileOptions` semantics):
+  invalid or session-conflicting flags (`--interaction*`, `--version`,
+  `-V`, `-?`, etc.) are rejected with an `errorEnvelope` before the
+  subprocess sees them. Case-sensitive matching for short flags
+  (`-V` blocked, `-v` allowed); case-insensitive for long flags.
+- **`.agda-mcp.json` project config** — a JSON config file at PROJECT_ROOT
+  sets persistent `commandLineOptions` defaults. Loaded once per
+  `agda_load` and cached by file mtime + size for repeated calls.
+  UTF-8 BOMs are stripped; oversize files (>256 KiB) are refused with
+  a warning rather than read into memory; unknown top-level keys produce
+  a warning so typoed config keys (e.g. `commandlineoptions`) are not
+  silently ignored.
+- **`AGDA_MCP_DEFAULT_FLAGS` env var** — space-separated default flags
+  alternative to the JSON config. Validated the same as file flags;
+  invalid env entries surface as warnings on every load instead of
+  silently corrupting the option list.
+- **`agda_project_config` tool** — agent-facing introspection tool that
+  returns the resolved project config (file flags, env flags, effective
+  deduplicated flags) along with any validation warnings (unknown keys,
+  invalid flag syntax, oversize file). Lets an agent confirm which flags
+  will apply to subsequent loads without having to run a load first.
+- **JSON schema for `.agda-mcp.json`** — published at
+  `schemas/agda-mcp.schema.json` (and shipped with the npm package) for
+  IDE autocompletion via the standard `$schema` field.
+- **Project-config diagnostics on every load** — `agda_load`,
+  `agda_typecheck`, `agda_reload`, `agda_apply_rename`,
+  `agda_add_missing_clauses`, and every proof-action reload (give,
+  refine, case_split, auto, solve, intro) now surface
+  `LoadResult.projectConfigWarnings` either as structured tool
+  diagnostics or as a `**Project-config warnings:**` markdown section,
+  so an agent sees the failure inline with the load that consumed the
+  bad config — not only when calling `agda_load` explicitly.
+- **"Did you mean ...?" suggestions for typoed flags** — invalid
+  command-line options now get a Levenshtein-matched hint pointing at
+  the closest entry in `COMMON_AGDA_FLAGS`. `Werror` (forgot the
+  dashes) → `Did you mean '--Werror'?`. Same treatment for typoed
+  `.agda-mcp.json` keys: `commandlineoptions` (case typo) →
+  `Did you mean 'commandLineOptions'?`. Conservative thresholds (≤2
+  for flags, ≤3 case-insensitive for keys) avoid second-guessing real
+  but obscure inputs.
+- **`LoadResult.projectConfigWarnings`** — public load-result field
+  so any tool surfacing a load result can render config warnings
+  consistently. Centralises the wire format previously duplicated at
+  each tool boundary.
+- **Per-element validation of `commandLineOptions` arrays** — a
+  config like `["--safe", 42, "--Werror"]` now keeps the two valid
+  flags and emits one warning per offending entry (with index and
+  type label: `commandLineOptions[1] is not a string (got number)`),
+  instead of dropping the whole array on the first non-string.
+- **Control-character + length defenses on flags** — a flag
+  containing a newline / NUL / tab / DEL is now rejected with a
+  `control character` error (would otherwise corrupt IOTCM
+  transport, which serialises commands one-per-line). Flags longer
+  than 1024 chars are rejected with a truncated-preview error; the
+  longest real Agda flag is well under this and a multi-KB string
+  is almost certainly an accidental paste of a binary blob.
+
+### Fixed
+
+- **`projectConfigDiagnostics()` mis-labelled `system`-source warnings
+  as `config:`** — the binary `env` / `config` ternary swallowed the
+  `system` source even though the diagnostic kind was correctly
+  `project-config-system`. The visible message text now matches the
+  kind via a `prefixForWarningSource()` mapping; the
+  `agda_project_config` tool's inline duplicate of the same logic now
+  routes through the shared formatter.
+- **System-level config-read failures are now tagged `system`, not `file`**
+  — `statSync` / `readFileSync` failures (permission denied, deletion
+  race) are infrastructure problems, not "your config content is
+  wrong". An agent can now distinguish `the disk says no` from `the
+  JSON is malformed` by looking at the warning source.
+- **`agda_effective_options` source attribution** — flags that appeared
+  in BOTH `.agda-mcp.json` and `AGDA_MCP_DEFAULT_FLAGS` are partitioned
+  at config-load time (`fileFlags` / `envFlags`) so
+  `agda_effective_options` reports each source unambiguously,
+  including the case where the same flag appears in both.
+- **`-V` blocking case-sensitivity** — the previous lower-casing pass
+  meant `-V` (Agda's short `--version`) and `-v` (verbosity) collapsed
+  to the same key, blocking the verbosity flag too. Short flags now use
+  case-sensitive matching (`-V`, `-?` blocked), long flags case-insensitive.
+
+### Changed
+
+- **`ProjectConfig` shape** — internal API change: `commandLineOptions`
+  field replaced by separate `fileFlags` / `envFlags` arrays plus a
+  `warnings` array of validation issues. External callers can use
+  `effectiveProjectFlags(config)` to get the combined list.
+- **Project-config merge centralised in `AgdaSession.load()`** — every
+  caller of `session.load()` now picks up `.agda-mcp.json` and
+  `AGDA_MCP_DEFAULT_FLAGS` defaults, not just `agda_load` and
+  `agda_typecheck`. Previously `agda_apply_edit`'s post-edit reload,
+  `agda_bulk_status`, and `analysis-tools.ts`'s revalidation bypassed
+  the merge, producing inconsistent typechecking behavior under a
+  shared project config. Validation warnings now ride back on
+  `LoadResult.projectConfigWarnings` so any tool surfacing a load
+  result can display them inline.
+
 ## [0.6.6] - 2026-04-16
 
 ### Fixed

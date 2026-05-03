@@ -44,6 +44,11 @@ import { type AgdaVersion, parseAgdaVersion } from "./agda-version.js";
 import { decodeDisplayTextResponses } from "../protocol/responses/text-display.js";
 import { findAgdaBinary } from "./binary-discovery.js";
 import { runLoad, runLoadNoMetas } from "./session-load-impl.js";
+import {
+  effectiveProjectFlags,
+  loadProjectConfig,
+  mergeCommandLineOptions,
+} from "../session/project-config.js";
 import { statSync } from "node:fs";
 
 export { findAgdaBinary };
@@ -325,17 +330,39 @@ export class AgdaSession {
    * focused on the class and its lifecycle; both load() and
    * loadNoMetas() are thin delegators here.
    *
+   * Project-level defaults (`.agda-mcp.json` + `AGDA_MCP_DEFAULT_FLAGS`)
+   * are merged in HERE, not at the tool boundary, so EVERY caller of
+   * `session.load()` — including `agda_apply_edit`'s post-edit reload,
+   * `agda_bulk_status`, and any future tool — picks them up
+   * consistently. The merged warnings ride back on
+   * `LoadResult.projectConfigWarnings` so callers can surface them.
+   *
    * @param filePath  Path to the Agda file (relative or absolute).
    * @param options   Optional settings for the load command.
    * @param options.profileOptions  Agda profile options (e.g.
    *   ["modules", "sharing"]). These are passed as `--profile=xxx` in
    *   the Cmd_load options list.
+   * @param options.commandLineOptions  Per-call Agda command-line flags
+   *   (e.g. ["--Werror", "--safe"]). MERGED with project config + env
+   *   defaults; per-call values win on collision via last-wins dedup.
    */
   async load(
     filePath: string,
-    options?: { profileOptions?: string[] },
+    options?: { profileOptions?: string[]; commandLineOptions?: string[] },
   ): Promise<LoadResult> {
-    return runLoad(this, filePath, options);
+    const projectConfig = loadProjectConfig(this.repoRoot);
+    const merged = mergeCommandLineOptions(
+      effectiveProjectFlags(projectConfig),
+      options?.commandLineOptions,
+    );
+    const result = await runLoad(this, filePath, {
+      profileOptions: options?.profileOptions,
+      commandLineOptions: merged.length > 0 ? merged : undefined,
+    });
+    if (projectConfig.warnings.length > 0) {
+      return { ...result, projectConfigWarnings: projectConfig.warnings };
+    }
+    return result;
   }
 
   async loadNoMetas(filePath: string): Promise<LoadResult> {

@@ -11,6 +11,8 @@
 
 import { errorDiagnostic, errorEnvelope, makeToolResult } from "../tools/tool-helpers.js";
 import { PathSandboxError } from "../repo-root.js";
+import { validateCommandLineOptions } from "../protocol/command-line-options.js";
+import { suggestSimilarFlag } from "../protocol/command-line-suggestions.js";
 
 export type LoadToolName = "agda_load" | "agda_load_no_metas" | "agda_typecheck";
 
@@ -133,4 +135,73 @@ export function validateProfileOptionsOrError(
       ),
     }),
   );
+}
+
+/**
+ * Run command-line option validation at the tool boundary.
+ * Returns a pre-built error ToolResult (ok=false) if any option is
+ * invalid or blocked, or null if validation passes (or options are absent).
+ *
+ * This mirrors validateProfileOptionsOrError so that invalid CLI flags
+ * are rejected consistently with invalid profile options — as a tool
+ * error, not embedded in an okEnvelope with a classification.
+ */
+export function validateCommandLineOptionsOrError(
+  tool: LoadToolName,
+  file: string,
+  commandLineOptions: string[] | undefined,
+) {
+  if (!commandLineOptions || commandLineOptions.length === 0) return null;
+  const validation = validateCommandLineOptions(commandLineOptions);
+  if (validation.valid) return null;
+
+  const enrichedErrors = enrichWithSuggestions(commandLineOptions, validation.errors);
+  const message = `Invalid command-line options: ${enrichedErrors.join("; ")}`;
+  return makeToolResult(
+    errorEnvelope({
+      tool,
+      summary: message,
+      classification: "invalid-command-line-options",
+      data: {
+        ...baseErrorData(file, message, "invalid-command-line-options"),
+        ...reloadFields(tool),
+        errors: enrichedErrors,
+      },
+      diagnostics: enrichedErrors.map((msg) =>
+        errorDiagnostic(msg, "invalid-command-line-option"),
+      ),
+    }),
+  );
+}
+
+/**
+ * Append a "did you mean ...?" hint to an error when the offending
+ * input looks like a typo of a `COMMON_AGDA_FLAGS` entry. The hint is
+ * appended once per error string — we don't try to be clever about
+ * which input produced which error message, just match against any
+ * input the user passed.
+ */
+function enrichWithSuggestions(
+  inputs: readonly string[],
+  errors: readonly string[],
+): string[] {
+  const suggestions = new Map<string, string>();
+  for (const input of inputs) {
+    const trimmed = input.trim();
+    if (trimmed.length === 0) continue;
+    const suggestion = suggestSimilarFlag(trimmed);
+    if (suggestion && suggestion !== trimmed) {
+      suggestions.set(trimmed, suggestion);
+    }
+  }
+  if (suggestions.size === 0) return [...errors];
+
+  return errors.map((message) => {
+    for (const [bad, good] of suggestions) {
+      if (message.includes(`'${bad}'`)) {
+        return `${message} Did you mean '${good}'?`;
+      }
+    }
+    return message;
+  });
 }
