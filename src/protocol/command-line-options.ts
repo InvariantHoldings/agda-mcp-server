@@ -37,6 +37,30 @@ const MAX_FLAG_LENGTH = 1024;
 const FLAG_FORBIDDEN_CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
 
 /**
+ * Build a single-line, control-char-escaped preview of a flag for use
+ * in error messages. Both the over-length and the control-char errors
+ * embed this preview so the caller can identify the offending entry
+ * in a long list — without the preview, "control character at index 7"
+ * is still a step ahead of just "control character", but pasting the
+ * literal flag with its raw control chars would corrupt the log line
+ * itself. The preview escapes `\n` / `\r` / `\t` / NUL with their
+ * conventional sequences and other control chars with `\xNN`.
+ */
+function safePreview(raw: string): string {
+  const head = raw.length > 32 ? raw.slice(0, 32) + "…" : raw;
+  // eslint-disable-next-line no-control-regex
+  return head.replace(/[\u0000-\u001f\u007f]/gu, (ch) => {
+    switch (ch) {
+      case "\n": return "\\n";
+      case "\r": return "\\r";
+      case "\t": return "\\t";
+      case "\u0000": return "\\0";
+      default: return "\\x" + ch.charCodeAt(0).toString(16).padStart(2, "0");
+    }
+  });
+}
+
+/**
  * Flags that must never be passed in the Cmd_load options list because
  * they conflict with the MCP server's own session management.
  *
@@ -108,25 +132,27 @@ export function validateCommandLineOptions(
   const seen = new Set<string>();
   const options: string[] = [];
 
-  for (const raw of input) {
+  for (let index = 0; index < input.length; index++) {
+    const raw = input[index];
     const trimmed = raw.trim();
     if (trimmed.length === 0) continue;
 
     if (trimmed.length > MAX_FLAG_LENGTH) {
       errors.push(
-        `Command-line option exceeds the ${MAX_FLAG_LENGTH}-character limit ` +
+        `Command-line option at index ${index} exceeds the ${MAX_FLAG_LENGTH}-character limit ` +
         `(got ${trimmed.length}). Real Agda flags are well under this; this ` +
-        "looks like an accidentally-pasted blob. Truncating to keep the log " +
-        "useful: '" + trimmed.slice(0, 32) + "…'.",
+        "looks like an accidentally-pasted blob. Preview: '" +
+        safePreview(trimmed) + "'.",
       );
       continue;
     }
 
     if (FLAG_FORBIDDEN_CONTROL_CHARS.test(trimmed)) {
       errors.push(
-        "Command-line option contains a control character " +
+        `Command-line option at index ${index} contains a control character ` +
         "(newline, NUL, tab, etc.) which would corrupt IOTCM transport. " +
-        "Pass each flag as a single line of printable characters.",
+        "Pass each flag as a single line of printable characters. " +
+        "Preview (control chars escaped): '" + safePreview(trimmed) + "'.",
       );
       continue;
     }

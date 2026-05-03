@@ -27,9 +27,11 @@ import { createLibraryRegistration } from "../agda/library-registration.js";
 import { filePathDescription, isAgdaSourceFile } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import {
+  effectiveProjectFlags,
   ENV_DEFAULT_FLAGS,
   PROJECT_CONFIG_FILENAME,
   loadProjectConfig,
+  mergeCommandLineOptions,
 } from "../session/project-config.js";
 import { projectConfigDiagnostics } from "../session/project-config-diagnostics.js";
 import {
@@ -936,20 +938,15 @@ export function register(
       // looks contradictory.
       const envVarSet = envVarRaw !== undefined && envVarRaw.trim().length > 0;
 
-      // Effective flags = file flags then env flags, deduplicated by
-      // last-wins (so `agda_project_config` reports the same final list a
-      // load with no per-call options would build). Per-call options live
-      // on the tool call itself and aren't visible at config time.
-      const seen = new Set<string>();
-      const effectiveFlags: string[] = [];
-      const allFlags = [...projectConfig.fileFlags, ...projectConfig.envFlags];
-      for (let i = allFlags.length - 1; i >= 0; i--) {
-        const flag = allFlags[i];
-        if (!seen.has(flag)) {
-          seen.add(flag);
-          effectiveFlags.unshift(flag);
-        }
-      }
+      // Effective flags must match what `AgdaSession.load()` would
+      // produce given a no-per-call call site, so route through the
+      // same `effectiveProjectFlags` + `mergeCommandLineOptions`
+      // pipeline. (Per-call options live on the tool call itself and
+      // aren't visible at config time, so we pass `[]`.)
+      const effectiveFlags = mergeCommandLineOptions(
+        effectiveProjectFlags(projectConfig),
+        [],
+      );
 
       const data = {
         configFilePath: configFilePath ? relative(repoRoot, configFilePath) : null,

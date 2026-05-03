@@ -373,3 +373,27 @@ test("agda_project_config tool is registered", () => {
   registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
   expect(server.names()).toContain("agda_project_config");
 });
+
+test("agda_project_config effectiveFlags matches mergeCommandLineOptions(file, env)", async () => {
+  // Pins the contract that `agda_project_config`'s `effectiveFlags`
+  // is exactly what `AgdaSession.load()` would build given the same
+  // file+env layers and no per-call options. Drift here would be a
+  // source of confusion: an agent inspecting the config would see one
+  // set of flags but the actual load would use a different set.
+  const { mergeCommandLineOptions } = await import("../../../src/session/project-config.js");
+  writeFileSync(
+    join(sandbox, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: ["--safe", "--Werror"] }),
+  );
+  process.env[ENV_DEFAULT_FLAGS] = "--Werror --without-K";
+  invalidateProjectConfigCache();
+
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, makeStubSession(sandbox), sandbox);
+  const result = await server.get("agda_project_config")!.callback({});
+  const data = result.structuredContent.data;
+  // The ground truth is what mergeCommandLineOptions produces — the
+  // tool must agree with the helper, byte for byte.
+  const expected = mergeCommandLineOptions([...data.fileFlags, ...data.envFlags], []);
+  expect(data.effectiveFlags).toEqual(expected);
+});
