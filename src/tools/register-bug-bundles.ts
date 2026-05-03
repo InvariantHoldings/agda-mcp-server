@@ -144,7 +144,7 @@ export function registerBugReportUpdateBundle(server: McpServer, session: AgdaSe
     description: "Emit a structured update bundle for an existing bug report, preserving stable fingerprints and issue linkage.",
     category: "reporting",
     inputSchema: {
-      existingIssue: z.number().describe("Existing GitHub issue number"),
+      existingIssue: z.number().int().min(1).describe("Existing GitHub issue number (positive integer)"),
       affectedTool: z.string().describe("The MCP tool affected by the bug"),
       classification: z.string().describe("Normalized classification"),
       observed: z.string().describe("Observed behavior"),

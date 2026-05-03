@@ -12,14 +12,16 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { relative } from "node:path";
 
 import type { AgdaSession } from "../agda-process.js";
 import { findAgdaiArtifacts, findAgdaProjectRoot } from "../agda/agdai-cache.js";
+import { canonicalizeOrFallback } from "./path-utils.js";
 import { filePathDescription } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import {
+  errorDiagnostic,
   errorEnvelope,
   makeToolResult,
   okEnvelope,
@@ -71,7 +73,11 @@ export function register(
               summary: `Invalid file path: ${file}`,
               classification: "invalid-path",
               data: emptyCacheInfo(file),
-              diagnostics: [{ severity: "error", message: `Invalid file path: ${file}`, code: "invalid-path" }],
+              diagnostics: [errorDiagnostic(
+                `Invalid file path: ${file}`,
+                "invalid-path",
+                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
+              )],
             }),
           );
         }
@@ -84,7 +90,11 @@ export function register(
             summary: `File not found: ${file}`,
             classification: "not-found",
             data: emptyCacheInfo(file),
-            diagnostics: [{ severity: "error", message: `File not found: ${requestedFilePath}`, code: "not-found" }],
+            diagnostics: [errorDiagnostic(
+              `File not found: ${requestedFilePath}`,
+              "not-found",
+              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_file_list` or `agda_search` to discover available files.",
+            )],
           }),
         );
       }
@@ -106,11 +116,11 @@ export function register(
             summary: `Could not stat file: ${file}`,
             classification: "not-found",
             data: emptyCacheInfo(file),
-            diagnostics: [{
-              severity: "error",
-              message: `Could not stat ${requestedFilePath}: ${err instanceof Error ? err.message : String(err)}`,
-              code: "not-found",
-            }],
+            diagnostics: [errorDiagnostic(
+              `Could not stat ${requestedFilePath}: ${err instanceof Error ? err.message : String(err)}`,
+              "not-found",
+              "The file disappeared between existsSync and statSync (deletion race) or is unreadable (permissions). Retry, or verify the path with `agda_file_list`.",
+            )],
           }),
         );
       }
@@ -121,11 +131,11 @@ export function register(
             summary: `Not a regular file: ${file}`,
             classification: "not-a-file",
             data: emptyCacheInfo(file),
-            diagnostics: [{
-              severity: "error",
-              message: `agda_cache_info requires a single Agda source file — ${requestedFilePath} is a directory or special file. Pass a .agda / .lagda* path.`,
-              code: "not-a-file",
-            }],
+            diagnostics: [errorDiagnostic(
+              `agda_cache_info requires a single Agda source file — ${requestedFilePath} is a directory or special file. Pass a .agda / .lagda* path.`,
+              "not-a-file",
+              "Pass a single source file (.agda or .lagda*). For directory-level scans use `agda_project_progress` or `agda_bulk_status`.",
+            )],
           }),
         );
       }
@@ -141,7 +151,11 @@ export function register(
               summary: `Invalid file path: ${file}`,
               classification: "invalid-path",
               data: emptyCacheInfo(file),
-              diagnostics: [{ severity: "error", message: `Invalid file path: ${file}`, code: "invalid-path" }],
+              diagnostics: [errorDiagnostic(
+                `Invalid file path: ${file}`,
+                "invalid-path",
+                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
+              )],
             }),
           );
         }
@@ -223,14 +237,6 @@ export function register(
       );
     },
   });
-}
-
-function canonicalizeOrFallback(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
 }
 
 function emptyCacheInfo(file: string) {

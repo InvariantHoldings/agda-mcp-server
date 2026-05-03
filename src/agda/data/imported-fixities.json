@@ -1,0 +1,13 @@
+{
+  "$comment": "Curated precedence map for common stdlib operators. Used as the default reference set by inferFixityConflicts. Numbers match the declarations in Data.Nat.Properties, Data.Bool, etc., so a user-defined operator without a fixity declaration that binds against any of these will trigger a conflict warning.",
+  "fixities": {
+    "_+_": 6,
+    "_-_": 6,
+    "_*_": 7,
+    "_≤_": 4,
+    "_<_": 4,
+    "_≡_": 4,
+    "_∧_": 3,
+    "_∨_": 2
+  }
+}

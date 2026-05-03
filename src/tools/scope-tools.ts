@@ -7,6 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
 import {
+  errorDiagnostic,
   errorEnvelope,
   makeToolResult,
   okEnvelope,
@@ -14,6 +15,7 @@ import {
   sessionErrorStateGate,
   validateGoalId,
 } from "./tool-helpers.js";
+import { optionalGoalIdSchema } from "./tool-schemas.js";
 
 export function register(
   server: McpServer,
@@ -28,11 +30,11 @@ export function register(
     protocolCommands: ["Cmd_why_in_scope", "Cmd_why_in_scope_toplevel"],
     inputSchema: {
       name: z.string().describe("The name to look up"),
-      goalId: z.number().optional().describe("Optional goal ID for context"),
+      goalId: optionalGoalIdSchema.describe("Optional goal ID for context"),
     },
     outputDataSchema: z.object({
       name: z.string(),
-      goalId: z.number().optional(),
+      goalId: optionalGoalIdSchema,
       explanation: z.string(),
     }),
     callback: async ({ name, goalId }: { name: string; goalId?: number }) => {
@@ -74,6 +76,13 @@ export function register(
             tool: "agda_why_in_scope",
             summary: message,
             data: { name, goalId, explanation: "" },
+            diagnostics: [errorDiagnostic(
+              message,
+              "why-in-scope-error",
+              goalId !== undefined
+                ? "Confirm the name is spelled correctly and the goal still exists. Run `agda_goal_catalog` to inspect open goals, or `agda_load` to refresh the session."
+                : "Confirm a file is loaded (`agda_session_status`) and the name is in scope at the top level. For a goal-local check, pass `goalId`.",
+            )],
           }),
           message,
         );
@@ -89,11 +98,11 @@ export function register(
     protocolCommands: ["Cmd_show_module_contents", "Cmd_show_module_contents_toplevel"],
     inputSchema: {
       moduleName: z.string().describe("The fully qualified module name"),
-      goalId: z.number().optional().describe("Optional goal ID for context"),
+      goalId: optionalGoalIdSchema.describe("Optional goal ID for context"),
     },
     outputDataSchema: z.object({
       moduleName: z.string(),
-      goalId: z.number().optional(),
+      goalId: optionalGoalIdSchema,
       contents: z.string(),
     }),
     callback: async ({ moduleName, goalId }: { moduleName: string; goalId?: number }) => {
@@ -135,6 +144,12 @@ export function register(
             tool: "agda_show_module",
             summary: message,
             data: { moduleName, goalId, contents: "" },
+            diagnostics: [errorDiagnostic(
+              message,
+              "show-module-error",
+              "Confirm the module name is exact and reachable from the loaded file. " +
+              "Use `agda_search_about` for a fuzzy lookup, or `agda_file_list` to find the module's source file.",
+            )],
           }),
           message,
         );
@@ -198,6 +213,12 @@ export function register(
               results: [],
               text: "",
             },
+            diagnostics: [errorDiagnostic(
+              message,
+              "search-about-error",
+              "Confirm a file is loaded with `agda_session_status`. " +
+              "If the search query is unusual (binders, pragmas), try a simpler identifier-shaped query first.",
+            )],
           }),
           message,
         );

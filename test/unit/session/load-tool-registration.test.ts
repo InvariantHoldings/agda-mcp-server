@@ -63,13 +63,19 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
         severity: "error",
         message: "Invalid file path: ../../etc/passwd",
         code: "invalid-path",
+        nextAction: expect.stringMatching(/sandbox|PROJECT_ROOT/u),
       },
     ]);
   });
 }
 
 for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
-  test(`${toolName} rethrows unexpected path resolver failures`, async () => {
+  test(`${toolName} translates unexpected resolver failures to a structured error envelope`, async () => {
+    // Pre-v0.6.7 contract was "rethrow unexpected exceptions as raw
+    // promise rejections." That left agents staring at an MCP RPC
+    // failure with no recovery hint. registerStructuredTool now
+    // catches every callback exception and translates it into an
+    // ok=false ToolResult with the message embedded.
     clearToolManifest();
     const server = createCapturingServer();
 
@@ -84,9 +90,14 @@ for (const toolName of ["agda_load", "agda_load_no_metas", "agda_typecheck"]) {
       },
     );
 
-    await expect(
-      () => server.get(toolName)!.callback({ file: "Example.agda" }),
-    ).rejects.toThrow(/unexpected resolver failure/);
+    const result = await server.get(toolName)!.callback({ file: "Example.agda" });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.ok).toBe(false);
+    // Either the message text or one of the diagnostics carries the
+    // original error message; an agent reading either side sees it.
+    const summary: string = result.structuredContent.summary ?? "";
+    const diagMessages: string[] = (result.structuredContent.diagnostics ?? []).map((d: any) => d.message);
+    expect([summary, ...diagMessages].join(" ")).toMatch(/unexpected resolver failure/u);
   });
 }
 

@@ -30,6 +30,7 @@ import {
   stalenessWarning,
   validateGoalId,
 } from "./tool-gates.js";
+import { goalIdSchema } from "./tool-schemas.js";
 
 /**
  * Wrap a session tool handler with staleness warning and error handling.
@@ -150,12 +151,24 @@ export function registerStructuredTool(args: {
     annotations: args.annotations,
   });
 
-  // Wrap the callback to automatically measure wall-clock time.
+  // Wrap the callback to automatically measure wall-clock time AND
+  // catch any uncaught exception from the body. Without the catch,
+  // a stray `readFileSync` or `JSON.parse` on user-controlled input
+  // throws straight up to the MCP framework and the caller sees an
+  // unstructured RPC error instead of a `ToolResult`. With the catch,
+  // every tool call returns a structured envelope — `ok=false` plus
+  // a tool-error diagnostic with a `nextAction` recovery hint —
+  // even when the callback forgets its own try/catch.
   // If the callback already sets elapsedMs on the envelope, that value
   // is preserved. Otherwise elapsedMs is filled in automatically.
   const timedCallback = async (toolArgs: any) => {
     const startMs = performance.now();
-    const result = await args.callback(toolArgs);
+    let result: unknown;
+    try {
+      result = await args.callback(toolArgs);
+    } catch (err) {
+      result = makeTextToolErrorResult(args.name, err, {});
+    }
     const elapsed = Math.round(performance.now() - startMs);
     if (
       result &&
@@ -227,7 +240,12 @@ export function registerTextTool(args: {
         return makeToolResult(
           okEnvelope({
             tool: args.name,
-            summary: textValue,
+            // `summary` is contractually a 1-line digest, but text-only
+            // tools historically produced multi-line bodies and had it
+            // duplicated whole. Take the first non-empty line; the full
+            // body still goes in `data.text` and the markdown body
+            // alongside.
+            summary: digestText(textValue),
             data: { text: textValue },
             elapsedMs: Math.round(performance.now() - startMs),
           }),
@@ -238,6 +256,18 @@ export function registerTextTool(args: {
       }
     },
   });
+}
+
+/**
+ * Take the first non-empty line of `text` as a 1-line summary digest,
+ * truncating overly long lines. Used by text-only tool wrappers so the
+ * envelope's `summary` field stays terse even when the body is a
+ * multi-line markdown blob.
+ */
+function digestText(text: string): string {
+  const firstNonEmpty = text.split(/\r?\n/u).find((line) => line.trim().length > 0) ?? text.trim();
+  if (firstNonEmpty.length <= 200) return firstNonEmpty;
+  return firstNonEmpty.slice(0, 197) + "…";
 }
 
 export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
@@ -254,7 +284,7 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
 }): void {
   const outputDataSchema =
     args.outputDataSchema
-    ?? z.object({ text: z.string(), goalId: z.number() });
+    ?? z.object({ text: z.string(), goalId: goalIdSchema });
 
   registerStructuredTool({
     server: args.server,
@@ -291,7 +321,9 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
         return makeToolResult(
           okEnvelope({
             tool: args.name,
-            summary: body,
+            // 1-line digest of the goal-text body (multi-line bodies
+            // would otherwise be repeated whole in `summary`).
+            summary: digestText(body),
             data: { text: body, goalId: cbArgs.goalId },
             stale: args.session.isFileStale() || undefined,
             elapsedMs: Math.round(performance.now() - startMs),
