@@ -30,6 +30,7 @@ import {
   validateProfileOptions,
 } from "../protocol/profile-options.js";
 import { COMMON_AGDA_FLAGS } from "../protocol/command-line-options.js";
+import { projectConfigDiagnostics } from "./project-config-diagnostics.js";
 
 import {
   invalidPathResult,
@@ -147,12 +148,7 @@ export function registerAgdaTypecheck(
             diagnostics: [
               ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),
               ...result.warnings.map((message) => warningDiagnostic(message, "agda-warning")),
-              ...(result.projectConfigWarnings ?? []).map((w) =>
-                warningDiagnostic(
-                  `${w.source === "env" ? "env" : "config"}: ${w.message}`,
-                  `project-config-${w.source}`,
-                ),
-              ),
+              ...projectConfigDiagnostics(result.projectConfigWarnings),
             ],
             provenance: { file: filePath, protocolCommands: ["Cmd_load", "Cmd_metas"] },
             elapsedMs,

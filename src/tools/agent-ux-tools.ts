@@ -31,12 +31,14 @@ import {
   PROJECT_CONFIG_FILENAME,
   loadProjectConfig,
 } from "../session/project-config.js";
+import { projectConfigDiagnostics } from "../session/project-config-diagnostics.js";
 import {
   errorDiagnostic,
   errorEnvelope,
   makeToolResult,
   okEnvelope,
   registerStructuredTool,
+  type ToolDiagnostic,
   warningDiagnostic,
 } from "./tool-helpers.js";
 
@@ -454,12 +456,14 @@ export function register(
       let loadClassification: string | null = null;
       let errors: string[] = [];
       let warnings: string[] = [];
+      let configWarningDiags: ToolDiagnostic[] = [];
       if (!dryRun && renamed.replacements > 0) {
         writeFileSync(filePath, renamed.updated, "utf8");
         const load = await session.load(filePath);
         loadClassification = load.classification;
         errors = load.errors.map(rewriteCompilerPlaceholders);
         warnings = load.warnings.map(rewriteCompilerPlaceholders);
+        configWarningDiags = projectConfigDiagnostics(load.projectConfigWarnings);
       }
 
       const changed = renamed.replacements > 0;
@@ -479,6 +483,7 @@ export function register(
             errors,
             warnings,
           },
+          diagnostics: configWarningDiags.length > 0 ? configWarningDiags : undefined,
         }),
         diff.length > 0 ? `\`\`\`diff\n${diff}\n\`\`\`` : "No changes.",
       );
@@ -715,12 +720,14 @@ export function register(
       const arity = inferMissingClauseArity(source, functionName);
       const clause = buildMissingClause(functionName, arity);
       let loadClassification: string | null = null;
+      let configWarningDiags: ToolDiagnostic[] = [];
       const shouldWrite = writeToFile !== false;
       if (shouldWrite) {
         const next = insertClauseAtEndOfFunction(source, functionName, clause);
         writeFileSync(filePath, next, "utf8");
         const load = await session.load(filePath);
         loadClassification = load.classification;
+        configWarningDiags = projectConfigDiagnostics(load.projectConfigWarnings);
       }
       return makeToolResult(
         okEnvelope({
@@ -733,6 +740,7 @@ export function register(
             arity,
             loadClassification,
           },
+          diagnostics: configWarningDiags.length > 0 ? configWarningDiags : undefined,
         }),
         `\`\`\`agda\n${clause}\n\`\`\``,
       );

@@ -7,6 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
 import { registerGoalTextTool, registerTextTool } from "./tool-helpers.js";
+import { projectConfigWarningsText } from "../session/project-config-diagnostics.js";
 import {
   parseContextEntry,
   deriveSuggestions,
@@ -157,6 +158,8 @@ export function register(
             output += `\`\`\`\n${err}\n\`\`\`\n`;
           }
         }
+
+        output += projectConfigWarningsText(result.projectConfigWarnings);
 
         return output;
       } catch (err) {
