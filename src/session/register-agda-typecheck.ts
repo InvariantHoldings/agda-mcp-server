@@ -30,11 +30,6 @@ import {
   validateProfileOptions,
 } from "../protocol/profile-options.js";
 import { COMMON_AGDA_FLAGS } from "../protocol/command-line-options.js";
-import {
-  effectiveProjectFlags,
-  loadProjectConfig,
-  mergeCommandLineOptions,
-} from "./project-config.js";
 
 import {
   invalidPathResult,
@@ -82,19 +77,13 @@ export function registerAgdaTypecheck(
       );
       if (profileError) return profileError;
 
-      // Merge per-call options with project-level defaults and env var
-      const projectConfig = loadProjectConfig(repoRoot);
-      const mergedOptions = mergeCommandLineOptions(
-        effectiveProjectFlags(projectConfig),
-        commandLineOptions,
-      );
-
-      // Validate merged command-line options at tool boundary (consistent
-      // with profileOptions: invalid input → errorEnvelope, not okEnvelope).
+      // Validate ONLY the per-call command-line options. Project-config
+      // and env-var flags are validated and dropped at config-load time;
+      // the merge with project defaults happens inside `session.load()`.
       const cmdLineError = validateCommandLineOptionsOrError(
         "agda_typecheck",
         file,
-        mergedOptions.length > 0 ? mergedOptions : undefined,
+        commandLineOptions,
       );
       if (cmdLineError) return cmdLineError;
 
@@ -119,7 +108,7 @@ export function registerAgdaTypecheck(
         // can still profile the typecheck path.
         const result = await session.load(filePath, {
           profileOptions,
-          commandLineOptions: mergedOptions.length > 0 ? mergedOptions : undefined,
+          commandLineOptions,
         });
         const relPath = relative(repoRoot, requestedFilePath);
         const elapsedMs = Math.round(performance.now() - startMs);
@@ -158,7 +147,7 @@ export function registerAgdaTypecheck(
             diagnostics: [
               ...result.errors.map((message) => errorDiagnostic(message, "agda-error")),
               ...result.warnings.map((message) => warningDiagnostic(message, "agda-warning")),
-              ...projectConfig.warnings.map((w) =>
+              ...(result.projectConfigWarnings ?? []).map((w) =>
                 warningDiagnostic(
                   `${w.source === "env" ? "env" : "config"}: ${w.message}`,
                   `project-config-${w.source}`,

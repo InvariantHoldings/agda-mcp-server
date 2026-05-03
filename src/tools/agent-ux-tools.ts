@@ -921,7 +921,12 @@ export function register(
       const configFilePath = projectConfig.configFilePath ?? null;
       const configFileExists = configFilePath !== null && existsSync(configFilePath);
       const envVarRaw = process.env[ENV_DEFAULT_FLAGS];
-      const envVarSet = envVarRaw !== undefined && envVarRaw.length > 0;
+      // `envVarSet` should mirror the *effective* state, so a value of
+      // "   " or "\t\n" — which `parseEnvFlags()` resolves to zero
+      // flags — is reported as unset. Otherwise an agent inspecting the
+      // config sees `envVarSet: true` while `envFlags` is empty, which
+      // looks contradictory.
+      const envVarSet = envVarRaw !== undefined && envVarRaw.trim().length > 0;
 
       // Effective flags = file flags then env flags, deduplicated by
       // last-wins (so `agda_project_config` reports the same final list a

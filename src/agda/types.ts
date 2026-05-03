@@ -127,6 +127,21 @@ export interface LoadResult {
    * file's holes — see §1.4 in the agent UX observations doc.
    */
   lastCheckedLine?: number | null;
+  /**
+   * Validation warnings raised while loading the project-level config
+   * (`.agda-mcp.json` and `AGDA_MCP_DEFAULT_FLAGS`) for THIS load.
+   * Centralised in `AgdaSession.load()` so every caller — not just the
+   * registered agda_load / agda_typecheck tools — gets the same
+   * surfacing. Empty (or absent) when the config is clean.
+   *
+   * Type imported lazily via a string-literal-only re-export so the
+   * `agda/` layer doesn't reach back into `session/` for a hard symbol.
+   */
+  projectConfigWarnings?: ReadonlyArray<{
+    source: "file" | "env" | "system";
+    message: string;
+    path?: string;
+  }>;
 }
 
 export interface GoalInfo {

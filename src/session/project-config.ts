@@ -88,10 +88,15 @@ export interface ProjectConfig {
 
 // ── Config caching ───────────────────────────────────────────────────
 //
-// The project config is read from disk on every load call. To avoid
+// `.agda-mcp.json` is read from disk on every load call. To avoid
 // redundant I/O on large projects with many sequential loads, we cache
-// the parsed config keyed by (projectRoot, mtime, size, env). The cache
-// is invalidated when the file's mtime/size or the env var changes.
+// the parsed FILE layer keyed by `projectRoot`, validated against the
+// current file's `mtimeMs` + `size`. Env-var flags are NOT cached —
+// they are re-read from `process.env` on every call, since CI suites
+// and tests routinely flip them mid-run and a cache stamped with the
+// env value would silently miss those changes. (Comparing env on every
+// call is essentially free — it's a single `process.env` lookup plus a
+// short string split.)
 
 interface CacheEntry {
   config: Pick<ProjectConfig, "fileFlags" | "warnings" | "configFilePath">;

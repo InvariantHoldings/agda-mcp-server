@@ -56,6 +56,15 @@ and this project follows [Semantic Versioning](https://semver.org/).
   field replaced by separate `fileFlags` / `envFlags` arrays plus a
   `warnings` array of validation issues. External callers can use
   `effectiveProjectFlags(config)` to get the combined list.
+- **Project-config merge centralised in `AgdaSession.load()`** — every
+  caller of `session.load()` now picks up `.agda-mcp.json` and
+  `AGDA_MCP_DEFAULT_FLAGS` defaults, not just `agda_load` and
+  `agda_typecheck`. Previously `agda_apply_edit`'s post-edit reload,
+  `agda_bulk_status`, and `analysis-tools.ts`'s revalidation bypassed
+  the merge, producing inconsistent typechecking behavior under a
+  shared project config. Validation warnings now ride back on
+  `LoadResult.projectConfigWarnings` so any tool surfacing a load
+  result can display them inline.
 
 ## [0.6.6] - 2026-04-16
 

@@ -57,9 +57,13 @@ Environment variables:
                                tooling/scripts/run-pinned-agda.sh.
   AGDA_DIR                     Agda library directory.
                                Default: ~/.agda
-  AGDA_MCP_DEFAULT_FLAGS       Space-separated Agda CLI flags applied
-                               to every Cmd_load invocation. Merged
-                               with .agda-mcp.json and per-call opts.
+  AGDA_MCP_DEFAULT_FLAGS       Space-separated Agda CLI flags merged
+                               into every load that goes through
+                               AgdaSession.load() — agda_load,
+                               agda_typecheck, and any tool that reloads
+                               a file (e.g. agda_apply_edit). Combined
+                               with .agda-mcp.json and per-call opts;
+                               per-call wins on collision.
                                Example: "--Werror --safe --without-K"
   AGDA_MCP_EXTENSION_MODULES   Colon-separated list of extension module
                                paths or package specifiers to load on

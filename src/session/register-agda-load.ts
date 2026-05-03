@@ -34,12 +34,7 @@ import {
   validateProfileOptions,
 } from "../protocol/profile-options.js";
 import { COMMON_AGDA_FLAGS } from "../protocol/command-line-options.js";
-import {
-  effectiveProjectFlags,
-  loadProjectConfig,
-  mergeCommandLineOptions,
-  type ProjectConfigWarning,
-} from "./project-config.js";
+import type { ProjectConfigWarning } from "./project-config.js";
 
 import {
   invalidPathResult,
@@ -90,19 +85,16 @@ export function registerAgdaLoad(
       );
       if (profileError) return profileError;
 
-      // Merge per-call options with project-level defaults and env var
-      const projectConfig = loadProjectConfig(repoRoot);
-      const mergedOptions = mergeCommandLineOptions(
-        effectiveProjectFlags(projectConfig),
-        commandLineOptions,
-      );
-
-      // Validate merged command-line options at tool boundary (consistent
-      // with profileOptions: invalid input → errorEnvelope, not okEnvelope).
+      // Validate ONLY the per-call command-line options at the tool
+      // boundary. Project-config and env-var flags are validated at
+      // config-load time and dropped if invalid (with warnings on the
+      // load response), so we do not need to re-validate them here.
+      // The merge with project defaults happens inside `session.load()`
+      // — see issue #49 review feedback (`session.load()` bypass bug).
       const cmdLineError = validateCommandLineOptionsOrError(
         "agda_load",
         file,
-        mergedOptions.length > 0 ? mergedOptions : undefined,
+        commandLineOptions,
       );
       if (cmdLineError) return cmdLineError;
 
@@ -145,7 +137,7 @@ export function registerAgdaLoad(
 
         const result = await session.load(filePath, {
           profileOptions,
-          commandLineOptions: mergedOptions.length > 0 ? mergedOptions : undefined,
+          commandLineOptions,
         });
         const relPath = relative(repoRoot, requestedFilePath);
         const normalizedErrors = result.errors.map(rewriteCompilerPlaceholders);
@@ -165,7 +157,7 @@ export function registerAgdaLoad(
               ...(suggestedRename ? { suggestedRename } : {}),
             };
           }),
-          ...projectConfigDiagnostics(projectConfig.warnings),
+          ...projectConfigDiagnostics(result.projectConfigWarnings ?? []),
         ];
 
         if (result.hasHoles) {
@@ -305,7 +297,7 @@ export function registerAgdaLoad(
  * config file, env var typos) as warning diagnostics on every load so an
  * agent can correct them without having to call `agda_project_config`.
  */
-function projectConfigDiagnostics(warnings: ProjectConfigWarning[]): ToolDiagnostic[] {
+function projectConfigDiagnostics(warnings: ReadonlyArray<ProjectConfigWarning>): ToolDiagnostic[] {
   return warnings.map((w) =>
     warningDiagnostic(
       `${w.source === "env" ? "env" : "config"}: ${w.message}`,
