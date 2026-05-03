@@ -12,11 +12,12 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { relative } from "node:path";
 
 import type { AgdaSession } from "../agda-process.js";
 import { findAgdaiArtifacts, findAgdaProjectRoot } from "../agda/agdai-cache.js";
+import { canonicalizeOrFallback } from "./path-utils.js";
 import { filePathDescription } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import {
@@ -223,14 +224,6 @@ export function register(
       );
     },
   });
-}
-
-function canonicalizeOrFallback(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
 }
 
 function emptyCacheInfo(file: string) {

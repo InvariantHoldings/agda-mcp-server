@@ -69,7 +69,15 @@ export function register(
             tool: "agda_compute",
             summary: message,
             data: { expr, goalId, normalForm: "" },
-            diagnostics: [errorDiagnostic(message, "compute-error")],
+            diagnostics: [errorDiagnostic(
+              message,
+              "compute-error",
+              goalId !== undefined
+                ? "The goal context may have changed. Call `agda_load` to refresh, " +
+                  "then retry; or run `agda_goal_type` to confirm the goal still exists."
+                : "Confirm the expression parses and references in-scope identifiers. " +
+                  "Run `agda_load` if the file changed, or `agda_show_module` to check imports.",
+            )],
           }),
           message,
         );
@@ -124,7 +132,15 @@ export function register(
             tool: "agda_infer",
             summary: message,
             data: { expr, goalId, inferredType: "" },
-            diagnostics: [errorDiagnostic(message, "infer-error")],
+            diagnostics: [errorDiagnostic(
+              message,
+              "infer-error",
+              goalId !== undefined
+                ? "The goal context may have changed. Call `agda_load` to refresh, " +
+                  "then retry; or run `agda_goal_type` to confirm the goal still exists."
+                : "Confirm the expression parses and references in-scope identifiers. " +
+                  "Run `agda_load` if the file changed, or `agda_show_module` to check imports.",
+            )],
           }),
           message,
         );

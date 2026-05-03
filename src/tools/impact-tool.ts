@@ -13,11 +13,12 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { relative } from "node:path";
 
 import type { AgdaSession } from "../agda-process.js";
 import { buildImportGraph, computeImpact } from "../agda/import-graph.js";
+import { canonicalizeOrFallback } from "./path-utils.js";
 import { filePathDescription } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import {
@@ -207,14 +208,6 @@ function renderList(title: string, items: string[], limit: number): string[] {
     lines.push(`…and ${items.length - limit} more (full list in structured data; raise \`limit\` to render more).`);
   }
   return lines;
-}
-
-function canonicalizeOrFallback(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
 }
 
 function emptyImpactData(file: string) {
