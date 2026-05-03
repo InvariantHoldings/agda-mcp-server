@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/InvariantHoldings/agda-mcp-server/raw/main/schemas/agda-mcp.schema.json",
+  "title": ".agda-mcp.json",
+  "description": "Project-level configuration for agda-mcp-server. Place at the project root (PROJECT_ROOT or AGDA_MCP_ROOT). Read on every agda_load / agda_typecheck call (mtime-cached).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional JSON-Schema reference for editor support."
+    },
+    "commandLineOptions": {
+      "type": "array",
+      "description": "Command-line flags forwarded to Agda's Cmd_load. Validated and merged with AGDA_MCP_DEFAULT_FLAGS and per-call options on each load. Flags conflicting with the MCP server's interactive session (e.g. --interaction-json, --version) are rejected with a warning.",
+      "items": {
+        "type": "string",
+        "pattern": "^-"
+      },
+      "examples": [
+        ["--Werror"],
+        ["--safe", "--without-K", "--Werror"],
+        ["--cubical", "--no-import-sorts"]
+      ]
+    }
+  },
+  "examples": [
+    {
+      "$schema": "https://github.com/InvariantHoldings/agda-mcp-server/raw/main/schemas/agda-mcp.schema.json",
+      "commandLineOptions": ["--Werror", "--safe"]
+    }
+  ]
+}

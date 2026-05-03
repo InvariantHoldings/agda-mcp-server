@@ -72,8 +72,13 @@ Environment variables:
 
 Project configuration:
   Place a .agda-mcp.json file at PROJECT_ROOT to set persistent defaults:
-    { "commandLineOptions": ["--Werror", "--safe"] }
+    {
+      "$schema": "https://github.com/InvariantHoldings/agda-mcp-server/raw/main/schemas/agda-mcp.schema.json",
+      "commandLineOptions": ["--Werror", "--safe"]
+    }
   These are merged with AGDA_MCP_DEFAULT_FLAGS and per-call options.
+  Use the agda_project_config tool to inspect the resolved configuration
+  (file flags + env flags + warnings) at any time.
   See: https://agda.readthedocs.io/en/latest/tools/command-line-options.html
 
 Documentation: https://github.com/InvariantHoldings/agda-mcp-server
