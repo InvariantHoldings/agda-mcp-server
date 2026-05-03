@@ -122,7 +122,11 @@ export function registerEditTools(
                 errors: [`Invalid file path: ${file}`],
                 warnings: [],
               },
-              diagnostics: [errorDiagnostic(`Invalid file path: ${file}`, "invalid-path")],
+              diagnostics: [errorDiagnostic(
+                `Invalid file path: ${file}`,
+                "invalid-path",
+                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
+              )],
             }),
           );
         }
@@ -143,7 +147,11 @@ export function registerEditTools(
               errors: [`File not found: ${file}`],
               warnings: [],
             },
-            diagnostics: [errorDiagnostic(`File not found: ${file}`, "not-found")],
+            diagnostics: [errorDiagnostic(
+              `File not found: ${file}`,
+              "not-found",
+              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_file_list` or `agda_search` to discover available files.",
+            )],
           }),
         );
       }

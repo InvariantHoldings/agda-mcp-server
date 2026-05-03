@@ -110,7 +110,13 @@ export function sessionErrorStateGate<T extends Record<string, unknown>>(
       classification: "unavailable",
       data: emptyData,
       diagnostics: [
-        errorDiagnostic(summary, "session-unavailable", "agda_load"),
+        errorDiagnostic(
+          summary,
+          "session-unavailable",
+          "Inspect the load errors with `agda_load` (re-run on the same file to see them again), " +
+          "fix the source, then re-run `agda_load`. Goal-based tools refuse to run while the load " +
+          "classification is `type-error` because their answers would be stale or undefined.",
+        ),
         infoDiagnostic(
           "Fix the type errors in the source file, then call agda_load to reload.",
           "recovery-hint",
@@ -143,7 +149,7 @@ export function validateGoalId(
           errorDiagnostic(
             "No file loaded. Call `agda_load` first.",
             "no-loaded-file",
-            "agda_load",
+            "Call `agda_load` with the file you want to operate on. Goals only exist in the context of a successfully-loaded file.",
           ),
         ],
       }),
@@ -154,6 +160,16 @@ export function validateGoalId(
     const available = ids.length > 0
       ? ids.map((id) => `?${id}`).join(", ")
       : "(none)";
+    // Surface a more useful nextAction depending on whether ANY
+    // goals are open. If `(none)`, the file has no holes to operate
+    // on; the agent should switch to non-goal tools or pick a
+    // different file. If goals exist but the requested ID isn't
+    // among them, the agent's goal table is stale.
+    const recovery = ids.length === 0
+      ? "The currently-loaded file has no open goals. " +
+        "Use `agda_session_status` to check the session, or pick a file with `{!!}` / `?` markers."
+      : `Pick a goal from the available list: ${available}. ` +
+        "If you expected this ID to exist, run `agda_load` to refresh — goals are reassigned on every load.";
     return makeToolResult(
       errorEnvelope({
         tool,
@@ -164,6 +180,7 @@ export function validateGoalId(
           errorDiagnostic(
             `Invalid goal ID ?${goalId}. Available goals: ${available}`,
             "invalid-goal",
+            recovery,
           ),
           infoDiagnostic(
             "Run `agda_load` to refresh goals after modifying the file.",

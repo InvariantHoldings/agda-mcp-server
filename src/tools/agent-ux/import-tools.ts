@@ -70,7 +70,11 @@ export function registerImportTools(
               summary: `Invalid file path: ${file}`,
               classification: "invalid-path",
               data: { symbol, candidates: [] },
-              diagnostics: [errorDiagnostic(`Invalid file path: ${file}`, "invalid-path")],
+              diagnostics: [errorDiagnostic(
+                `Invalid file path: ${file}`,
+                "invalid-path",
+                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
+              )],
             }),
           );
         }
@@ -83,7 +87,11 @@ export function registerImportTools(
             summary: `File not found: ${file}`,
             classification: "not-found",
             data: { symbol, candidates: [] },
-            diagnostics: [errorDiagnostic(`File not found: ${file}`, "not-found")],
+            diagnostics: [errorDiagnostic(
+              `File not found: ${file}`,
+              "not-found",
+              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_file_list` or `agda_search` to discover available files.",
+            )],
           }),
         );
       }
@@ -150,7 +158,11 @@ export function registerImportTools(
                 importedBindings: [],
                 clashSource: null,
               },
-              diagnostics: [errorDiagnostic(`Invalid file path: ${file}`, "invalid-path")],
+              diagnostics: [errorDiagnostic(
+                `Invalid file path: ${file}`,
+                "invalid-path",
+                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
+              )],
             }),
           );
         }
@@ -168,7 +180,11 @@ export function registerImportTools(
               importedBindings: [],
               clashSource: null,
             },
-            diagnostics: [errorDiagnostic(`File not found: ${file}`, "not-found")],
+            diagnostics: [errorDiagnostic(
+              `File not found: ${file}`,
+              "not-found",
+              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_file_list` or `agda_search` to discover available files.",
+            )],
           }),
         );
       }
