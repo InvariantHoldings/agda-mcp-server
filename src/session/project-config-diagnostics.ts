@@ -9,16 +9,34 @@ import {
   warningDiagnostic,
   type ToolDiagnostic,
 } from "../tools/tool-helpers.js";
-import type { ProjectConfigWarning } from "./project-config.js";
+import type {
+  ProjectConfigWarning,
+  ProjectConfigWarningSource,
+} from "./project-config.js";
+
+/**
+ * Inline prefix for a warning source. Mirrors the diagnostic `kind`
+ * (`project-config-{source}`) so an agent grepping the flat message
+ * text sees the same provenance the structured `kind` already encodes.
+ *
+ * Kept exported so callers that emit text-only output (e.g.
+ * `projectConfigWarningsText`) format messages identically.
+ */
+export function prefixForWarningSource(source: ProjectConfigWarningSource): string {
+  switch (source) {
+    case "env": return "env";
+    case "system": return "system";
+    case "file": return "config";
+  }
+}
 
 /**
  * Convert project-config warnings into structured tool diagnostics.
  *
  * Each warning becomes a `warning` diagnostic with kind
  * `project-config-{file|env|system}`. The message is prefixed with
- * `config:` or `env:` to make the source obvious in a flat diagnostic
- * list — the kind already encodes this, but raw message readers (e.g.
- * agents grepping a markdown summary) benefit from inline prefix too.
+ * the matching source label (`config:`, `env:`, `system:`) so the
+ * raw message text matches the kind for agents that read either side.
  */
 export function projectConfigDiagnostics(
   warnings: ReadonlyArray<ProjectConfigWarning> | undefined,
@@ -26,7 +44,7 @@ export function projectConfigDiagnostics(
   if (!warnings || warnings.length === 0) return [];
   return warnings.map((w) =>
     warningDiagnostic(
-      `${w.source === "env" ? "env" : "config"}: ${w.message}`,
+      `${prefixForWarningSource(w.source)}: ${w.message}`,
       `project-config-${w.source}`,
     ),
   );

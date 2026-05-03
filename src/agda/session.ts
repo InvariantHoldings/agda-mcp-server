@@ -48,7 +48,6 @@ import {
   effectiveProjectFlags,
   loadProjectConfig,
   mergeCommandLineOptions,
-  type ProjectConfigWarning,
 } from "../session/project-config.js";
 import { statSync } from "node:fs";
 

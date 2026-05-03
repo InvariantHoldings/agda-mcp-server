@@ -996,12 +996,7 @@ export function register(
           tool: "agda_project_config",
           summary,
           data,
-          diagnostics: projectConfig.warnings.map((w) =>
-            warningDiagnostic(
-              `${w.source === "env" ? "env" : "config"}: ${w.message}`,
-              `project-config-${w.source}`,
-            ),
-          ),
+          diagnostics: projectConfigDiagnostics(projectConfig.warnings),
         }),
         lines.join("\n"),
       );

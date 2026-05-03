@@ -331,10 +331,26 @@ function parseConfigFile(
     const value = obj.commandLineOptions;
     if (!Array.isArray(value)) {
       warn("'commandLineOptions' must be an array of strings.");
-    } else if (!value.every((item: unknown) => typeof item === "string")) {
-      warn("'commandLineOptions' must contain only strings.");
     } else {
-      const validation = validateCommandLineOptions(value);
+      // Filter out non-string entries individually rather than rejecting
+      // the whole array — a `[\"--Werror\", 42, \"--safe\"]` config still
+      // has two valid flags worth keeping. Each non-string element gets
+      // its own warning so the user can correct the offender(s) without
+      // hunting for which one tripped a generic "must contain only
+      // strings" message.
+      const stringEntries: string[] = [];
+      for (let i = 0; i < value.length; i++) {
+        const item = value[i];
+        if (typeof item === "string") {
+          stringEntries.push(item);
+        } else {
+          warn(
+            `'commandLineOptions[${i}]' is not a string (got ${typeofLabel(item)}); ` +
+            "ignoring this entry.",
+          );
+        }
+      }
+      const validation = validateCommandLineOptions(stringEntries);
       for (const error of validation.errors) {
         warn(error);
       }
@@ -343,6 +359,12 @@ function parseConfigFile(
   }
 
   return result;
+}
+
+function typeofLabel(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
 }
 
 /**

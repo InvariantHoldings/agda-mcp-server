@@ -96,15 +96,45 @@ test("emits warning for invalid commandLineOptions type (string instead of array
   expect(config.warnings.some((w) => w.message.includes("must be an array of strings"))).toBe(true);
 });
 
-test("emits warning when commandLineOptions array contains non-strings", () => {
+test("emits per-element warning for non-string entries and keeps the valid ones", () => {
   const dir = makeTempDir();
   writeFileSync(
     join(dir, PROJECT_CONFIG_FILENAME),
-    JSON.stringify({ commandLineOptions: ["--safe", 42] }),
+    JSON.stringify({ commandLineOptions: ["--safe", 42, "--Werror", null] }),
+  );
+  const config = loadProjectConfig(dir);
+  // Valid string flags survive — dropping the whole array would lose
+  // good config because of one bad entry.
+  expect(config.fileFlags).toEqual(["--safe", "--Werror"]);
+  // One warning per offending element, with its index.
+  const offenderWarnings = config.warnings.filter((w) =>
+    w.message.includes("'commandLineOptions[")
+  );
+  expect(offenderWarnings.length).toBe(2);
+  expect(offenderWarnings.some((w) => w.message.includes("commandLineOptions[1]"))).toBe(true);
+  expect(offenderWarnings.some((w) => w.message.includes("commandLineOptions[3]"))).toBe(true);
+  // Type label tells the user *what* the bad entry was.
+  expect(offenderWarnings.some((w) => w.message.includes("got number"))).toBe(true);
+  expect(offenderWarnings.some((w) => w.message.includes("got null"))).toBe(true);
+});
+
+test("non-string-only commandLineOptions yields zero fileFlags but warns per element", () => {
+  const dir = makeTempDir();
+  writeFileSync(
+    join(dir, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOptions: [1, 2, true, {}, []] }),
   );
   const config = loadProjectConfig(dir);
   expect(config.fileFlags).toEqual([]);
-  expect(config.warnings.some((w) => w.message.includes("must contain only strings"))).toBe(true);
+  // 5 element-level warnings, one per offender.
+  const offenderWarnings = config.warnings.filter((w) =>
+    w.message.includes("'commandLineOptions[")
+  );
+  expect(offenderWarnings.length).toBe(5);
+  // Type labels distinguish primitive cases from object/array cases.
+  expect(offenderWarnings.some((w) => w.message.includes("got boolean"))).toBe(true);
+  expect(offenderWarnings.some((w) => w.message.includes("got object"))).toBe(true);
+  expect(offenderWarnings.some((w) => w.message.includes("got array"))).toBe(true);
 });
 
 test("emits warning for invalid (blocked/non-flag) entries inside file commandLineOptions", () => {
