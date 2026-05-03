@@ -314,19 +314,30 @@ export function registerProjectTools(
         }))
         .sort((a, b) => b.files.length - a.files.length || a.rootCauseFile.localeCompare(b.rootCauseFile));
 
+      const cleanCount = statuses.filter((entry) => entry.status === "clean").length;
+      const holesCount = statuses.filter((entry) => entry.status === "holes").length;
+      const errorsCount = statuses.filter((entry) => entry.status === "error").length;
+      const dirLabel = relativeOrIdentity(repoRoot, scanRoot);
+
+      // 1-line summary is for agents that read the envelope by hand;
+      // the multi-line text body adds the per-bucket breakdown that
+      // would clutter the summary line.
+      const summary =
+        `Scanned ${statuses.length} file(s) under ${dirLabel}: ` +
+        `${cleanCount} clean, ${holesCount} with holes, ${errorsCount} errors.`;
       const text = [
-        `Scanned ${statuses.length} file(s) under ${relativeOrIdentity(repoRoot, scanRoot)}.`,
-        `Clean: ${statuses.filter((entry) => entry.status === "clean").length}`,
-        `With holes: ${statuses.filter((entry) => entry.status === "holes").length}`,
-        `Errors: ${statuses.filter((entry) => entry.status === "error").length}`,
+        `Scanned ${statuses.length} file(s) under ${dirLabel}.`,
+        `Clean: ${cleanCount}`,
+        `With holes: ${holesCount}`,
+        `Errors: ${errorsCount}`,
       ].join("\n");
 
       return makeToolResult(
         okEnvelope({
           tool: "agda_bulk_status",
-          summary: text,
+          summary,
           data: {
-            directory: relativeOrIdentity(repoRoot, scanRoot),
+            directory: dirLabel,
             files: statuses.map(({ errors, ...rest }) => rest),
             clusters,
           },

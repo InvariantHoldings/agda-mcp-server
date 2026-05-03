@@ -227,7 +227,12 @@ export function registerTextTool(args: {
         return makeToolResult(
           okEnvelope({
             tool: args.name,
-            summary: textValue,
+            // `summary` is contractually a 1-line digest, but text-only
+            // tools historically produced multi-line bodies and had it
+            // duplicated whole. Take the first non-empty line; the full
+            // body still goes in `data.text` and the markdown body
+            // alongside.
+            summary: digestText(textValue),
             data: { text: textValue },
             elapsedMs: Math.round(performance.now() - startMs),
           }),
@@ -238,6 +243,18 @@ export function registerTextTool(args: {
       }
     },
   });
+}
+
+/**
+ * Take the first non-empty line of `text` as a 1-line summary digest,
+ * truncating overly long lines. Used by text-only tool wrappers so the
+ * envelope's `summary` field stays terse even when the body is a
+ * multi-line markdown blob.
+ */
+function digestText(text: string): string {
+  const firstNonEmpty = text.split(/\r?\n/u).find((line) => line.trim().length > 0) ?? text.trim();
+  if (firstNonEmpty.length <= 200) return firstNonEmpty;
+  return firstNonEmpty.slice(0, 197) + "…";
 }
 
 export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
@@ -291,7 +308,9 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
         return makeToolResult(
           okEnvelope({
             tool: args.name,
-            summary: body,
+            // 1-line digest of the goal-text body (multi-line bodies
+            // would otherwise be repeated whole in `summary`).
+            summary: digestText(body),
             data: { text: body, goalId: cbArgs.goalId },
             stale: args.session.isFileStale() || undefined,
             elapsedMs: Math.round(performance.now() - startMs),
