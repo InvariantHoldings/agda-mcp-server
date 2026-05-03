@@ -132,6 +132,48 @@ test("emits warning for unknown top-level keys", () => {
   expect(config.warnings.some((w) => w.message.includes("Unknown key 'extras'"))).toBe(true);
 });
 
+test("unknown-key warning includes 'Did you mean ...?' for case-typo of commandLineOptions", () => {
+  const dir = makeTempDir();
+  writeFileSync(
+    join(dir, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandlineoptions: ["--safe"] }),
+  );
+  const config = loadProjectConfig(dir);
+  const warning = config.warnings.find((w) =>
+    w.message.includes("Unknown key 'commandlineoptions'"),
+  );
+  expect(warning).toBeDefined();
+  expect(warning!.message).toContain("Did you mean 'commandLineOptions'?");
+});
+
+test("unknown-key warning includes 'Did you mean ...?' for near-misses", () => {
+  const dir = makeTempDir();
+  writeFileSync(
+    join(dir, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ commandLineOption: ["--safe"] }), // missing trailing 's'
+  );
+  const config = loadProjectConfig(dir);
+  const warning = config.warnings.find((w) =>
+    w.message.includes("Unknown key 'commandLineOption'"),
+  );
+  expect(warning).toBeDefined();
+  expect(warning!.message).toContain("Did you mean 'commandLineOptions'?");
+});
+
+test("unknown-key warning omits 'Did you mean' for far-away keys", () => {
+  const dir = makeTempDir();
+  writeFileSync(
+    join(dir, PROJECT_CONFIG_FILENAME),
+    JSON.stringify({ totallyUnrelatedKey: 1 }),
+  );
+  const config = loadProjectConfig(dir);
+  const warning = config.warnings.find((w) =>
+    w.message.includes("Unknown key 'totallyUnrelatedKey'"),
+  );
+  expect(warning).toBeDefined();
+  expect(warning!.message).not.toContain("Did you mean");
+});
+
 test("$schema key is silently accepted", () => {
   const dir = makeTempDir();
   writeFileSync(

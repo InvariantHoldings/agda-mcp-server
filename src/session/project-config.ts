@@ -227,6 +227,52 @@ export function parseEnvFlags(): string[] {
   return raw.split(/\s+/u).filter(Boolean);
 }
 
+/**
+ * Case-insensitive nearest-match against `RECOGNISED_KEYS` for typoed
+ * config keys. Most typos in JSON keys are casing — `commandlineoptions`
+ * vs `commandLineOptions` — so we lower-case before comparing. Returns
+ * the first match within edit distance 3 (covers `commandlineoptions`
+ * → `commandLineOptions` which has 4 case substitutions, but the
+ * lowercase compare collapses those to 0). Returns null if no candidate
+ * is close enough.
+ */
+function suggestRecognisedKey(input: string): string | null {
+  const inputLower = input.toLowerCase();
+  let best: { key: string; distance: number } | null = null;
+  for (const candidate of RECOGNISED_KEYS) {
+    const candLower = candidate.toLowerCase();
+    if (candLower === inputLower) return candidate;
+    const dist = simpleDistance(inputLower, candLower, 3);
+    if (dist <= 3 && (best === null || dist < best.distance)) {
+      best = { key: candidate, distance: dist };
+    }
+  }
+  return best?.key ?? null;
+}
+
+/** Cheap edit distance with early termination for the recognised-key check. */
+function simpleDistance(a: string, b: string, cap: number): number {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  if (a === b) return 0;
+  const aLen = a.length;
+  const bLen = b.length;
+  let prev = new Array<number>(bLen + 1);
+  let curr = new Array<number>(bLen + 1);
+  for (let j = 0; j <= bLen; j++) prev[j] = j;
+  for (let i = 1; i <= aLen; i++) {
+    curr[0] = i;
+    let rowMin = i;
+    for (let j = 1; j <= bLen; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      if (curr[j] < rowMin) rowMin = curr[j];
+    }
+    if (rowMin > cap) return cap + 1;
+    [prev, curr] = [curr, prev];
+  }
+  return prev[bLen];
+}
+
 function parseConfigFile(
   configPath: string,
 ): Pick<ProjectConfig, "fileFlags" | "warnings" | "configFilePath"> {
@@ -272,8 +318,11 @@ function parseConfigFile(
 
   for (const key of Object.keys(obj)) {
     if (!RECOGNISED_KEYS.has(key)) {
+      const suggestion = suggestRecognisedKey(key);
+      const hint = suggestion ? ` Did you mean '${suggestion}'?` : "";
       warn(
-        `Unknown key '${key}' in .agda-mcp.json. Recognised keys: ${[...RECOGNISED_KEYS].join(", ")}.`,
+        `Unknown key '${key}' in .agda-mcp.json.${hint} ` +
+        `Recognised keys: ${[...RECOGNISED_KEYS].join(", ")}.`,
       );
     }
   }
