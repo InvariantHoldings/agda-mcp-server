@@ -30,6 +30,7 @@ import {
   stalenessWarning,
   validateGoalId,
 } from "./tool-gates.js";
+import { goalIdSchema } from "./tool-schemas.js";
 
 /**
  * Wrap a session tool handler with staleness warning and error handling.
@@ -283,7 +284,7 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
 }): void {
   const outputDataSchema =
     args.outputDataSchema
-    ?? z.object({ text: z.string(), goalId: z.number() });
+    ?? z.object({ text: z.string(), goalId: goalIdSchema });
 
   registerStructuredTool({
     server: args.server,

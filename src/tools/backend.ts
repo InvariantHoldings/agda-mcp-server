@@ -13,6 +13,7 @@ import {
   registerTextTool,
 } from "./tool-helpers.js";
 import { resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
+import { goalIdSchema } from "./tool-schemas.js";
 
 function backendExpressionHelp(): string {
   return "Backend constructor expression (for example: GHC, GHCNoMain, LaTeX, QuickLaTeX, or OtherBackend \"JS\").";
@@ -80,7 +81,7 @@ export function register(
     category: "backend",
     protocolCommands: ["Cmd_backend_hole"],
     inputSchema: {
-      goalId: z.number().describe("Goal ID for the hole command context"),
+      goalId: goalIdSchema.describe("Goal ID for the hole command context"),
       holeContents: z.string().optional().describe("Current hole contents text (defaults to empty string)"),
       backend: z.string().describe(backendExpressionHelp()),
       payload: z.string().describe("Arbitrary backend payload string"),

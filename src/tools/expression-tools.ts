@@ -15,6 +15,7 @@ import {
   sessionErrorStateGate,
   validateGoalId,
 } from "./tool-helpers.js";
+import { goalIdSchema, optionalGoalIdSchema } from "./tool-schemas.js";
 
 export function register(
   server: McpServer,
@@ -29,11 +30,11 @@ export function register(
     protocolCommands: ["Cmd_compute", "Cmd_compute_toplevel"],
     inputSchema: {
       expr: z.string().describe("The Agda expression to normalize"),
-      goalId: z.number().optional().describe("Optional goal ID for context"),
+      goalId: optionalGoalIdSchema.describe("Optional goal ID for context"),
     },
     outputDataSchema: z.object({
       expr: z.string(),
-      goalId: z.number().optional(),
+      goalId: optionalGoalIdSchema,
       normalForm: z.string(),
     }),
     callback: async ({ expr, goalId }: { expr: string; goalId?: number }) => {
@@ -84,11 +85,11 @@ export function register(
     protocolCommands: ["Cmd_infer", "Cmd_infer_toplevel"],
     inputSchema: {
       expr: z.string().describe("The Agda expression to infer the type of"),
-      goalId: z.number().optional().describe("Optional goal ID for context"),
+      goalId: optionalGoalIdSchema.describe("Optional goal ID for context"),
     },
     outputDataSchema: z.object({
       expr: z.string(),
-      goalId: z.number().optional(),
+      goalId: optionalGoalIdSchema,
       inferredType: z.string(),
     }),
     callback: async ({ expr, goalId }: { expr: string; goalId?: number }) => {
@@ -139,7 +140,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_elaborate_give"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID for context"),
+      goalId: goalIdSchema.describe("The goal ID for context"),
       expr: z.string().describe("The Agda expression to elaborate"),
     },
     callback: async ({ goalId, expr }) => {
@@ -156,7 +157,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_helper_function"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID for context"),
+      goalId: goalIdSchema.describe("The goal ID for context"),
       expr: z.string().describe("The expression to generate a helper for"),
     },
     callback: async ({ goalId, expr }) => {

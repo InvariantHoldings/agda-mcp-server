@@ -80,7 +80,16 @@ export function registerProjectTools(
       for (const dep of deps) {
         const abs = resolve(repoRoot, dep);
         if (!existsSync(abs)) continue;
-        const source = readFileSync(abs, "utf8");
+        // Per-file try/catch so an unreadable dependency (permissions
+        // / deleted between existsSync and read) doesn't abort the
+        // closure scan. Caller still gets the postulates from every
+        // dependency we COULD read.
+        let source: string;
+        try {
+          source = readFileSync(abs, "utf8");
+        } catch {
+          continue;
+        }
         const sites = extractPostulateSites(source);
         for (const site of sites) {
           for (const declaration of site.declarations.length > 0 ? site.declarations : ["(anonymous)"]) {

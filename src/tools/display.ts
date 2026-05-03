@@ -13,6 +13,7 @@ import {
   registerTextTool,
 } from "./tool-helpers.js";
 import { resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
+import { goalIdSchema } from "./tool-schemas.js";
 
 export function register(
   server: McpServer,
@@ -65,7 +66,7 @@ export function register(
     category: "highlighting",
     protocolCommands: ["Cmd_highlight"],
     inputSchema: {
-      goalId: z.number().describe("Goal ID used as highlighting context"),
+      goalId: goalIdSchema.describe("Goal ID used as highlighting context"),
       expr: z.string().describe("Expression to highlight"),
     },
     callback: async ({ goalId, expr }) => {

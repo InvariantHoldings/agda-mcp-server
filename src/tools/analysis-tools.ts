@@ -13,6 +13,7 @@ import {
   deriveSuggestions,
   findMatchingTerms,
 } from "../agda/goal-analysis.js";
+import { goalIdSchema } from "./tool-schemas.js";
 
 export function register(
   server: McpServer,
@@ -71,7 +72,7 @@ export function register(
     description: "Analyze a goal: show its type, parsed context, splittable variables, and suggested next actions. Use this to decide what proof step to take.",
     category: "analysis",
     inputSchema: {
-      goalId: z.number().describe("The goal ID to analyze"),
+      goalId: goalIdSchema.describe("The goal ID to analyze"),
     },
     callback: async ({ goalId }) => {
       const info = await session.goal.typeContext(goalId);
@@ -177,7 +178,7 @@ export function register(
     description: "Search the goal's context for terms whose type matches the goal type (or a custom target type). Returns candidate expressions that might fill the goal.",
     category: "analysis",
     inputSchema: {
-      goalId: z.number().describe("The goal ID to search in"),
+      goalId: goalIdSchema.describe("The goal ID to search in"),
       targetType: z.string().optional().describe("Optional type to search for (defaults to the goal's type)"),
       scope: z.enum(["local", "module", "imported"]).optional().describe("Search scope: local context only, module-wide, or imported definitions"),
       offset: z.number().int().min(0).optional().describe("0-based pagination offset"),

@@ -14,6 +14,7 @@ import {
   sessionErrorStateGate,
   validateGoalId,
 } from "./tool-helpers.js";
+import { optionalGoalIdSchema } from "./tool-schemas.js";
 
 export function register(
   server: McpServer,
@@ -28,11 +29,11 @@ export function register(
     protocolCommands: ["Cmd_why_in_scope", "Cmd_why_in_scope_toplevel"],
     inputSchema: {
       name: z.string().describe("The name to look up"),
-      goalId: z.number().optional().describe("Optional goal ID for context"),
+      goalId: optionalGoalIdSchema.describe("Optional goal ID for context"),
     },
     outputDataSchema: z.object({
       name: z.string(),
-      goalId: z.number().optional(),
+      goalId: optionalGoalIdSchema,
       explanation: z.string(),
     }),
     callback: async ({ name, goalId }: { name: string; goalId?: number }) => {
@@ -89,11 +90,11 @@ export function register(
     protocolCommands: ["Cmd_show_module_contents", "Cmd_show_module_contents_toplevel"],
     inputSchema: {
       moduleName: z.string().describe("The fully qualified module name"),
-      goalId: z.number().optional().describe("Optional goal ID for context"),
+      goalId: optionalGoalIdSchema.describe("Optional goal ID for context"),
     },
     outputDataSchema: z.object({
       moduleName: z.string(),
-      goalId: z.number().optional(),
+      goalId: optionalGoalIdSchema,
       contents: z.string(),
     }),
     callback: async ({ moduleName, goalId }: { moduleName: string; goalId?: number }) => {

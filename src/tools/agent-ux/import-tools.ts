@@ -187,7 +187,19 @@ export function registerImportTools(
         if (!relImported) continue;
         const absImported = resolve(repoRoot, relImported);
         if (!existsSync(absImported)) continue;
-        const importedDefs = parseTopLevelDefinitions(readFileSync(absImported, "utf8"));
+        // Per-file try/catch so one unreadable import (permissions /
+        // deleted between the existsSync check and the read) doesn't
+        // abort the whole clash-source search. The overall tool would
+        // still produce a result envelope via the registerStructuredTool
+        // safety net, but skip-and-continue gives the agent a useful
+        // partial answer for the imports that DID succeed.
+        let importedSource: string;
+        try {
+          importedSource = readFileSync(absImported, "utf8");
+        } catch {
+          continue;
+        }
+        const importedDefs = parseTopLevelDefinitions(importedSource);
         for (const def of importedDefs) {
           if (def.name !== symbol) continue;
           importedBindings.push({
