@@ -9,6 +9,48 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`ARCHITECTURE.md`** — top-level entry point describing the
+  `protocol → agda → session → tools` layering, the 500-line
+  per-source-file ceiling, the output-envelope contract, and the
+  static-metadata-in-JSON convention. New contributors and assistant
+  agents should read this before touching `src/`.
+- **`nextAction` recovery hints on every error envelope** —
+  `ToolDiagnostic.nextAction` was always part of the schema but was
+  populated nowhere. Every load-shared error path
+  (`file-not-found` / `process-error` / `invalid-path` /
+  `invalid-profile-options` / `invalid-command-line-options`) and
+  every `tool-errors.ts` path (`PathSandboxError`, generic
+  `ToolInvocationError`, `missingPathToolError`) now ships a concrete
+  recovery hint pointing the agent at the right next call.
+
+### Changed
+
+- **Source-file size ceiling: every file in `src/` is now ≤ 500
+  lines.** Four grab-bag files split into cohesive modules with
+  thin barrel files at the original paths so consumers' imports keep
+  working unchanged:
+  - `src/tools/agent-ux-tools.ts` (1303 → 38) → six sub-modules under
+    `src/tools/agent-ux/` (`shared.ts`, `migration-tools.ts`,
+    `edit-tools.ts`, `import-tools.ts`, `options-tools.ts`,
+    `project-tools.ts`).
+  - `src/session/apply-proof-edit.ts` (626 → 37) → `safe-source-io.ts`,
+    `apply-goal-edit.ts`, `apply-batch-edits.ts`, `apply-text-edit.ts`.
+  - `src/agda/agent-ux.ts` (509 → 71) → `error-classifier.ts`,
+    `source-parsers.ts`, `refactor-helpers.ts`, `clause-fixity.ts`.
+  - `src/agda/session.ts` (508 → 442) → `agda-process-spawn.ts`,
+    `agda-version-detection.ts`.
+- **Output redundancy: `summary` no longer mirrors multi-line text
+  bodies.** `registerTextTool` and `registerGoalTextTool` now feed
+  the body through a `digestText()` helper that picks the first
+  non-empty line and truncates over 200 chars. `agda_bulk_status`
+  switched from `summary === text` (4-line breakdown duplicated
+  whole) to a 1-line digest.
+- **Migration maps now live in JSON-backed data files** (advances
+  #15). `src/tools/agent-ux/data/{stdlib,builtin}-migrations.json`
+  validated at module load via Zod and shipped via the existing
+  `copy-json-assets.mjs` post-build step. Logic stays in TypeScript;
+  pure metadata is in JSON.
+
 - **Configurable Agda CLI flags for `Cmd_load`** (#49) — `agda_load` and
   `agda_typecheck` accept a new `commandLineOptions` array that is passed
   through to Agda's `Cmd_load` `[String]` argument. Validated at the
