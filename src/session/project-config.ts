@@ -114,12 +114,12 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
 
 /**
  * Parse `AGDA_MCP_DEFAULT_FLAGS` env var into an array of flags.
- * Splits on whitespace, trims, and filters empty strings.
+ * Splits on whitespace and filters empty strings.
  */
-function parseEnvFlags(): string[] {
+export function parseEnvFlags(): string[] {
   const raw = process.env[ENV_DEFAULT_FLAGS];
   if (!raw) return [];
-  return raw.split(/\s+/u).map((s) => s.trim()).filter(Boolean);
+  return raw.split(/\s+/u).filter(Boolean);
 }
 
 function parseConfigFile(configPath: string): ProjectConfig {

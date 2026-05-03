@@ -26,7 +26,7 @@ import { buildImportGraph, computeImpact } from "../agda/import-graph.js";
 import { createLibraryRegistration } from "../agda/library-registration.js";
 import { filePathDescription, isAgdaSourceFile } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
-import { loadProjectConfig, ENV_DEFAULT_FLAGS } from "../session/project-config.js";
+import { loadProjectConfig, ENV_DEFAULT_FLAGS, parseEnvFlags } from "../session/project-config.js";
 import {
   errorDiagnostic,
   errorEnvelope,
@@ -841,10 +841,7 @@ export function register(
       const projectConfig = loadProjectConfig(repoRoot);
       if (projectConfig.commandLineOptions) {
         // Distinguish env-var flags from file-config flags
-        const envRaw = process.env[ENV_DEFAULT_FLAGS];
-        const envFlags = new Set(
-          envRaw ? envRaw.split(/\s+/u).map((s) => s.trim()).filter(Boolean) : [],
-        );
+        const envFlags = new Set(parseEnvFlags());
         for (const opt of projectConfig.commandLineOptions) {
           options.push({ option: opt, source: envFlags.has(opt) ? "env-var" : "project-config" });
         }
