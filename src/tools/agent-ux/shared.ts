@@ -3,30 +3,33 @@
 // Helpers shared across the agent-UX tool group. Pure functions only —
 // no MCP / session state in here, so each helper can be unit-tested
 // in isolation and reused by any sub-module under `tools/agent-ux/`.
+//
+// Path-related helpers live upstream in `src/agda/source-path-utils.ts`
+// so the same regex / extraction logic is used by every consumer
+// (tools, session, integration tests). This module re-exports them
+// so existing imports under `tools/agent-ux/*` keep working unchanged.
 
 import { readFileSync, readdirSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
 import { isAgdaSourceFile } from "../../agda/version-support.js";
 import {
+  AGDA_SOURCE_PATH_RE,
+  AGDA_SOURCE_SUFFIX_RE,
+  extractPathFromDiagnostic,
+  moduleNameFromPath,
+} from "../../agda/source-path-utils.js";
+import {
   parseModuleSourceShape,
   parseTopLevelDefinitions,
-  rewriteCompilerPlaceholders,
 } from "../../agda/agent-ux.js";
 
-/**
- * All supported Agda source extensions including every literate variant.
- * Anchors a `.agda` / `.lagda[.md|.rst|.tex|.org|.typ|.tree]` suffix at
- * the END of the matched string.
- */
-export const AGDA_SOURCE_SUFFIX_RE = /\.(?:agda|lagda(?:\.(?:md|rst|tex|org|typ|tree))?)$/iu;
-
-/**
- * Captures an Agda-source-shaped path embedded inside a longer string
- * (e.g. an Agda diagnostic line "/abs/path/Foo.agda:12:3 ..."). Used to
- * extract the offender from compiler error text.
- */
-export const AGDA_SOURCE_PATH_RE = /([A-Za-z0-9_./-]+\.(?:agda|lagda(?:\.(?:md|rst|tex|org|typ|tree))?))/iu;
+export {
+  AGDA_SOURCE_PATH_RE,
+  AGDA_SOURCE_SUFFIX_RE,
+  extractPathFromDiagnostic,
+  moduleNameFromPath,
+};
 
 /**
  * Recursively list every Agda source file under `root`, sorted by
@@ -107,26 +110,6 @@ export function relativeOrIdentity(root: string, path: string): string {
 /** Escape a string for embedding inside a `RegExp` body. */
 export function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * Pick the first Agda-source-shaped path out of a diagnostic message.
- * Returns null when the diagnostic has no path component (e.g. a plain
- * "Internal error" with no file context).
- */
-export function extractPathFromDiagnostic(message: string): string | null {
-  const rewritten = rewriteCompilerPlaceholders(message);
-  const match = AGDA_SOURCE_PATH_RE.exec(rewritten);
-  return match?.[1] ?? null;
-}
-
-/** Convert a relative on-disk path to its dotted Agda module name. */
-export function moduleNameFromPath(relPath: string): string {
-  return relPath
-    .replace(AGDA_SOURCE_SUFFIX_RE, "")
-    .replaceAll("\\", "/")
-    .replace(/\//g, ".")
-    .replace(/^agda\./, "");
 }
 
 /**

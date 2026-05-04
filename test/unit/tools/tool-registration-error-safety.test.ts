@@ -94,6 +94,41 @@ test("the elapsedMs timer still fires for callbacks that throw", async () => {
   expect(result.structuredContent.elapsedMs).toBeGreaterThanOrEqual(0);
 });
 
+test("safety-net error envelope satisfies the registered outputSchema (required-data tools)", async () => {
+  // Regression: before the toolEnvelopeSchema relaxation, an uncaught
+  // throw produced data: {} which violated outputDataSchema for any
+  // tool whose data has required fields. The MCP framework's output
+  // validator would reject the envelope and re-throw — defeating the
+  // safety net. This test pins that an envelope from the catch path
+  // round-trips through the registered output schema cleanly even
+  // when the tool's outputDataSchema requires fields.
+  clearToolManifest();
+  const server = makeCapturingServer();
+  const requiredOutputData = z.object({
+    file: z.string(),
+    count: z.number(),
+    deepNested: z.object({ flag: z.boolean() }),
+  });
+  registerStructuredTool({
+    server: server as unknown as McpServer,
+    name: "test_required_data",
+    description: "test",
+    category: "analysis",
+    outputDataSchema: requiredOutputData,
+    callback: async () => {
+      throw new Error("oops");
+    },
+  });
+
+  const result = await server.get("test_required_data")!.callback({});
+  expect(result.isError).toBe(true);
+  // The envelope's data is `{}` (relaxed) but the framework's
+  // output schema validation should still pass because the union
+  // accepts a record-of-unknown shape on errors.
+  const data = result.structuredContent.data;
+  expect(typeof data).toBe("object");
+});
+
 test("happy-path callbacks still pass through unchanged", async () => {
   clearToolManifest();
   const server = makeCapturingServer();

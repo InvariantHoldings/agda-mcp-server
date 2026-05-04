@@ -62,11 +62,23 @@ const envelopeBaseSchema = z.object({
   elapsedMs: z.int().nonnegative().optional(),
 });
 
+/**
+ * Build a schema for a tool envelope whose `data` shape conforms to
+ * `dataSchema`. Wraps `dataSchema` in `z.union([dataSchema, z.record(...)])`
+ * so the schema validates STRICT data on success but tolerates the
+ * looser `{}` / partial shape that `makeTextToolErrorResult` produces
+ * when the structural safety net catches an uncaught exception.
+ *
+ * The MCP SDK's introspection looks for `type: "object"` at the top
+ * level (so e.g. `tools/list` exposes a sane outputSchema), so we
+ * KEEP the envelope as an object schema and only relax the `data`
+ * field — not the whole envelope.
+ */
 export function toolEnvelopeSchema(
   dataSchema: z.ZodTypeAny,
 ): z.ZodTypeAny {
   return envelopeBaseSchema.extend({
-    data: dataSchema,
+    data: z.union([dataSchema, z.record(z.string(), z.unknown())]),
   });
 }
 

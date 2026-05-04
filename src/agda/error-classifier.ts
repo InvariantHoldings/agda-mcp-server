@@ -50,11 +50,17 @@ export function normalizeConfidence(value: number): number {
  * out of an error message so downstream regex matches don't have to
  * branch on the literal extension. Used both by the classifier and
  * by tools that surface the error message verbatim to a human.
+ *
+ * MUST be case-sensitive: Agda's internal placeholders are uppercase
+ * (`.AGDA`, `.LAGDA.MD`) by convention, while real source extensions
+ * in diagnostics are lowercase (`Foo.lagda.md`). A case-insensitive
+ * pass would over-zealously rewrite real path extensions and break
+ * `extractPathFromDiagnostic`.
  */
 export function rewriteCompilerPlaceholders(message: string): string {
   return message
     .replace(/\.AGDA\b/g, "<ext>")
-    .replace(/\.LAGDA(?:\.[A-Z]+)?\b/giu, "<ext>");
+    .replace(/\.LAGDA(?:\.[A-Z]+)?\b/gu, "<ext>");
 }
 
 /**
