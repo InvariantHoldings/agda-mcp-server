@@ -29,7 +29,7 @@ export function register(
   _repoRoot: string,
 ): void {
   registerToolsCatalog(server, session);
-  registerProtocolParity(server);
+  registerProtocolParity(server, session);
   registerBugReportBundle(server, session);
   registerBugReportUpdateBundle(server, session);
   registerSessionSnapshot(server, session, _repoRoot);

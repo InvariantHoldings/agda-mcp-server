@@ -16,6 +16,7 @@ import { AgdaSession, getAgdaCapabilities } from "../agda-process.js";
 import { getServerVersion } from "../server-version.js";
 
 import { listToolManifest, listToolSchemas } from "./manifest.js";
+import { listAllToolFamilyExamples } from "./tool-family-examples.js";
 import { makeToolResult, okEnvelope, registerStructuredTool } from "./tool-helpers.js";
 import { toolsCatalogDataSchema, tryGetAgdaVersion } from "./reporting-schemas.js";
 
@@ -23,12 +24,13 @@ export function registerToolsCatalog(server: McpServer, session: AgdaSession): v
   registerStructuredTool({
     server,
     name: "agda_tools_catalog",
-    description: "Return the generated manifest view of exposed MCP tools, categories, protocol mappings, and schema field names. Also reports the detected Agda version and which extensions, feature flags, and protocol features are available.",
+    description: "Return the generated manifest view of exposed MCP tools, categories, protocol mappings, schema field names, and representative example invocations per tool family. Also reports the detected Agda version and which extensions, feature flags, and protocol features are available.",
     category: "reporting",
     outputDataSchema: toolsCatalogDataSchema,
     callback: async () => {
       const tools = listToolManifest();
       const schemas = listToolSchemas();
+      const toolFamilyExamples = listAllToolFamilyExamples();
       const serverVersion = getServerVersion();
       // Trigger version detection if it hasn't run yet (e.g. when this
       // tool is invoked before any other Agda command). tryGetAgdaVersion
@@ -81,6 +83,24 @@ export function registerToolsCatalog(server: McpServer, session: AgdaSession): v
         }
       }
 
+      const exampleFamilies = Object.keys(toolFamilyExamples).sort();
+      if (exampleFamilies.length > 0) {
+        output += "\n### Examples by family\n";
+        for (const family of exampleFamilies) {
+          const examples = toolFamilyExamples[family] ?? [];
+          if (examples.length === 0) continue;
+          output += `\n**${family}**\n`;
+          for (const example of examples) {
+            const argString = JSON.stringify(example.args);
+            output += `- \`${example.tool}\` — ${example.summary}\n`;
+            output += `  Args: \`${argString}\`\n`;
+            if (example.note) {
+              output += `  Note: ${example.note}\n`;
+            }
+          }
+        }
+      }
+
       return makeToolResult(
         okEnvelope({
           tool: "agda_tools_catalog",
@@ -92,6 +112,7 @@ export function registerToolsCatalog(server: McpServer, session: AgdaSession): v
             supportedFeatureFlags,
             structuredGiveResult,
             tools,
+            toolFamilyExamples,
           },
         }),
         output,

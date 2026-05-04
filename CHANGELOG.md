@@ -9,6 +9,21 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Declared supported-Agda range (issue #41 part 2).** A new
+  `agdaMcpServer` block in `package.json` records `minAgdaVersion`
+  and `maxTestedAgdaVersion`. The server now (a) emits a stderr
+  warning at startup when the detected `agda --version` falls
+  outside the declared range and (b) reflects both the declared
+  range and the live classification (`below-min` / `in-range` /
+  `above-max` / `unknown`) in `agda_protocol_parity` output and its
+  structured payload, so callers can see whether their installed
+  Agda is in tested territory without parsing version strings.
+- **Representative tool-family examples (issue #18).** A curated
+  JSON-backed table at `src/tools/data/tool-family-examples.json`
+  surfaces per-family invocations through `agda_tools_catalog`'s
+  text body and structured `data.toolFamilyExamples` payload. New
+  tests assert that every example references a tool the server
+  actually exposes.
 - **`ARCHITECTURE.md`** — top-level entry point describing the
   `protocol → agda → session → tools` layering, the 500-line
   per-source-file ceiling, the output-envelope contract, and the

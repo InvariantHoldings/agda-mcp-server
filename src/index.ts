@@ -20,9 +20,13 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { AgdaSession, findAgdaBinary } from "./agda-process.js";
+import { AgdaSession, findAgdaBinary, parseAgdaVersion } from "./agda-process.js";
 import { PROJECT_ROOT, SERVER_REPO_ROOT, resolveProjectPath } from "./repo-root.js";
-import { getServerVersion } from "./server-version.js";
+import {
+  classifyAgdaAgainstSupportedRange,
+  describeOutOfRangeWarning,
+  getServerVersion,
+} from "./server-version.js";
 
 import { registerCoreTools } from "./tools/register-core-tools.js";
 import { registerGlobalProvenance } from "./tools/tool-helpers.js";
@@ -151,6 +155,25 @@ try {
   const firstLine = rawVersion.split(/\r?\n/u)[0]?.trim();
   if (firstLine) {
     registerGlobalProvenance("agdaVersion", firstLine);
+    // Compare the detected Agda against the declared supported range
+    // (package.json#agdaMcpServer). Emits a stderr warning when the
+    // version is below the declared minimum or above the maximum
+    // tested version. The server still starts in either case — the
+    // range is a soft compatibility contract, not a gate, so users on
+    // newer Agda releases can still try the server while being aware
+    // they're past CI coverage.
+    try {
+      const parsed = parseAgdaVersion(firstLine);
+      const status = classifyAgdaAgainstSupportedRange(parsed);
+      const warning = describeOutOfRangeWarning(status);
+      if (warning) {
+        process.stderr.write(`agda-mcp-server: ${warning}\n`);
+      }
+    } catch {
+      // Could not parse the detected version — skip the warning. The
+      // provenance stamp above still records the raw string for
+      // downstream debugging.
+    }
   }
 } catch {
   // Agda not reachable from the spawn point — skip the provenance stamp.

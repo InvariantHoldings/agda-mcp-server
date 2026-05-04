@@ -20,6 +20,13 @@ export const manifestEntrySchema = z.object({
   outputFields: z.array(z.string()),
 });
 
+export const toolFamilyExampleSchema = z.object({
+  tool: z.string(),
+  summary: z.string(),
+  args: z.record(z.string(), z.unknown()),
+  note: z.string().optional(),
+});
+
 export const toolsCatalogDataSchema = z.object({
   serverVersion: z.string(),
   agdaVersion: z.string().optional(),
@@ -27,6 +34,7 @@ export const toolsCatalogDataSchema = z.object({
   supportedFeatureFlags: z.array(z.string()).optional(),
   structuredGiveResult: z.boolean().optional(),
   tools: z.array(manifestEntrySchema),
+  toolFamilyExamples: z.record(z.string(), z.array(toolFamilyExampleSchema)),
 });
 
 export const protocolParityEntrySchema = z.object({
@@ -41,6 +49,18 @@ export const protocolParityEntrySchema = z.object({
   issues: z.array(z.number()),
 });
 
+export const supportedAgdaRangeSchema = z.object({
+  minAgdaVersion: z.string().optional(),
+  maxTestedAgdaVersion: z.string().optional(),
+});
+
+export const agdaVersionRangeStatusSchema = z.object({
+  classification: z.enum(["unknown", "below-min", "in-range", "above-max"]),
+  detected: z.string().optional(),
+  range: supportedAgdaRangeSchema,
+  warning: z.string().optional(),
+});
+
 export const protocolParityDataSchema = z.object({
   serverVersion: z.string(),
   source: z.string(),
@@ -53,6 +73,8 @@ export const protocolParityDataSchema = z.object({
   knownGapCount: z.number(),
   knownGaps: z.array(protocolParityEntrySchema),
   entries: z.array(protocolParityEntrySchema),
+  supportedAgdaRange: supportedAgdaRangeSchema,
+  agdaVersionRangeStatus: agdaVersionRangeStatusSchema.optional(),
 });
 
 export const bugDiagnosticSchema = z.object({
