@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-05-04
+
 ### Notes for upgraders
 
 - **Structured-output rollout is non-breaking but visible** — every
