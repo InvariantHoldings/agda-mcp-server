@@ -88,3 +88,17 @@ export function rewriteGoalCommand(
 export function profileOptionsList(profileArgs: string[]): string {
   return stringList(profileArgs);
 }
+
+/**
+ * Wrap an inner Agda command in the IOTCM transport envelope.
+ *
+ * Format: `IOTCM "<filepath>" NonInteractive Direct (<inner-command>)`
+ *
+ * `filePath` is interpolated literally inside the surrounding quotes.
+ * Callers must already have validated/canonicalized the path —
+ * upstream sandboxing in `safe-source-io.ts` rules out the characters
+ * (`"`, raw newlines) that would otherwise corrupt this envelope.
+ */
+export function iotcmEnvelope(filePath: string, innerCommand: string): string {
+  return `IOTCM "${filePath}" NonInteractive Direct (${innerCommand})`;
+}

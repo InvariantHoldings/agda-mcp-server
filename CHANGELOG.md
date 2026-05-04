@@ -9,6 +9,28 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Typed IOTCM command builder finalized (issue #10).** The IOTCM
+  transport envelope (`IOTCM "<file>" NonInteractive Direct (...)`)
+  is now built through a single `iotcmEnvelope` helper in
+  `src/protocol/command-builder.ts`; `AgdaSession.iotcm`,
+  `iotcmFor`, and `runIndependentCommand` all delegate to it, so the
+  envelope shape is no longer hand-assembled in two duplicate
+  template literals inside `session.ts`. The last bare-string inner
+  command (`Cmd_show_version`) now goes through `topLevelCommand`,
+  matching the rest of the surface. Property-based tests cover
+  escaping (`quoted`/`stringList`), `noRange` placement for goal
+  builders, and round-tripping of arbitrary inner commands through
+  `iotcmEnvelope`.
+- **Output-schema and completeness invariants (issue #11).** A new
+  unit suite at `test/unit/tools/output-schema-invariants.test.ts`
+  registers the full core tool surface and asserts that every
+  exposed tool declares a non-empty output schema with typed fields,
+  closing the regression hole where a tool could be registered with
+  an empty `z.object({})`. The same suite pins the load/typecheck
+  agreement contract: identical underlying signal must yield
+  identical completeness classification (`ok-complete`,
+  `ok-with-holes`, `type-error`) regardless of which entry point
+  produced the result.
 - **Declared supported-Agda range (issue #41 part 2).** A new
   `agdaMcpServer` block in `package.json` records `minAgdaVersion`
   and `maxTestedAgdaVersion`. The server now (a) emits a stderr

@@ -208,7 +208,7 @@ export async function autoAll(ctx: AgdaCommandContext): Promise<AutoResult> {
 export async function showVersion(
   ctx: AgdaCommandContext,
 ): Promise<ShowVersionResult> {
-  const responses = await ctx.sendCommand(ctx.iotcm("Cmd_show_version"));
+  const responses = await ctx.sendCommand(ctx.iotcm(topLevelCommand("Cmd_show_version")));
   throwOnFatalProtocolStderr(responses);
   const version =
     decodeDisplayTextResponses(responses, {
