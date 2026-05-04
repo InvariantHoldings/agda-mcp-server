@@ -36,6 +36,29 @@ function isCompletenessClassification(
 }
 
 /**
+ * Count-only classification primitive — does no array work and never
+ * allocates. Both the public `classifyCompleteness` (which takes a
+ * goals array) and the merged-result fallback path call this so they
+ * agree by construction and can both stay O(1) regardless of how
+ * many goals the caller is reporting.
+ */
+function classifyFromCounts(
+  success: boolean,
+  goalCount: number,
+  invisibleGoalCount: number,
+): CompletenessStatus {
+  const hasHoles = goalCount > 0 || invisibleGoalCount > 0;
+  const isComplete = success && !hasHoles;
+  return {
+    classification: success ? (hasHoles ? "ok-with-holes" : "ok-complete") : "type-error",
+    goalCount,
+    invisibleGoalCount,
+    hasHoles,
+    isComplete,
+  };
+}
+
+/**
  * Recompute completeness from the protocol-level counts alone.
  *
  * This is the count-only path: it knows about visible + invisible
@@ -50,22 +73,11 @@ function isCompletenessClassification(
 export function classifyCompleteness(
   input: CompletenessInput,
 ): CompletenessStatus {
-  const goalCount = input.goals.length;
-  const invisibleGoalCount = input.invisibleGoalCount ?? 0;
-  const hasHoles = goalCount > 0 || invisibleGoalCount > 0;
-  const isComplete = input.success && !hasHoles;
-
-  return {
-    classification: input.success
-      ? hasHoles
-        ? "ok-with-holes"
-        : "ok-complete"
-      : "type-error",
-    goalCount,
-    invisibleGoalCount,
-    hasHoles,
-    isComplete,
-  };
+  return classifyFromCounts(
+    input.success,
+    input.goals.length,
+    input.invisibleGoalCount ?? 0,
+  );
 }
 
 interface MergedCompletenessFields {
@@ -85,9 +97,13 @@ interface MergedCompletenessFields {
  * Agda-reported counts. Honor those fields directly so callers see
  * the same classification the load tool surfaced.
  *
- * Falls back to the count-only `classifyCompleteness` if the embedded
+ * Falls back to the count-only `classifyFromCounts` if the embedded
  * `classification` is missing or unknown — defensive for stub results
- * tests construct without populating the merged fields.
+ * tests construct without populating the merged fields. The fallback
+ * is O(1) and never materializes an array; an earlier draft of this
+ * helper used `new Array(goalCount)` to round-trip through
+ * `classifyCompleteness`, which would have allocated proportionally
+ * to a malformed result's reported `goalCount`.
  */
 function completenessFromMerged(
   result: MergedCompletenessFields,
@@ -101,11 +117,11 @@ function completenessFromMerged(
       isComplete: result.isComplete,
     };
   }
-  return classifyCompleteness({
-    success: result.success,
-    goals: new Array(result.goalCount),
-    invisibleGoalCount: result.invisibleGoalCount,
-  });
+  return classifyFromCounts(
+    result.success,
+    result.goalCount,
+    result.invisibleGoalCount,
+  );
 }
 
 export function completenessFromLoadResult(
