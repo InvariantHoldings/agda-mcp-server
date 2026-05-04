@@ -31,6 +31,12 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_goal_type_context"],
     inputSchema: { goalId: goalIdSchema.describe("The goal ID (from agda_load output)") },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      goalType: z.string(),
+      context: z.array(z.string()),
+    }),
     callback: async ({ goalId }) => {
       const info = await session.goal.typeContext(goalId);
       let output = `## Goal ?${goalId}\n\n`;
@@ -38,7 +44,10 @@ export function register(
         output += `### Context\n\`\`\`agda\n${info.context.join("\n")}\n\`\`\`\n\n`;
       }
       output += `### Goal type\n\`\`\`agda\n${info.type || "(unknown)"}\n\`\`\`\n`;
-      return output;
+      return {
+        text: output,
+        data: { goalType: info.type ?? "", context: info.context },
+      };
     },
   });
 
@@ -50,9 +59,15 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_goal_type"],
     inputSchema: { goalId: goalIdSchema.describe("The goal ID (from agda_load output)") },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      goalType: z.string(),
+    }),
     callback: async ({ goalId }) => {
       const info = await session.goal.type(goalId);
-      return `## Goal ?${goalId}\n\n### Goal type\n\`\`\`agda\n${info.type || "(unknown)"}\n\`\`\`\n`;
+      const text = `## Goal ?${goalId}\n\n### Goal type\n\`\`\`agda\n${info.type || "(unknown)"}\n\`\`\`\n`;
+      return { text, data: { goalType: info.type ?? "" } };
     },
   });
 
@@ -64,13 +79,18 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_context"],
     inputSchema: { goalId: goalIdSchema.describe("The goal ID (from agda_load output)") },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      context: z.array(z.string()),
+    }),
     callback: async ({ goalId }) => {
       const info = await session.goal.context(goalId);
       let output = `## Context for ?${goalId}\n\n`;
       output += info.context.length > 0
         ? `\`\`\`agda\n${info.context.join("\n")}\n\`\`\`\n`
         : "(empty context)\n";
-      return output;
+      return { text: output, data: { context: info.context } };
     },
   });
 
@@ -86,11 +106,19 @@ export function register(
       variable: z.string().describe("The variable name to case-split on"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      variable: z.string(),
+      clauses: z.array(z.string()),
+      written: z.boolean(),
+    }),
     callback: async ({ goalId, variable, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
       const goalIdsBefore = session.getGoalIds();
       const result = await session.goal.caseSplit(goalId, variable as string);
       let output = `## Case split on \`${variable}\` in ?${goalId}\n\n`;
+      let written = false;
       if (result.clauses.length > 0) {
         output += `### New clauses\n\`\`\`agda\n${result.clauses.join("\n")}\n\`\`\`\n`;
 
@@ -98,13 +126,21 @@ export function register(
           output += await applyEditAndReload(session, goalIdsBefore, {
             kind: "replace-line", goalId, clauses: result.clauses,
           });
+          written = true;
         } else {
           output += `\nReplace the original clause with these, then call \`agda_load\` to reload.\n`;
         }
       } else {
         output += `No clauses generated. The variable may not be splittable.\n`;
       }
-      return output;
+      return {
+        text: output,
+        data: {
+          variable: variable as string,
+          clauses: result.clauses,
+          written,
+        },
+      };
     },
   });
 
@@ -120,6 +156,14 @@ export function register(
       expr: z.string().describe("The Agda expression to give"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      expr: z.string(),
+      result: z.string(),
+      replacementText: z.string().nullable(),
+      written: z.boolean(),
+    }),
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
       const exprStr = expr as string;
@@ -128,16 +172,26 @@ export function register(
       let output = `## Give \`${exprStr}\` to ?${goalId}\n\n`;
       output += result.result ? `**Result:** \`${result.result}\`\n` : `Expression accepted.\n`;
 
+      let written = false;
       if (shouldWrite && session.currentFile) {
         if (hasReplacementText(result.replacementText)) {
           output += await applyEditAndReload(session, goalIdsBefore, {
             kind: "replace-hole", goalId, expr: result.replacementText,
           });
+          written = true;
         } else {
           output += `\nAgda did not return a confirmed replacement. Apply the expression manually if appropriate, then call \`agda_load\`.\n`;
         }
       }
-      return output;
+      return {
+        text: output,
+        data: {
+          expr: exprStr,
+          result: result.result ?? "",
+          replacementText: result.replacementText ?? null,
+          written,
+        },
+      };
     },
   });
 
@@ -153,6 +207,14 @@ export function register(
       expr: z.string().describe("The expression to refine with (can be empty to let Agda choose)"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      expr: z.string(),
+      result: z.string(),
+      replacementText: z.string().nullable(),
+      written: z.boolean(),
+    }),
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
       const exprStr = expr as string;
@@ -163,16 +225,26 @@ export function register(
         ? `**Result:** \`${result.result}\`\n`
         : `Refinement applied. Call \`agda_metas\` to see new goals.\n`;
 
+      let written = false;
       if (shouldWrite && session.currentFile) {
         if (hasReplacementText(result.replacementText)) {
           output += await applyEditAndReload(session, goalIdsBefore, {
             kind: "replace-hole", goalId, expr: result.replacementText,
           });
+          written = true;
         } else {
           output += `\nNo concrete replacement text was returned, so the file was not modified.\n`;
         }
       }
-      return output;
+      return {
+        text: output,
+        data: {
+          expr: exprStr,
+          result: result.result ?? "",
+          replacementText: result.replacementText ?? null,
+          written,
+        },
+      };
     },
   });
 
@@ -188,6 +260,14 @@ export function register(
       expr: z.string().describe("The expression to refine with"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      expr: z.string(),
+      result: z.string(),
+      replacementText: z.string().nullable(),
+      written: z.boolean(),
+    }),
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
       const exprStr = expr as string;
@@ -198,16 +278,26 @@ export function register(
         ? `**Result:** \`${result.result}\`\n`
         : "Refinement applied. Call `agda_metas` to inspect resulting goals.\n";
 
+      let written = false;
       if (shouldWrite && session.currentFile) {
         if (hasReplacementText(result.replacementText)) {
           output += await applyEditAndReload(session, goalIdsBefore, {
             kind: "replace-hole", goalId, expr: result.replacementText,
           });
+          written = true;
         } else {
           output += `\nNo confirmed replacement text was returned by Agda, so the file was left unchanged. Apply the refinement manually if needed.\n`;
         }
       }
-      return output;
+      return {
+        text: output,
+        data: {
+          expr: exprStr,
+          result: result.result ?? "",
+          replacementText: result.replacementText ?? null,
+          written,
+        },
+      };
     },
   });
 
@@ -223,6 +313,13 @@ export function register(
       expr: z.string().optional().describe("Optional existing goal contents to use as input"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      result: z.string(),
+      replacementText: z.string().nullable(),
+      written: z.boolean(),
+    }),
     callback: async ({ goalId, expr, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
       const exprStr = (expr as string | undefined) ?? "";
@@ -233,16 +330,25 @@ export function register(
         ? `**Result:** \`${result.result}\`\n`
         : "Introduction applied. Call `agda_metas` to inspect resulting goals.\n";
 
+      let written = false;
       if (shouldWrite && session.currentFile) {
         if (hasReplacementText(result.replacementText)) {
           output += await applyEditAndReload(session, goalIdsBefore, {
             kind: "replace-hole", goalId, expr: result.replacementText,
           });
+          written = true;
         } else {
           output += `\nAgda did not return a confirmed replacement, so the file was left unchanged.\n`;
         }
       }
-      return output;
+      return {
+        text: output,
+        data: {
+          result: result.result ?? "",
+          replacementText: result.replacementText ?? null,
+          written,
+        },
+      };
     },
   });
 
@@ -261,6 +367,14 @@ export function register(
       hints: z.array(z.string()).optional().describe("Hints/modules to prioritize during search"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      solution: z.string(),
+      hasSolution: z.boolean(),
+      searchPayload: z.string(),
+      written: z.boolean(),
+    }),
     callback: async ({ goalId, writeToFile, depth, listCandidates, excludeHints, hints }) => {
       const shouldWrite = writeToFile !== false;
       const goalIdsBefore = session.getGoalIds();
@@ -277,16 +391,26 @@ export function register(
         output += `\nSearch payload: \`${payload}\`\n`;
       }
 
+      let written = false;
       if (shouldWrite && session.currentFile) {
         if (hasReplacementText(result.solution)) {
           output += await applyEditAndReload(session, goalIdsBefore, {
             kind: "replace-hole", goalId, expr: result.solution,
           });
+          written = true;
         } else {
           output += `\nAuto returned no solution, so the file was left unchanged.\n`;
         }
       }
-      return output;
+      return {
+        text: output,
+        data: {
+          solution: result.solution ?? "",
+          hasSolution: Boolean(result.solution),
+          searchPayload: payload,
+          written,
+        },
+      };
     },
   });
 
@@ -301,6 +425,14 @@ export function register(
       goalId: goalIdSchema.describe("The goal ID for context"),
       expr: z.string().describe("The Agda expression to check against the goal type"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      expr: z.string(),
+      goalType: z.string(),
+      context: z.array(z.string()),
+      checkedExpr: z.string(),
+    }),
     callback: async ({ goalId, expr }) => {
       const result = await session.goal.typeContextCheck(goalId, expr as string);
       let output = `## Goal ?${goalId}, context, and checked term\n\n`;
@@ -309,7 +441,15 @@ export function register(
       }
       output += `### Goal type\n\n\`\`\`agda\n${result.goalType || "(unknown)"}\n\`\`\`\n\n`;
       output += `### Checked term for \`${expr}\`\n\n\`\`\`agda\n${result.checkedExpr || "(no checked term returned)"}\n\`\`\`\n`;
-      return output;
+      return {
+        text: output,
+        data: {
+          expr: expr as string,
+          goalType: result.goalType ?? "",
+          context: result.context,
+          checkedExpr: result.checkedExpr ?? "",
+        },
+      };
     },
   });
 
@@ -324,6 +464,14 @@ export function register(
       goalId: goalIdSchema.describe("The goal ID for context"),
       expr: z.string().describe("The Agda expression to infer in context"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      expr: z.string(),
+      goalType: z.string(),
+      context: z.array(z.string()),
+      inferredType: z.string(),
+    }),
     callback: async ({ goalId, expr }) => {
       const result = await session.query.goalTypeContextInfer(goalId, expr as string);
       let output = `## Goal ?${goalId}, context, and inferred type\n\n`;
@@ -332,7 +480,15 @@ export function register(
       }
       output += `### Goal type\n\n\`\`\`agda\n${result.goalType || "(unknown)"}\n\`\`\`\n\n`;
       output += `### Inferred type for \`${expr}\`\n\n\`\`\`agda\n${result.inferredType || "(unable to infer)"}\n\`\`\`\n`;
-      return output;
+      return {
+        text: output,
+        data: {
+          expr: expr as string,
+          goalType: result.goalType ?? "",
+          context: result.context,
+          inferredType: result.inferredType ?? "",
+        },
+      };
     },
   });
 }

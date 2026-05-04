@@ -215,7 +215,16 @@ export function registerTextTool(args: {
    * behavior is unchanged from the pre-#39 release.
    */
   session?: AgdaSession;
-  callback: (cbArgs: any) => Promise<string>;
+  /**
+   * Either return a text body (legacy path) or a structured payload
+   * with the same text rendering plus extra fields. Tools that have
+   * machine-decoded data — solve solutions, display state, postulate
+   * lists — should return the structured form so the envelope's
+   * `data` carries the parsed result alongside the prose body.
+   * Issue #11 scope: "expand richer per-tool data beyond plain text
+   * where still missing".
+   */
+  callback: (cbArgs: any) => Promise<string | { text: string; data?: Record<string, unknown> }>;
 }): void {
   const outputDataSchema =
     args.outputDataSchema ?? z.object({ text: z.string() });
@@ -236,7 +245,8 @@ export function registerTextTool(args: {
         if (unavailable) return unavailable;
       }
       try {
-        const textValue = await args.callback(cbArgs);
+        const raw = await args.callback(cbArgs);
+        const { text: textValue, extra } = unpackTextCallbackResult(raw);
         return makeToolResult(
           okEnvelope({
             tool: args.name,
@@ -246,7 +256,7 @@ export function registerTextTool(args: {
             // body still goes in `data.text` and the markdown body
             // alongside.
             summary: digestText(textValue),
-            data: { text: textValue },
+            data: { text: textValue, ...extra },
             elapsedMs: Math.round(performance.now() - startMs),
           }),
           textValue,
@@ -256,6 +266,40 @@ export function registerTextTool(args: {
       }
     },
   });
+}
+
+/**
+ * Reserved envelope-data keys the wrapper controls. A tool callback
+ * cannot override them via its `data` payload — letting it would let
+ * `data.text` desync from the markdown body, or let `data.goalId`
+ * disagree with the validated `cbArgs.goalId`.
+ */
+const RESERVED_TEXT_DATA_KEYS = new Set(["text"]);
+const RESERVED_GOAL_TEXT_DATA_KEYS = new Set(["text", "goalId"]);
+
+/**
+ * Normalize a `registerTextTool` / `registerGoalTextTool` callback
+ * return value to the `{ text, extra }` shape the envelope builder
+ * expects. Accepts the legacy bare-string form for backward compat.
+ *
+ * `reserved` names any keys the wrapper itself owns (`text`, plus
+ * `goalId` for goal tools); they are stripped from `extra` so a
+ * callback's `data` payload cannot clobber them on merge.
+ */
+function unpackTextCallbackResult(
+  raw: string | { text: string; data?: Record<string, unknown> },
+  reserved: Set<string> = RESERVED_TEXT_DATA_KEYS,
+): { text: string; extra: Record<string, unknown> } {
+  if (typeof raw === "string") {
+    return { text: raw, extra: {} };
+  }
+  const data = raw.data ?? {};
+  const extra: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (reserved.has(key)) continue;
+    extra[key] = value;
+  }
+  return { text: raw.text, extra };
 }
 
 /**
@@ -280,7 +324,7 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
   inputSchema: unknown;
   annotations?: ToolAnnotations;
   outputDataSchema?: z.ZodTypeAny;
-  callback: (cbArgs: A & { goalId: number }) => Promise<string>;
+  callback: (cbArgs: A & { goalId: number }) => Promise<string | { text: string; data?: Record<string, unknown> }>;
 }): void {
   const outputDataSchema =
     args.outputDataSchema
@@ -316,7 +360,11 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
 
       try {
         const warn = stalenessWarning(args.session);
-        const body = await args.callback(cbArgs);
+        const raw = await args.callback(cbArgs);
+        const { text: body, extra } = unpackTextCallbackResult(
+          raw,
+          RESERVED_GOAL_TEXT_DATA_KEYS,
+        );
         const textValue = warn + body;
         return makeToolResult(
           okEnvelope({
@@ -324,7 +372,7 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
             // 1-line digest of the goal-text body (multi-line bodies
             // would otherwise be repeated whole in `summary`).
             summary: digestText(body),
-            data: { text: body, goalId: cbArgs.goalId },
+            data: { text: body, goalId: cbArgs.goalId, ...extra },
             stale: args.session.isFileStale() || undefined,
             elapsedMs: Math.round(performance.now() - startMs),
           }),

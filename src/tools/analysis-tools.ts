@@ -28,9 +28,31 @@ export function register(
     description: "Get a complete proof state snapshot: loaded file, staleness, all goals with types, and constraints. Use this instead of calling agda_session_status + agda_metas + agda_constraints separately.",
     category: "analysis",
     inputSchema: {},
+    outputDataSchema: z.object({
+      text: z.string(),
+      loadedFile: z.string().nullable(),
+      goalCount: z.number(),
+      hasConstraints: z.boolean(),
+      goals: z.array(z.object({
+        goalId: z.number(),
+        type: z.string(),
+      })),
+      constraintsText: z.string(),
+    }),
     callback: async () => {
       const file = session.getLoadedFile();
-      if (!file) return "No file loaded. Call `agda_load` first.";
+      if (!file) {
+        return {
+          text: "No file loaded. Call `agda_load` first.",
+          data: {
+            loadedFile: null,
+            goalCount: 0,
+            hasConstraints: false,
+            goals: [],
+            constraintsText: "",
+          },
+        };
+      }
 
       const metas = await session.goal.metas();
       const constraints = await session.query.constraints();
@@ -59,7 +81,16 @@ export function register(
         output += "All goals solved.\n";
       }
 
-      return output;
+      return {
+        text: output,
+        data: {
+          loadedFile: file,
+          goalCount: metas.goals.length,
+          hasConstraints: constraints.text.trim().length > 0,
+          goals: metas.goals.map((g) => ({ goalId: g.goalId, type: g.type })),
+          constraintsText: constraints.text,
+        },
+      };
     },
   });
 
@@ -74,6 +105,26 @@ export function register(
     inputSchema: {
       goalId: goalIdSchema.describe("The goal ID to analyze"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      goalType: z.string(),
+      context: z.array(z.object({
+        name: z.string(),
+        type: z.string(),
+        isImplicit: z.boolean(),
+      })),
+      splittableVariables: z.array(z.object({
+        name: z.string(),
+        type: z.string(),
+      })),
+      suggestions: z.array(z.object({
+        action: z.string(),
+        expr: z.string().optional(),
+        variable: z.string().optional(),
+        reason: z.string(),
+      })),
+    }),
     callback: async ({ goalId }) => {
       const info = await session.goal.typeContext(goalId);
       const contextEntries = info.context.map(parseContextEntry);
@@ -108,7 +159,24 @@ export function register(
         output += `- ${desc} — ${s.reason}\n`;
       }
 
-      return output;
+      return {
+        text: output,
+        data: {
+          goalType: info.type ?? "",
+          context: contextEntries.map((e) => ({
+            name: e.name,
+            type: e.type,
+            isImplicit: e.isImplicit,
+          })),
+          splittableVariables: splittable.map((v) => ({ name: v.name, type: v.type })),
+          suggestions: suggestions.map((s) => ({
+            action: s.action,
+            expr: s.expr,
+            variable: s.variable,
+            reason: s.reason,
+          })),
+        },
+      };
     },
   });
 
@@ -120,9 +188,36 @@ export function register(
     description: "Reload the currently loaded file and report what changed: which goals were solved, which are new, and the current proof state.",
     category: "analysis",
     inputSchema: {},
+    outputDataSchema: z.object({
+      text: z.string(),
+      file: z.string().nullable(),
+      success: z.boolean(),
+      classification: z.string().nullable(),
+      wasStale: z.boolean(),
+      goalCount: z.number(),
+      solvedGoalIds: z.array(z.number()),
+      newGoalIds: z.array(z.number()),
+      unchangedGoalIds: z.array(z.number()),
+      errors: z.array(z.string()),
+    }),
     callback: async () => {
       const prevFile = session.getLoadedFile();
-      if (!prevFile) return "No file loaded. Call `agda_load` first.";
+      if (!prevFile) {
+        return {
+          text: "No file loaded. Call `agda_load` first.",
+          data: {
+            file: null,
+            success: false,
+            classification: null,
+            wasStale: false,
+            goalCount: 0,
+            solvedGoalIds: [],
+            newGoalIds: [],
+            unchangedGoalIds: [],
+            errors: [],
+          },
+        };
+      }
 
       const prevGoalIds = session.getGoalIds();
       const wasStale = session.isFileStale();
@@ -162,9 +257,36 @@ export function register(
 
         output += projectConfigWarningsText(result.projectConfigWarnings);
 
-        return output;
+        return {
+          text: output,
+          data: {
+            file: prevFile,
+            success: result.success,
+            classification: result.classification ?? null,
+            wasStale,
+            goalCount: newGoalIds.length,
+            solvedGoalIds: solved,
+            newGoalIds: created,
+            unchangedGoalIds: unchanged,
+            errors: result.errors,
+          },
+        };
       } catch (err) {
-        return `Error: ${err instanceof Error ? err.message : String(err)}`;
+        const message = `Error: ${err instanceof Error ? err.message : String(err)}`;
+        return {
+          text: message,
+          data: {
+            file: prevFile,
+            success: false,
+            classification: null,
+            wasStale,
+            goalCount: 0,
+            solvedGoalIds: [],
+            newGoalIds: [],
+            unchangedGoalIds: [],
+            errors: [message],
+          },
+        };
       }
     },
   });
@@ -184,6 +306,21 @@ export function register(
       offset: z.number().int().min(0).optional().describe("0-based pagination offset"),
       limit: z.number().int().min(1).max(200).optional().describe("Maximum results to return"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      targetType: z.string(),
+      scope: z.enum(["local", "module", "imported"]),
+      totalCandidates: z.number(),
+      offset: z.number(),
+      limit: z.number(),
+      matches: z.array(z.object({
+        name: z.string(),
+        type: z.string(),
+        source: z.enum(["local", "module", "imported"]),
+      })),
+      hasMore: z.boolean(),
+    }),
     callback: async ({ goalId, targetType, scope, offset, limit }) => {
       const info = await session.goal.typeContext(goalId);
       const target = (targetType as string) || info.type;
@@ -258,7 +395,18 @@ export function register(
         output += `\n**Hint:** Goal is a function type. Consider \`refine\` or \`intro\` to introduce arguments.\n`;
       }
 
-      return output;
+      return {
+        text: output,
+        data: {
+          targetType: target,
+          scope: effectiveScope,
+          totalCandidates: merged.length,
+          offset: effectiveOffset,
+          limit: effectiveLimit,
+          matches,
+          hasMore: merged.length > effectiveOffset + effectiveLimit,
+        },
+      };
     },
   });
 }

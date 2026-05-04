@@ -16,7 +16,16 @@ import { decodeDisplayTextResponses } from "../protocol/responses/text-display.j
 import { type AgdaVersion, parseAgdaVersion } from "./agda-version.js";
 import { logger } from "./logger.js";
 import type { AgdaTransport } from "../session/agda-transport.js";
+import { topLevelCommand } from "../protocol/command-builder.js";
 import type { AgdaResponse } from "./types.js";
+
+/**
+ * Inner Agda command for the version probe. Materialized once so the
+ * regression fence in `test/unit/protocol/no-bare-command-strings.ts`
+ * doesn't have to special-case the call site, and so the typed builder
+ * remains the single source of truth for the wire string.
+ */
+const SHOW_VERSION_COMMAND = topLevelCommand("Cmd_show_version");
 
 /**
  * Hard cap on how many `Cmd_show_version` round-trips a session will
@@ -79,7 +88,7 @@ export async function preflightVersionDetection(args: {
 
   args.state.versionDetectionAttempts++;
   try {
-    const vCmd = args.buildIotcm("Cmd_show_version");
+    const vCmd = args.buildIotcm(SHOW_VERSION_COMMAND);
     const responses = await args.transport.sendCommand(
       args.proc,
       vCmd,

@@ -88,3 +88,20 @@ export function rewriteGoalCommand(
 export function profileOptionsList(profileArgs: string[]): string {
   return stringList(profileArgs);
 }
+
+/**
+ * Wrap an inner Agda command in the IOTCM transport envelope.
+ *
+ * Format: `IOTCM "<filepath>" NonInteractive Direct (<inner-command>)`
+ *
+ * The file-path segment is escaped via `escapeAgdaString` (the same
+ * escaping `quoted` applies). POSIX permits `"` / `\` / `\n` in file
+ * paths, and project-root sandboxing (`resolveExistingPathWithinRoot`)
+ * does not strip those characters — so a path like `foo"bar.agda`
+ * would otherwise close the IOTCM envelope's opening quote and leak
+ * the rest of the path as literal protocol tokens. Escaping here
+ * keeps the envelope well-formed regardless of upstream path policy.
+ */
+export function iotcmEnvelope(filePath: string, innerCommand: string): string {
+  return `IOTCM "${escapeAgdaString(filePath)}" NonInteractive Direct (${innerCommand})`;
+}

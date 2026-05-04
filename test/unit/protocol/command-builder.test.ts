@@ -4,6 +4,7 @@ import {
   boolLiteral,
   command,
   goalCommand,
+  iotcmEnvelope,
   modeGoalCommand,
   modeTopLevelCommand,
   profileOptionsList,
@@ -11,6 +12,7 @@ import {
   rewriteGoalCommand,
   rewriteTopLevelCommand,
   stringList,
+  topLevelCommand,
 } from "../../../src/protocol/command-builder.js";
 
 test("quoted escapes raw newlines and quotes", () => {
@@ -70,4 +72,26 @@ test("Cmd_load with profile options produces correct IOTCM payload", () => {
 test("Cmd_load without profile options uses empty list", () => {
   const cmd = command("Cmd_load", quoted("/path/to/file.agda"), "[]");
   expect(cmd).toBe('Cmd_load "/path/to/file.agda" []');
+});
+
+test("iotcmEnvelope wraps inner command for the configured file", () => {
+  const inner = topLevelCommand("Cmd_show_version");
+  expect(iotcmEnvelope("/abs/path/M.agda", inner)).toBe(
+    'IOTCM "/abs/path/M.agda" NonInteractive Direct (Cmd_show_version)',
+  );
+});
+
+test("iotcmEnvelope tolerates an empty file path for pre-load commands", () => {
+  // session.ts uses an empty file path before any Cmd_load has bound a
+  // currentFile (e.g. version detection). The envelope shape must remain
+  // syntactically valid.
+  const inner = topLevelCommand("Cmd_show_version");
+  expect(iotcmEnvelope("", inner)).toBe(
+    'IOTCM "" NonInteractive Direct (Cmd_show_version)',
+  );
+});
+
+test("topLevelCommand with no parts produces the bare command name", () => {
+  expect(topLevelCommand("Cmd_show_version")).toBe("Cmd_show_version");
+  expect(topLevelCommand("Cmd_abort")).toBe("Cmd_abort");
 });

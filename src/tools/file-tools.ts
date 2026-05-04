@@ -54,6 +54,14 @@ export function register(
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
       codeOnly: z.boolean().optional().describe("When true, extract only Agda code blocks from literate files, stripping prose. Has no effect on plain .agda files."),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      file: z.string(),
+      lineCount: z.number(),
+      literateFormat: z.string().nullable(),
+      codeOnly: z.boolean(),
+      codeBlockCount: z.number().nullable(),
+    }),
     callback: async ({ file, codeOnly }: { file: string; codeOnly?: boolean }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(requestedFilePath)) {
@@ -63,8 +71,10 @@ export function register(
       const fileContent = readFileSync(filePath, "utf-8");
       const canonicalRoot = resolveExistingPathWithinRoot(repoRoot, ".");
       const relPath = relative(canonicalRoot, filePath);
+      const lineCount = fileContent.split("\n").length;
+      const isCodeOnly = Boolean(codeOnly);
 
-      if (codeOnly) {
+      if (isCodeOnly) {
         const extraction = extractLiterateCode(filePath, fileContent);
         if (extraction.format === null) {
           // Plain .agda — codeOnly has no effect, return as normal
@@ -72,11 +82,29 @@ export function register(
             .split("\n")
             .map((line, i) => `${String(i + 1).padStart(4)} | ${line}`)
             .join("\n");
-          return `## ${relPath}\n\n\`\`\`agda\n${numbered}\n\`\`\``;
+          return {
+            text: `## ${relPath}\n\n\`\`\`agda\n${numbered}\n\`\`\``,
+            data: {
+              file: relPath,
+              lineCount,
+              literateFormat: null,
+              codeOnly: true,
+              codeBlockCount: null,
+            },
+          };
         }
 
         if (extraction.blocks.length === 0) {
-          return `## ${relPath} (code only)\n\nNo Agda code blocks found in this ${extraction.format} literate file.`;
+          return {
+            text: `## ${relPath} (code only)\n\nNo Agda code blocks found in this ${extraction.format} literate file.`,
+            data: {
+              file: relPath,
+              lineCount,
+              literateFormat: extraction.format,
+              codeOnly: true,
+              codeBlockCount: 0,
+            },
+          };
         }
 
         let output = `## ${relPath} (code only — ${extraction.format} format, ${extraction.blocks.length} block(s))\n\n`;
@@ -87,14 +115,32 @@ export function register(
             .join("\n");
           output += `\`\`\`agda\n${numbered}\n\`\`\`\n\n`;
         }
-        return output.trimEnd();
+        return {
+          text: output.trimEnd(),
+          data: {
+            file: relPath,
+            lineCount,
+            literateFormat: extraction.format,
+            codeOnly: true,
+            codeBlockCount: extraction.blocks.length,
+          },
+        };
       }
 
       const numbered = fileContent
         .split("\n")
         .map((line, i) => `${String(i + 1).padStart(4)} | ${line}`)
         .join("\n");
-      return `## ${relPath}\n\n\`\`\`agda\n${numbered}\n\`\`\``;
+      return {
+        text: `## ${relPath}\n\n\`\`\`agda\n${numbered}\n\`\`\``,
+        data: {
+          file: relPath,
+          lineCount,
+          literateFormat: null,
+          codeOnly: false,
+          codeBlockCount: null,
+        },
+      };
     },
   });
 
@@ -111,6 +157,19 @@ export function register(
       ),
       pattern: z.string().optional().describe("Case-insensitive substring filter applied to each module's relative path before pagination."),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      tier: z.string(),
+      pattern: z.string().nullable(),
+      total: z.number(),
+      filtered: z.number(),
+      offset: z.number(),
+      limit: z.number(),
+      modules: z.array(z.string()),
+      hasMore: z.boolean(),
+      nextOffset: z.number().nullable(),
+      unreadableSubtrees: z.array(z.string()),
+    }),
     callback: async ({ tier, offset, limit, pattern }: { tier: string; offset?: number; limit?: number; pattern?: string }) => {
       const requestedTierDir = resolveFileWithinRoot(repoRoot, join("agda", tier));
       if (!existsSync(requestedTierDir)) {
@@ -218,7 +277,21 @@ export function register(
         lines.push("");
         lines.push(`**Skipped ${unreadableDirs.length} unreadable subtree(s):** ${unreadableDirs.join(", ")}. Check file permissions or broken symlinks; modules beneath these directories are not included in the total count.`);
       }
-      return lines.join("\n");
+      return {
+        text: lines.join("\n"),
+        data: {
+          tier,
+          pattern: pattern ?? null,
+          total: modules.length,
+          filtered: filtered.length,
+          offset: effectiveOffset,
+          limit: effectiveLimit,
+          modules: page,
+          hasMore,
+          nextOffset: hasMore ? nextOffset : null,
+          unreadableSubtrees: unreadableDirs,
+        },
+      };
     },
   });
 
@@ -228,6 +301,18 @@ export function register(
     description: "Check an Agda file for postulate declarations. In Kernel/ files, postulates are forbidden by construction.",
     category: "navigation",
     inputSchema: { file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)) },
+    outputDataSchema: z.object({
+      text: z.string(),
+      file: z.string(),
+      blockCount: z.number(),
+      declarationCount: z.number(),
+      isKernel: z.boolean(),
+      kernelViolation: z.boolean(),
+      blocks: z.array(z.object({
+        line: z.number(),
+        declarations: z.array(z.string()),
+      })),
+    }),
     callback: async ({ file }: { file: string }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(requestedFilePath)) {
@@ -297,10 +382,10 @@ export function register(
       const relPath = relative(canonicalRoot, filePath);
       const isKernel = relPath.startsWith("agda/Kernel/");
       let output = `## Postulate check: ${relPath}\n\n`;
+      const totalDecls = blocks.reduce((sum, b) => sum + b.declarations.length, 0);
       if (blocks.length === 0) {
         output += "No postulates found. Fully constructive.\n";
       } else {
-        const totalDecls = blocks.reduce((sum, b) => sum + b.declarations.length, 0);
         const declSummary = totalDecls > 0
           ? ` (${totalDecls} identifier${totalDecls === 1 ? "" : "s"} declared)`
           : "";
@@ -315,7 +400,20 @@ export function register(
           }
         }
       }
-      return output;
+      return {
+        text: output,
+        data: {
+          file: relPath,
+          blockCount: blocks.length,
+          declarationCount: totalDecls,
+          isKernel,
+          kernelViolation: isKernel && blocks.length > 0,
+          blocks: blocks.map((b) => ({
+            line: b.line,
+            declarations: b.declarations,
+          })),
+        },
+      };
     },
   });
 
@@ -329,6 +427,22 @@ export function register(
       typePattern: z.string().optional().describe("Type-shape query (wildcard `_` supported), e.g. `_ ≤ _ + _`"),
       tier: z.string().optional().describe("Optional tier to limit search (Kernel, Foundation, etc.)"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      mode: z.enum(["name", "type-pattern"]),
+      query: z.string(),
+      tier: z.string().nullable(),
+      matchCount: z.number(),
+      shown: z.number(),
+      truncated: z.boolean(),
+      matches: z.array(z.object({
+        file: z.string(),
+        line: z.number(),
+        text: z.string(),
+      })),
+      unreadableSubtrees: z.array(z.string()),
+      unreadableFiles: z.array(z.string()),
+    }),
     callback: async ({ query, typePattern, tier }: { query?: string; typePattern?: string; tier?: string }) => {
       const mode: "name" | "type-pattern" = typePattern ? "type-pattern" : "name";
       const actualQuery = (typePattern ?? query ?? "").trim();
@@ -440,12 +554,12 @@ export function register(
         relativeToRequestedRoot(repoRoot, requestedSearchRoot),
       );
       let output: string;
+      const capped = matches.slice(0, 50);
       if (matches.length === 0) {
         output = mode === "name"
           ? `No matches for "${actualQuery}" in ${tier ?? "agda/"}`
           : `No type-pattern matches for "${actualQuery}" in ${tier ?? "agda/"}`;
       } else {
-        const capped = matches.slice(0, 50);
         output = `## Search (${mode}): "${actualQuery}" (${matches.length} matches${matches.length > 50 ? ", showing first 50" : ""})\n\n`;
         for (const m of capped) output += `- **${m.file}:${m.line}** \`${m.text}\`\n`;
       }
@@ -459,7 +573,20 @@ export function register(
       if (truncatedAtCap) {
         output += `\n_Truncated at ${MAX_RAW_MATCHES} raw matches; refine the query to see the rest._`;
       }
-      return output;
+      return {
+        text: output,
+        data: {
+          mode,
+          query: actualQuery,
+          tier: tier ?? null,
+          matchCount: matches.length,
+          shown: capped.length,
+          truncated: truncatedAtCap,
+          matches: capped,
+          unreadableSubtrees: unreadableDirs,
+          unreadableFiles,
+        },
+      };
     },
   });
 }

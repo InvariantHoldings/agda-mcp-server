@@ -35,6 +35,13 @@ export function register(
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
       args: z.array(z.string()).optional().describe("Optional Agda CLI arguments for the compile command"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      backend: z.string(),
+      file: z.string(),
+      success: z.boolean(),
+      output: z.string(),
+    }),
     callback: async ({ backend, file, args }: { backend: string; file: string; args?: string[] }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(requestedFilePath)) {
@@ -42,13 +49,23 @@ export function register(
       }
       const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const result = await session.backend.compile(backend, filePath, args);
-      return [
+      const relFile = relative(repoRoot, requestedFilePath);
+      const text = [
         "## Compile", "",
         `Backend: ${backend}`,
-        `File: ${relative(repoRoot, requestedFilePath)}`,
+        `File: ${relFile}`,
         `Status: ${result.success ? "OK" : "FAILED"}`, "",
         result.output || "(no output)",
       ].join("\n");
+      return {
+        text,
+        data: {
+          backend,
+          file: relFile,
+          success: result.success,
+          output: result.output ?? "",
+        },
+      };
     },
   });
 
@@ -62,14 +79,24 @@ export function register(
       backend: z.string().describe(backendExpressionHelp()),
       payload: z.string().describe("Arbitrary backend payload string"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      backend: z.string(),
+      success: z.boolean(),
+      output: z.string(),
+    }),
     callback: async ({ backend, payload }: { backend: string; payload: string }) => {
       const result = await session.backend.top(backend, payload);
-      return [
+      const text = [
         "## Backend top-level command", "",
         `Backend: ${backend}`,
         `Status: ${result.success ? "OK" : "FAILED"}`, "",
         result.output || "(no output)",
       ].join("\n");
+      return {
+        text,
+        data: { backend, success: result.success, output: result.output ?? "" },
+      };
     },
   });
 
@@ -86,6 +113,13 @@ export function register(
       backend: z.string().describe(backendExpressionHelp()),
       payload: z.string().describe("Arbitrary backend payload string"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      backend: z.string(),
+      success: z.boolean(),
+      output: z.string(),
+    }),
     callback: async ({ goalId, holeContents, backend, payload }) => {
       const result = await session.backend.hole(
         goalId,
@@ -93,13 +127,21 @@ export function register(
         backend as string,
         payload as string,
       );
-      return [
+      const text = [
         "## Backend hole command", "",
         `Goal: ?${goalId}`,
         `Backend: ${backend}`,
         `Status: ${result.success ? "OK" : "FAILED"}`, "",
         result.output || "(no output)",
       ].join("\n");
+      return {
+        text,
+        data: {
+          backend: backend as string,
+          success: result.success,
+          output: result.output ?? "",
+        },
+      };
     },
   });
 }

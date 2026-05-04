@@ -53,6 +53,7 @@ import {
   loadProjectConfig,
   mergeCommandLineOptions,
 } from "../session/project-config.js";
+import { iotcmEnvelope, topLevelCommand } from "../protocol/command-builder.js";
 import { statSync } from "node:fs";
 
 export { findAgdaBinary };
@@ -214,8 +215,7 @@ export class AgdaSession {
    * Format: IOTCM "<filepath>" NonInteractive Direct (<agda-command>)
    */
   iotcm(agdaCmd: string): string {
-    const fp = this.currentFile ?? "";
-    return `IOTCM "${fp}" NonInteractive Direct (${agdaCmd})`;
+    return iotcmEnvelope(this.currentFile ?? "", agdaCmd);
   }
 
   /** Get the currently loaded file path, or throw if none loaded. */
@@ -233,10 +233,6 @@ export class AgdaSession {
     }
   }
 
-  private buildIotcm(filePath: string, agdaCmd: string): string {
-    return `IOTCM "${filePath}" NonInteractive Direct (${agdaCmd})`;
-  }
-
   /**
    * Build an IOTCM command string for a specific file path, bypassing
    * the session's currentFile. Used by the extracted load helpers
@@ -245,14 +241,14 @@ export class AgdaSession {
    * race with ensureProcess()'s stale-state reset path.
    */
   iotcmFor(filePath: string, agdaCmd: string): string {
-    return this.buildIotcm(filePath, agdaCmd);
+    return iotcmEnvelope(filePath, agdaCmd);
   }
 
   private async runIndependentCommand(
     agdaCmd: string,
     timeoutMs = 120_000,
   ): Promise<AgdaResponse[]> {
-    return this.sendCommand(this.buildIotcm(this.currentFile ?? "", agdaCmd), timeoutMs);
+    return this.sendCommand(iotcmEnvelope(this.currentFile ?? "", agdaCmd), timeoutMs);
   }
 
   // ── Public API ────────────────────────────────────────────────────
@@ -329,13 +325,13 @@ export class AgdaSession {
 
   /** Send Cmd_abort to the running Agda process. */
   async abort(): Promise<AgdaResponse[]> {
-    return this.runIndependentCommand("Cmd_abort", 10_000);
+    return this.runIndependentCommand(topLevelCommand("Cmd_abort"), 10_000);
   }
 
   /** Send Cmd_exit to the running Agda process. */
   async exit(): Promise<AgdaResponse[]> {
     this.exiting = true;
-    return this.runIndependentCommand("Cmd_exit", 10_000);
+    return this.runIndependentCommand(topLevelCommand("Cmd_exit"), 10_000);
   }
 
   // ── Accessors ─────────────────────────────────────────────────────
