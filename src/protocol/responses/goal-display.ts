@@ -71,6 +71,9 @@ export function decodeGoalDisplayResponses(responses: AgdaResponse[]): DecodedGo
 
         if (sections.length >= 2 && context.length === 0) {
             context.push(...sections[0].split("\n").map((line) => line.trim()).filter(Boolean));
+            // `splitSections` filters out empty entries via
+            // `.filter(Boolean)`, so `sections[1]` is non-empty when
+            // the index exists; the `??` is defensive.
             goalType = sections[1] ?? goalType;
             auxiliary = sections.slice(2).join("\n\n") || auxiliary;
             continue;

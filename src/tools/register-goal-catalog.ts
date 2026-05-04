@@ -74,7 +74,8 @@ export function registerGoalCatalog(
               errorDiagnostic(
                 "No file loaded. Call agda_load first.",
                 "no-loaded-file",
-                "agda_load",
+                "Call `agda_load` with the file you want to inspect. " +
+                "The goal catalog is empty until a file with `{!!}` / `?` markers is loaded successfully.",
               ),
             ],
           }),

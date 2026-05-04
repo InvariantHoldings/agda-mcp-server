@@ -7,7 +7,7 @@
 // uniformly through `LoadResult.projectConfigWarnings`.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { z } from "zod";
 
@@ -22,6 +22,7 @@ import {
 } from "../../agda/agent-ux.js";
 import { filePathDescription } from "../../agda/version-support.js";
 import { projectConfigDiagnostics } from "../../session/project-config-diagnostics.js";
+import { writeFileAtomic } from "../../session/safe-source-io.js";
 import { resolveProjectFile } from "../path-utils.js";
 import {
   errorDiagnostic,
@@ -139,7 +140,7 @@ export function registerEditTools(
       let warnings: string[] = [];
       let configWarningDiags: ToolDiagnostic[] = [];
       if (!dryRun && renamed.replacements > 0) {
-        writeFileSync(filePath, renamed.updated, "utf8");
+        await writeFileAtomic(filePath, renamed.updated);
         const load = await session.load(filePath);
         loadClassification = load.classification;
         errors = load.errors.map(rewriteCompilerPlaceholders);
@@ -214,7 +215,7 @@ export function registerEditTools(
       const shouldWrite = writeToFile !== false;
       if (shouldWrite) {
         const next = insertClauseAtEndOfFunction(source, functionName, clause);
-        writeFileSync(filePath, next, "utf8");
+        await writeFileAtomic(filePath, next);
         const load = await session.load(filePath);
         loadClassification = load.classification;
         configWarningDiags = projectConfigDiagnostics(load.projectConfigWarnings);
@@ -292,7 +293,7 @@ export function registerEditTools(
         const toInsert = uniqueFixities.filter((fixity) => !existing.has(fixity));
         if (toInsert.length > 0) {
           lines.splice(insertAt, 0, ...toInsert);
-          writeFileSync(filePath, lines.join("\n"), "utf8");
+          await writeFileAtomic(filePath, lines.join("\n"));
           appliedFixities.push(...toInsert);
         }
       }
