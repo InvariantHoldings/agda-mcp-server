@@ -68,4 +68,23 @@ describe("classifyAgdaAgainstSupportedRange", () => {
     const status = classifyAgdaAgainstSupportedRange(parseAgdaVersion("2.7.0.1"));
     expect(status.range).toEqual(getSupportedAgdaRange());
   });
+
+  test("cached SupportedAgdaRange is frozen — accidental mutation throws", () => {
+    // Both reporting tools and the startup warning share the cached
+    // range object. If a downstream caller could rewrite it, every
+    // subsequent call would see the tampered bounds. The freeze guards
+    // that.
+    const range = getSupportedAgdaRange();
+    expect(() => {
+      (range as unknown as { minAgdaVersion: string }).minAgdaVersion = "0.0.0";
+    }).toThrow(TypeError);
+  });
+
+  test("getSupportedAgdaRange returns the same identity on repeat calls", () => {
+    // Caching is observable: repeat callers must see the identical
+    // reference, not a fresh allocation per call. This documents the
+    // hot-path optimisation that backs every tool-callback that calls
+    // getServerVersion or getSupportedAgdaRange.
+    expect(getSupportedAgdaRange()).toBe(getSupportedAgdaRange());
+  });
 });

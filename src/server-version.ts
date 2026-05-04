@@ -5,6 +5,12 @@
 // declared supported-Agda range is the SSOT for both runtime checks
 // (startup warning) and reporting tools (`agda_protocol_parity`,
 // `agda_tools_catalog`).
+//
+// The package.json read happens ONCE at module init and is cached.
+// Every accessor is then O(1). Before the cache, every `getServerVersion`
+// call (which the tool-registration hot path invokes per request)
+// did a synchronous filesystem read + JSON.parse — wasteful for a
+// file that does not change between server start and exit.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -41,7 +47,7 @@ export interface SupportedAgdaRange {
   maxTestedAgdaVersion: string | undefined;
 }
 
-function readPackageJson(): PackageMetadata {
+function readPackageJsonOnce(): PackageMetadata {
   try {
     const here = dirname(fileURLToPath(import.meta.url));
     const packageJsonPath = resolve(here, "..", "package.json");
@@ -51,9 +57,45 @@ function readPackageJson(): PackageMetadata {
   }
 }
 
+const PACKAGE_METADATA: PackageMetadata = readPackageJsonOnce();
+
+const SERVER_VERSION: string =
+  typeof PACKAGE_METADATA.version === "string"
+    ? PACKAGE_METADATA.version
+    : FALLBACK_VERSION;
+
+const SUPPORTED_AGDA_RANGE: Readonly<SupportedAgdaRange> = Object.freeze({
+  minAgdaVersion:
+    typeof PACKAGE_METADATA.agdaMcpServer?.minAgdaVersion === "string"
+      ? PACKAGE_METADATA.agdaMcpServer.minAgdaVersion
+      : undefined,
+  maxTestedAgdaVersion:
+    typeof PACKAGE_METADATA.agdaMcpServer?.maxTestedAgdaVersion === "string"
+      ? PACKAGE_METADATA.agdaMcpServer.maxTestedAgdaVersion
+      : undefined,
+});
+
+/**
+ * Pre-parse the declared bounds once. A malformed bound string is
+ * silently treated as if absent (and the raw string is still surfaced
+ * via `getSupportedAgdaRange` for the human-readable report). We
+ * deliberately do NOT throw at module init: a bad bound would crash
+ * the server before any reporting tool could explain why.
+ */
+const PARSED_MIN: AgdaVersion | undefined = (() => {
+  if (!SUPPORTED_AGDA_RANGE.minAgdaVersion) return undefined;
+  try { return parseAgdaVersion(SUPPORTED_AGDA_RANGE.minAgdaVersion); }
+  catch { return undefined; }
+})();
+
+const PARSED_MAX: AgdaVersion | undefined = (() => {
+  if (!SUPPORTED_AGDA_RANGE.maxTestedAgdaVersion) return undefined;
+  try { return parseAgdaVersion(SUPPORTED_AGDA_RANGE.maxTestedAgdaVersion); }
+  catch { return undefined; }
+})();
+
 export function getServerVersion(): string {
-  const pkg = readPackageJson();
-  return typeof pkg.version === "string" ? pkg.version : FALLBACK_VERSION;
+  return SERVER_VERSION;
 }
 
 /**
@@ -63,12 +105,7 @@ export function getServerVersion(): string {
  * can treat the range as opt-in metadata rather than a hard contract.
  */
 export function getSupportedAgdaRange(): SupportedAgdaRange {
-  const pkg = readPackageJson();
-  const block = pkg.agdaMcpServer ?? {};
-  return {
-    minAgdaVersion: typeof block.minAgdaVersion === "string" ? block.minAgdaVersion : undefined,
-    maxTestedAgdaVersion: typeof block.maxTestedAgdaVersion === "string" ? block.maxTestedAgdaVersion : undefined,
-  };
+  return SUPPORTED_AGDA_RANGE;
 }
 
 /**
@@ -105,40 +142,19 @@ export interface AgdaVersionRangeStatus {
 export function classifyAgdaAgainstSupportedRange(
   detected: AgdaVersion | null | undefined,
 ): AgdaVersionRangeStatus {
-  const range = getSupportedAgdaRange();
+  const range = SUPPORTED_AGDA_RANGE;
   const detectedString = detected ? formatVersion(detected) : undefined;
   if (!detected) {
     return { classification: "unknown", detected: detectedString, range };
   }
-
-  let belowMin = false;
-  if (range.minAgdaVersion) {
-    try {
-      const min = parseAgdaVersion(range.minAgdaVersion);
-      if (compareVersions(detected, min) < 0) belowMin = true;
-    } catch {
-      // Malformed bound — treat as if missing.
-    }
+  if (!PARSED_MIN && !PARSED_MAX) {
+    return { classification: "unknown", detected: detectedString, range };
   }
-  if (belowMin) {
+  if (PARSED_MIN && compareVersions(detected, PARSED_MIN) < 0) {
     return { classification: "below-min", detected: detectedString, range };
   }
-
-  let aboveMax = false;
-  if (range.maxTestedAgdaVersion) {
-    try {
-      const max = parseAgdaVersion(range.maxTestedAgdaVersion);
-      if (compareVersions(detected, max) > 0) aboveMax = true;
-    } catch {
-      // Malformed bound — treat as if missing.
-    }
-  }
-  if (aboveMax) {
+  if (PARSED_MAX && compareVersions(detected, PARSED_MAX) > 0) {
     return { classification: "above-max", detected: detectedString, range };
-  }
-
-  if (!range.minAgdaVersion && !range.maxTestedAgdaVersion) {
-    return { classification: "unknown", detected: detectedString, range };
   }
   return { classification: "in-range", detected: detectedString, range };
 }
