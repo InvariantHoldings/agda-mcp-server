@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  agdaVersionStringSchema,
   classifyAgdaAgainstSupportedRange,
   describeOutOfRangeWarning,
   getServerVersion,
   getSupportedAgdaRange,
+  packageMetadataSchema,
 } from "../../../src/server-version.js";
 import { parseAgdaVersion } from "../../../src/agda/agda-version.js";
 
@@ -86,5 +88,45 @@ describe("classifyAgdaAgainstSupportedRange", () => {
     // hot-path optimisation that backs every tool-callback that calls
     // getServerVersion or getSupportedAgdaRange.
     expect(getSupportedAgdaRange()).toBe(getSupportedAgdaRange());
+  });
+});
+
+describe("agdaVersionStringSchema", () => {
+  test("accepts dotted Agda version strings", () => {
+    for (const accepted of ["2.6.4.3", "2.7.0.1", "2.8.0", "2.9.0", "2.9.0-rc1", "10.0.0-pre.1"]) {
+      expect(() => agdaVersionStringSchema.parse(accepted)).not.toThrow();
+    }
+  });
+
+  test("rejects non-version strings the parser would silently ignore", () => {
+    // These all parsed as "no minimum / no max" before the regex
+    // tightening landed: a typo would silently degrade to "unknown"
+    // classification with no maintainer-visible signal. The schema
+    // now rejects them at module init.
+    for (const rejected of [
+      "",
+      "latest",
+      ".2.9.0",
+      "2.9.0.",
+      "2..9",
+      "2.9.0-",
+      "v2.9.0",
+      "2.9.0; rm -rf /",
+      "2.9.0\n2.10.0",
+      "Agda version 2.9.0",
+    ]) {
+      expect(() => agdaVersionStringSchema.parse(rejected), `${rejected} should be rejected`).toThrow();
+    }
+  });
+
+  test("packageMetadataSchema rejects non-string version field", () => {
+    expect(() => packageMetadataSchema.parse({ version: 123 })).toThrow();
+  });
+
+  test("packageMetadataSchema accepts the live package.json shape", () => {
+    const packageJson = JSON.parse(
+      readFileSync(resolve(import.meta.dirname, "../../../package.json"), "utf8"),
+    );
+    expect(() => packageMetadataSchema.parse(packageJson)).not.toThrow();
   });
 });

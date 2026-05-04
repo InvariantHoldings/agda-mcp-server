@@ -16,6 +16,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { z } from "zod";
+
 import {
   type AgdaVersion,
   compareVersions,
@@ -25,13 +27,29 @@ import {
 
 const FALLBACK_VERSION = "0.0.0-dev";
 
-interface PackageMetadata {
-  version?: unknown;
-  agdaMcpServer?: {
-    minAgdaVersion?: unknown;
-    maxTestedAgdaVersion?: unknown;
-  };
-}
+// Bound strings must look like a dotted Agda version: 1+ numeric
+// components, optional prerelease suffix. A typo in the package.json
+// (e.g. "2.9-x" instead of "2.9.0-rc1") fails the schema parse at
+// module init rather than silently degrading to "unknown" — which a
+// maintainer might never notice because the in-range path still runs.
+//
+// Exported so unit tests can exercise both accepting and rejecting
+// inputs without round-tripping through package.json on disk.
+export const agdaVersionStringSchema = z
+  .string()
+  .regex(/^\d+(?:\.\d+)*(?:-[A-Za-z0-9.]+)?$/u);
+
+export const packageMetadataSchema = z.object({
+  version: z.string().optional(),
+  agdaMcpServer: z
+    .object({
+      minAgdaVersion: agdaVersionStringSchema.optional(),
+      maxTestedAgdaVersion: agdaVersionStringSchema.optional(),
+    })
+    .optional(),
+});
+
+type PackageMetadata = z.infer<typeof packageMetadataSchema>;
 
 /**
  * The declared range of Agda versions this server release was tested
@@ -51,7 +69,13 @@ function readPackageJsonOnce(): PackageMetadata {
   try {
     const here = dirname(fileURLToPath(import.meta.url));
     const packageJsonPath = resolve(here, "..", "package.json");
-    return JSON.parse(readFileSync(packageJsonPath, "utf8")) as PackageMetadata;
+    const raw = JSON.parse(readFileSync(packageJsonPath, "utf8")) as unknown;
+    // Strict-parse against the schema so malformed bound strings or
+    // unexpected types fail at module init. The catch below also
+    // covers schema rejection, so the server still starts on bad
+    // metadata — it just falls back to FALLBACK_VERSION and an empty
+    // range, which surfaces as "unknown" in the parity tool.
+    return packageMetadataSchema.parse(raw);
   } catch {
     return {};
   }
@@ -59,20 +83,11 @@ function readPackageJsonOnce(): PackageMetadata {
 
 const PACKAGE_METADATA: PackageMetadata = readPackageJsonOnce();
 
-const SERVER_VERSION: string =
-  typeof PACKAGE_METADATA.version === "string"
-    ? PACKAGE_METADATA.version
-    : FALLBACK_VERSION;
+const SERVER_VERSION: string = PACKAGE_METADATA.version ?? FALLBACK_VERSION;
 
 const SUPPORTED_AGDA_RANGE: Readonly<SupportedAgdaRange> = Object.freeze({
-  minAgdaVersion:
-    typeof PACKAGE_METADATA.agdaMcpServer?.minAgdaVersion === "string"
-      ? PACKAGE_METADATA.agdaMcpServer.minAgdaVersion
-      : undefined,
-  maxTestedAgdaVersion:
-    typeof PACKAGE_METADATA.agdaMcpServer?.maxTestedAgdaVersion === "string"
-      ? PACKAGE_METADATA.agdaMcpServer.maxTestedAgdaVersion
-      : undefined,
+  minAgdaVersion: PACKAGE_METADATA.agdaMcpServer?.minAgdaVersion,
+  maxTestedAgdaVersion: PACKAGE_METADATA.agdaMcpServer?.maxTestedAgdaVersion,
 });
 
 /**
@@ -140,7 +155,7 @@ export interface AgdaVersionRangeStatus {
  * absent block must not produce false positives.
  */
 export function classifyAgdaAgainstSupportedRange(
-  detected: AgdaVersion | null | undefined,
+  detected: AgdaVersion | null,
 ): AgdaVersionRangeStatus {
   const range = SUPPORTED_AGDA_RANGE;
   const detectedString = detected ? formatVersion(detected) : undefined;
