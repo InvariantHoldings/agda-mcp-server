@@ -20,7 +20,6 @@ import {
 } from "../../agda/agent-ux.js";
 import { buildImportGraph } from "../../agda/import-graph.js";
 import { filePathDescription } from "../../agda/version-support.js";
-import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../../repo-root.js";
 import {
   errorDiagnostic,
   errorEnvelope,
@@ -28,6 +27,7 @@ import {
   okEnvelope,
   registerStructuredTool,
 } from "../tool-helpers.js";
+import { resolveProjectFile } from "../path-utils.js";
 import {
   collectImportCandidates,
   scoreImportCandidate,
@@ -59,43 +59,23 @@ export function registerImportTools(
       })),
     }),
     callback: async ({ symbol, file, maxCandidates }: { symbol: string; file: string; maxCandidates?: number }) => {
-      let requestedPath: string;
-      try {
-        requestedPath = resolveFileWithinRoot(repoRoot, file);
-      } catch (err) {
-        if (err instanceof PathSandboxError) {
-          return makeToolResult(
-            errorEnvelope({
-              tool: "agda_suggest_import",
-              summary: `Invalid file path: ${file}`,
-              classification: "invalid-path",
-              data: { symbol, candidates: [] },
-              diagnostics: [errorDiagnostic(
-                `Invalid file path: ${file}`,
-                "invalid-path",
-                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
-              )],
-            }),
-          );
-        }
-        throw err;
-      }
-      if (!existsSync(requestedPath)) {
+      const resolved = resolveProjectFile(repoRoot, file);
+      if (resolved.error) {
         return makeToolResult(
           errorEnvelope({
             tool: "agda_suggest_import",
-            summary: `File not found: ${file}`,
-            classification: "not-found",
+            summary: resolved.error.message,
+            classification: resolved.error.classification,
             data: { symbol, candidates: [] },
             diagnostics: [errorDiagnostic(
-              `File not found: ${file}`,
-              "not-found",
-              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_file_list` or `agda_search` to discover available files.",
+              resolved.error.message,
+              resolved.error.classification,
+              resolved.error.nextAction,
             )],
           }),
         );
       }
-      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedPath);
+      const filePath = resolved.filePath;
       const source = readFileSync(filePath, "utf8");
       const shape = parseModuleSourceShape(source);
       const existingImports = new Set(shape.imports.map((imp) => imp.moduleName));
@@ -142,53 +122,29 @@ export function registerImportTools(
       clashSource: z.object({ module: z.string(), importLine: z.number().nullable() }).nullable(),
     }),
     callback: async ({ symbol, file }: { symbol: string; file: string }) => {
-      let requestedPath: string;
-      try {
-        requestedPath = resolveFileWithinRoot(repoRoot, file);
-      } catch (err) {
-        if (err instanceof PathSandboxError) {
-          return makeToolResult(
-            errorEnvelope({
-              tool: "agda_find_clash_source",
-              summary: `Invalid file path: ${file}`,
-              classification: "invalid-path",
-              data: {
-                symbol,
-                localBindings: [],
-                importedBindings: [],
-                clashSource: null,
-              },
-              diagnostics: [errorDiagnostic(
-                `Invalid file path: ${file}`,
-                "invalid-path",
-                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
-              )],
-            }),
-          );
-        }
-        throw err;
-      }
-      if (!existsSync(requestedPath)) {
+      const emptyClashData = {
+        symbol,
+        localBindings: [],
+        importedBindings: [],
+        clashSource: null,
+      };
+      const resolved = resolveProjectFile(repoRoot, file);
+      if (resolved.error) {
         return makeToolResult(
           errorEnvelope({
             tool: "agda_find_clash_source",
-            summary: `File not found: ${file}`,
-            classification: "not-found",
-            data: {
-              symbol,
-              localBindings: [],
-              importedBindings: [],
-              clashSource: null,
-            },
+            summary: resolved.error.message,
+            classification: resolved.error.classification,
+            data: emptyClashData,
             diagnostics: [errorDiagnostic(
-              `File not found: ${file}`,
-              "not-found",
-              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_file_list` or `agda_search` to discover available files.",
+              resolved.error.message,
+              resolved.error.classification,
+              resolved.error.nextAction,
             )],
           }),
         );
       }
-      const filePath = resolveExistingPathWithinRoot(repoRoot, requestedPath);
+      const filePath = resolved.filePath;
       const source = readFileSync(filePath, "utf8");
       const shape = parseModuleSourceShape(source);
       const defs = parseTopLevelDefinitions(source);

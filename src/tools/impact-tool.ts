@@ -13,14 +13,12 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { existsSync } from "node:fs";
 import { relative } from "node:path";
 
 import type { AgdaSession } from "../agda-process.js";
 import { buildImportGraph, computeImpact } from "../agda/import-graph.js";
-import { canonicalizeOrFallback } from "./path-utils.js";
+import { canonicalizeOrFallback, resolveProjectFile } from "./path-utils.js";
 import { filePathDescription } from "../agda/version-support.js";
-import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import {
   errorDiagnostic,
   errorEnvelope,
@@ -64,64 +62,27 @@ export function register(
     },
     outputDataSchema: impactDataSchema,
     callback: async ({ file, limit }: { file: string; limit?: number }) => {
-      let requestedFilePath: string;
-      try {
-        requestedFilePath = resolveFileWithinRoot(repoRoot, file);
-      } catch (err) {
-        if (err instanceof PathSandboxError) {
-          return makeToolResult(
-            errorEnvelope({
-              tool: "agda_impact",
-              summary: `Invalid file path: ${file}`,
-              classification: "invalid-path",
-              data: emptyImpactData(file),
-              diagnostics: [errorDiagnostic(
-                `Invalid file path: ${file}`,
-                "invalid-path",
-                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
-              )],
-            }),
-          );
-        }
-        throw err;
-      }
-      if (!existsSync(requestedFilePath)) {
+      // Three-step path resolution (sandbox check → existsSync →
+      // canonicalisation) is shared with every other file-input tool;
+      // delegate to the helper and route the discriminated error
+      // through the per-tool empty-data shape.
+      const resolved = resolveProjectFile(repoRoot, file);
+      if (resolved.error) {
         return makeToolResult(
           errorEnvelope({
             tool: "agda_impact",
-            summary: `File not found: ${file}`,
-            classification: "not-found",
+            summary: resolved.error.message,
+            classification: resolved.error.classification,
             data: emptyImpactData(file),
             diagnostics: [errorDiagnostic(
-              `File not found: ${requestedFilePath}`,
-              "not-found",
-              "Confirm the path is relative to PROJECT_ROOT. Use `agda_file_list` or `agda_search` to discover available files.",
+              resolved.error.message,
+              resolved.error.classification,
+              resolved.error.nextAction,
             )],
           }),
         );
       }
-
-      let filePath: string;
-      try {
-        filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
-      } catch (err) {
-        if (err instanceof PathSandboxError) {
-          return makeToolResult(
-            errorEnvelope({
-              tool: "agda_impact",
-              summary: `Invalid file path: ${file}`,
-              classification: "invalid-path",
-              data: emptyImpactData(file),
-              diagnostics: [errorDiagnostic(
-                `Invalid file path: ${file}`,
-                "invalid-path",
-                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
-              )],
-            }),
-          );
-        }
-        throw err;
-      }
+      const filePath = resolved.filePath;
       // Canonicalize the project root the same way `resolveExistingPathWithinRoot`
       // canonicalizes the source path, otherwise on macOS the graph
       // keys (built from `realpath(repoRoot)`) won't match the

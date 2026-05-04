@@ -7,7 +7,7 @@
 // uniformly through `LoadResult.projectConfigWarnings`.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { relative } from "node:path";
 import { z } from "zod";
 
@@ -21,8 +21,8 @@ import {
   rewriteCompilerPlaceholders,
 } from "../../agda/agent-ux.js";
 import { filePathDescription } from "../../agda/version-support.js";
-import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../../repo-root.js";
 import { projectConfigDiagnostics } from "../../session/project-config-diagnostics.js";
+import { resolveProjectFile } from "../path-utils.js";
 import {
   errorDiagnostic,
   errorEnvelope,
@@ -103,59 +103,32 @@ export function registerEditTools(
       warnings: z.array(z.string()),
     }),
     callback: async ({ file, from, to, dryRun }: { file: string; from: string; to: string; dryRun?: boolean }) => {
-      let requested: string;
-      try {
-        requested = resolveFileWithinRoot(repoRoot, file);
-      } catch (err) {
-        if (err instanceof PathSandboxError) {
-          return makeToolResult(
-            errorEnvelope({
-              tool: "agda_apply_rename",
-              summary: `Invalid path: ${file}`,
-              classification: "invalid-path",
-              data: {
-                file,
-                replacements: 0,
-                changed: false,
-                diff: "",
-                loadClassification: null,
-                errors: [`Invalid file path: ${file}`],
-                warnings: [],
-              },
-              diagnostics: [errorDiagnostic(
-                `Invalid file path: ${file}`,
-                "invalid-path",
-                "The path resolved outside PROJECT_ROOT. Pass a relative path or an absolute path inside the project root.",
-              )],
-            }),
-          );
-        }
-        throw err;
-      }
-      if (!existsSync(requested)) {
+      const emptyRenameData = () => ({
+        file,
+        replacements: 0,
+        changed: false,
+        diff: "",
+        loadClassification: null,
+        errors: [] as string[],
+        warnings: [] as string[],
+      });
+      const resolved = resolveProjectFile(repoRoot, file);
+      if (resolved.error) {
         return makeToolResult(
           errorEnvelope({
             tool: "agda_apply_rename",
-            summary: `File not found: ${file}`,
-            classification: "not-found",
-            data: {
-              file,
-              replacements: 0,
-              changed: false,
-              diff: "",
-              loadClassification: null,
-              errors: [`File not found: ${file}`],
-              warnings: [],
-            },
+            summary: resolved.error.message,
+            classification: resolved.error.classification,
+            data: { ...emptyRenameData(), errors: [resolved.error.message] },
             diagnostics: [errorDiagnostic(
-              `File not found: ${file}`,
-              "not-found",
-              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_file_list` or `agda_search` to discover available files.",
+              resolved.error.message,
+              resolved.error.classification,
+              resolved.error.nextAction,
             )],
           }),
         );
       }
-      const filePath = resolveExistingPathWithinRoot(repoRoot, requested);
+      const filePath = resolved.filePath;
       const before = readFileSync(filePath, "utf8");
       const renamed = applyScopedRename(before, from, to);
       const relPath = relative(repoRoot, filePath);
@@ -216,7 +189,23 @@ export function registerEditTools(
       loadClassification: z.string().nullable(),
     }),
     callback: async ({ file, functionName, writeToFile }: { file: string; functionName: string; writeToFile?: boolean }) => {
-      const filePath = resolveExistingPathWithinRoot(repoRoot, resolveFileWithinRoot(repoRoot, file));
+      const resolved = resolveProjectFile(repoRoot, file);
+      if (resolved.error) {
+        return makeToolResult(
+          errorEnvelope({
+            tool: "agda_add_missing_clauses",
+            summary: resolved.error.message,
+            classification: resolved.error.classification,
+            data: { file, functionName, insertedClause: "", arity: 0, loadClassification: null },
+            diagnostics: [errorDiagnostic(
+              resolved.error.message,
+              resolved.error.classification,
+              resolved.error.nextAction,
+            )],
+          }),
+        );
+      }
+      const filePath = resolved.filePath;
       const source = readFileSync(filePath, "utf8");
       const arity = inferMissingClauseArity(source, functionName);
       const clause = buildMissingClause(functionName, arity);
@@ -269,7 +258,23 @@ export function registerEditTools(
       appliedFixities: z.array(z.string()),
     }),
     callback: async ({ file, applyFixity }: { file: string; applyFixity?: boolean }) => {
-      const filePath = resolveExistingPathWithinRoot(repoRoot, resolveFileWithinRoot(repoRoot, file));
+      const resolved = resolveProjectFile(repoRoot, file);
+      if (resolved.error) {
+        return makeToolResult(
+          errorEnvelope({
+            tool: "agda_infer_fixity_conflicts",
+            summary: resolved.error.message,
+            classification: resolved.error.classification,
+            data: { file, conflicts: [], appliedFixities: [] },
+            diagnostics: [errorDiagnostic(
+              resolved.error.message,
+              resolved.error.classification,
+              resolved.error.nextAction,
+            )],
+          }),
+        );
+      }
+      const filePath = resolved.filePath;
       const source = readFileSync(filePath, "utf8");
       const conflicts = inferFixityConflicts(source);
       const appliedFixities: string[] = [];
