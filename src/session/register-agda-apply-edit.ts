@@ -16,6 +16,7 @@ import { realpathSync } from "node:fs";
 import { z } from "zod";
 
 import { AgdaSession, filePathDescription } from "../agda-process.js";
+import { allSourceExtensionSuffixes } from "../agda/version-support.js";
 import { PathSandboxError, resolveExistingPathWithinRoot } from "../repo-root.js";
 import { registerTextTool } from "../tools/tool-helpers.js";
 import { applyTextEdit } from "./apply-proof-edit.js";
@@ -30,19 +31,11 @@ import { reloadAndDiagnose } from "./reload-and-diagnose.js";
  * This is the blast-radius half of the sandbox; path containment
  * (via `resolveExistingPathWithinRoot`) is the other half.
  *
- * Covers the literate variants agda-mode currently supports. If
- * Agda adds another literate backend, add it here (and to
- * parse-load-responses.ts's error-location regex for consistency).
+ * Read from the canonical version-support list so adding a literate
+ * variant means editing one JSON file (`agda-source-extensions.json`)
+ * rather than three call sites (issue #15).
  */
-export const AGDA_SOURCE_EXTENSIONS = [
-  ".agda",
-  ".lagda",
-  ".lagda.md",
-  ".lagda.rst",
-  ".lagda.tex",
-  ".lagda.org",
-  ".lagda.typ",
-] as const;
+export const AGDA_SOURCE_EXTENSIONS: ReadonlyArray<string> = allSourceExtensionSuffixes();
 
 export function hasAgdaSourceExtension(path: string): boolean {
   // Compare against the lowercase filename so `Foo.AGDA` is

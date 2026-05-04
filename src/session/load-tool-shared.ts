@@ -51,6 +51,12 @@ export function missingFileResult(tool: LoadToolName, filePath: string) {
         ...baseErrorData(filePath, message, "file-not-found"),
         ...reloadFields(tool),
       },
+      diagnostics: [errorDiagnostic(
+        message,
+        "file-not-found",
+        "Confirm the path is relative to AGDA_MCP_ROOT (or absolute and within it). " +
+        "Use `agda_file_list` to see available modules, or `agda_search` to locate one.",
+      )],
     }),
   );
 }
@@ -65,6 +71,13 @@ export function processErrorResult(tool: LoadToolName, file: string, message: st
         ...baseErrorData(file, message, "process-error"),
         ...reloadFields(tool),
       },
+      diagnostics: [errorDiagnostic(
+        message,
+        "process-error",
+        "The Agda subprocess crashed or could not be started. " +
+        "Run `agda --version` to confirm it is installed and on PATH (or set AGDA_BIN), " +
+        "then retry the load.",
+      )],
     }),
     message,
   );
@@ -81,7 +94,12 @@ export function invalidPathResult(tool: LoadToolName, file: string) {
         ...baseErrorData(file, message, "invalid-path"),
         ...reloadFields(tool),
       },
-      diagnostics: [errorDiagnostic(message, "invalid-path")],
+      diagnostics: [errorDiagnostic(
+        message,
+        "invalid-path",
+        "The path resolved outside the project sandbox (PROJECT_ROOT / AGDA_MCP_ROOT). " +
+        "Pass a relative path or an absolute path inside the project root.",
+      )],
     }),
     message,
   );
@@ -131,7 +149,14 @@ export function validateProfileOptionsOrError(
         errors: validation.errors,
       },
       diagnostics: validation.errors.map((msg) =>
-        errorDiagnostic(msg, "invalid-profile-option"),
+        errorDiagnostic(
+          msg,
+          "invalid-profile-option",
+          "Pass profile options from the documented set (internal, modules, definitions, " +
+          "sharing, serialize, constraints, metas, interactive, conversion, all). " +
+          "Call `agda_show_version` to see what your Agda build accepts; the mutually-" +
+          "exclusive group is internal/modules/definitions.",
+        ),
       ),
     }),
   );
@@ -168,7 +193,14 @@ export function validateCommandLineOptionsOrError(
         errors: enrichedErrors,
       },
       diagnostics: enrichedErrors.map((msg) =>
-        errorDiagnostic(msg, "invalid-command-line-option"),
+        errorDiagnostic(
+          msg,
+          "invalid-command-line-option",
+          "Each entry must start with '-' and not collide with the MCP server's interactive " +
+          "session mode (--interaction-json, --version, etc. are reserved). Use " +
+          "`agda_project_config` to inspect resolved file/env defaults; pass per-call options " +
+          "as an array of strings, one flag per entry.",
+        ),
       ),
     }),
   );

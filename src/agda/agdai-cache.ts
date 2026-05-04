@@ -32,6 +32,8 @@
 import { existsSync, readdirSync, realpathSync, statSync, unlinkSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { allSourceExtensionSuffixes } from "./version-support.js";
+
 /** The two layouts Agda's `toIFile` produces. See the module header. */
 export type AgdaiArtifactKind = "separated" | "local";
 
@@ -286,25 +288,15 @@ export function bustAgdaiCache(
  * file collapses the literate suffix down to `.agdai`. Matches
  * Agda's `dropAgdaExtension` behaviour in
  * `src/full/Agda/Interaction/FindFile.hs`.
+ *
+ * Read from the canonical version-support list (issue #15: the
+ * extension set lives in `src/agda/data/agda-source-extensions.json`,
+ * with `version-support.ts` as its single TypeScript consumer). Sorted
+ * longest-first so that `.lagda.md` wins over `.lagda` when stripping
+ * the suffix from a file like `Foo.lagda.md`.
  */
-const AGDA_SOURCE_SUFFIXES = [
-  ".agda",
-  ".lagda",
-  ".lagda.tex",
-  ".lagda.md",
-  ".lagda.rst",
-  ".lagda.org",
-  ".lagda.tree",
-  ".lagda.typ",
-] as const;
-
-/**
- * Sort longest-first so that `.lagda.md` wins over `.lagda` when
- * stripping the suffix from a file like `Foo.lagda.md`.
- */
-const AGDA_SOURCE_SUFFIXES_LONGEST_FIRST = [...AGDA_SOURCE_SUFFIXES].sort(
-  (a, b) => b.length - a.length,
-);
+const AGDA_SOURCE_SUFFIXES_LONGEST_FIRST: ReadonlyArray<string> =
+  allSourceExtensionSuffixes().sort((a, b) => b.length - a.length);
 
 function sourceRelToAgdaiRel(sourceRel: string): string | null {
   for (const suffix of AGDA_SOURCE_SUFFIXES_LONGEST_FIRST) {

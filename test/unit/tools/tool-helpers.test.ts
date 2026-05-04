@@ -315,7 +315,9 @@ test("sessionErrorStateGate returns unavailable when lastClassification is type-
   const diag = result!.structuredContent.diagnostics[0];
   expect(diag.severity).toBe("error");
   expect(diag.code).toBe("session-unavailable");
-  expect(diag.nextAction).toBe("agda_load");
+  // The nextAction was upgraded from a bare tool name to a full
+  // recovery sentence; require that it still references agda_load.
+  expect(diag.nextAction).toMatch(/agda_load/u);
 
   // Recovery hint diagnostic
   const hint = result!.structuredContent.diagnostics[1];

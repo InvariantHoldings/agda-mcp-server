@@ -1,0 +1,11 @@
+{
+  "$comment": "Curated builtin name → module map plus rename/removal records. Consumed by agda_builtin_migration_map and agda_verify_builtin. Validated at module load via Zod; format change must be matched by src/tools/agent-ux/migration-tools.ts.",
+  "entries": [
+    { "name": "Nat", "module": "Agda.Builtin.Nat" },
+    { "name": "List", "module": "Agda.Builtin.List" },
+    { "name": "Bool", "module": "Agda.Builtin.Bool" },
+    { "name": "Sigma", "module": "Agda.Builtin.Sigma", "renamedFrom": "Σ" },
+    { "name": "IO", "module": "Agda.Builtin.IO" },
+    { "name": "Word64", "module": "Agda.Builtin.Word", "removedIn": "2.9.0", "replacement": "Data.Word.Word64" }
+  ]
+}

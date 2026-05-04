@@ -13,6 +13,7 @@ import type { AgdaSession } from "../agda-process.js";
 import { logger } from "../agda/logger.js";
 import { buildGoalCatalog, renderGoalCatalogText } from "../session/goal-catalog.js";
 import { makeToolResult, okEnvelope, errorEnvelope, errorDiagnostic, registerStructuredTool } from "./tool-helpers.js";
+import { goalIdSchema } from "./tool-schemas.js";
 
 const contextEntrySchema = z.object({
   name: z.string(),
@@ -28,7 +29,7 @@ const suggestionSchema = z.object({
 });
 
 const goalEntrySchema = z.object({
-  goalId: z.number(),
+  goalId: goalIdSchema,
   type: z.string(),
   context: z.array(contextEntrySchema),
   splittableVariables: z.array(z.string()),
@@ -73,7 +74,8 @@ export function registerGoalCatalog(
               errorDiagnostic(
                 "No file loaded. Call agda_load first.",
                 "no-loaded-file",
-                "agda_load",
+                "Call `agda_load` with the file you want to inspect. " +
+                "The goal catalog is empty until a file with `{!!}` / `?` markers is loaded successfully.",
               ),
             ],
           }),

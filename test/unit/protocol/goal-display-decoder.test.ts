@@ -95,3 +95,4 @@ test("decodeGoalDisplayResponses ignores non-DisplayInfo responses", () => {
   expect(decoded.goalType).toBe("");
   expect(decoded.context).toEqual([]);
 });
+

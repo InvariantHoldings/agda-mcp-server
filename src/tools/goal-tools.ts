@@ -9,6 +9,7 @@ import { registerGoalTextTool } from "./tool-helpers.js";
 import { applyEditAndReload } from "../session/reload-and-diagnose.js";
 import { hasReplacementText } from "../protocol/responses/proof-actions.js";
 import { buildAutoSearchPayload } from "../agda/agent-ux.js";
+import { goalIdSchema } from "./tool-schemas.js";
 
 // Appended to every write-capable proof-action tool description so
 // MCP clients surface the 512 KiB guard in their introspection. The
@@ -29,7 +30,7 @@ export function register(
     description: "Show the type and local context for a specific goal. Requires a file to be loaded first via agda_load.",
     category: "proof",
     protocolCommands: ["Cmd_goal_type_context"],
-    inputSchema: { goalId: z.number().describe("The goal ID (from agda_load output)") },
+    inputSchema: { goalId: goalIdSchema.describe("The goal ID (from agda_load output)") },
     callback: async ({ goalId }) => {
       const info = await session.goal.typeContext(goalId);
       let output = `## Goal ?${goalId}\n\n`;
@@ -48,7 +49,7 @@ export function register(
     description: "Show only the current goal type for a specific goal, using Agda's exact Cmd_goal_type query.",
     category: "proof",
     protocolCommands: ["Cmd_goal_type"],
-    inputSchema: { goalId: z.number().describe("The goal ID (from agda_load output)") },
+    inputSchema: { goalId: goalIdSchema.describe("The goal ID (from agda_load output)") },
     callback: async ({ goalId }) => {
       const info = await session.goal.type(goalId);
       return `## Goal ?${goalId}\n\n### Goal type\n\`\`\`agda\n${info.type || "(unknown)"}\n\`\`\`\n`;
@@ -62,7 +63,7 @@ export function register(
     description: "Show only the local context for a specific goal, using Agda's exact Cmd_context query.",
     category: "proof",
     protocolCommands: ["Cmd_context"],
-    inputSchema: { goalId: z.number().describe("The goal ID (from agda_load output)") },
+    inputSchema: { goalId: goalIdSchema.describe("The goal ID (from agda_load output)") },
     callback: async ({ goalId }) => {
       const info = await session.goal.context(goalId);
       let output = `## Context for ?${goalId}\n\n`;
@@ -81,7 +82,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_make_case"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID to case-split in"),
+      goalId: goalIdSchema.describe("The goal ID to case-split in"),
       variable: z.string().describe("The variable name to case-split on"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
@@ -115,7 +116,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_give"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID to fill"),
+      goalId: goalIdSchema.describe("The goal ID to fill"),
       expr: z.string().describe("The Agda expression to give"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
@@ -148,7 +149,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_refine_or_intro"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID to refine"),
+      goalId: goalIdSchema.describe("The goal ID to refine"),
       expr: z.string().describe("The expression to refine with (can be empty to let Agda choose)"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
@@ -183,7 +184,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_refine"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID to refine"),
+      goalId: goalIdSchema.describe("The goal ID to refine"),
       expr: z.string().describe("The expression to refine with"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
@@ -218,7 +219,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_intro"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID to introduce into"),
+      goalId: goalIdSchema.describe("The goal ID to introduce into"),
       expr: z.string().optional().describe("Optional existing goal contents to use as input"),
       writeToFile: z.boolean().optional().describe("Write changes to the file and reload (default: true)"),
     },
@@ -253,7 +254,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_autoOne"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID to auto-solve"),
+      goalId: goalIdSchema.describe("The goal ID to auto-solve"),
       depth: z.number().int().min(0).max(50).optional().describe("Optional search depth"),
       listCandidates: z.boolean().optional().describe("List candidate terms when no direct solution is found"),
       excludeHints: z.array(z.string()).optional().describe("Hints/modules to exclude from search"),
@@ -297,7 +298,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_goal_type_context_check"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID for context"),
+      goalId: goalIdSchema.describe("The goal ID for context"),
       expr: z.string().describe("The Agda expression to check against the goal type"),
     },
     callback: async ({ goalId, expr }) => {
@@ -320,7 +321,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_goal_type_context_infer"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID for context"),
+      goalId: goalIdSchema.describe("The goal ID for context"),
       expr: z.string().describe("The Agda expression to infer in context"),
     },
     callback: async ({ goalId, expr }) => {

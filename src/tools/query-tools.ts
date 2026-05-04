@@ -7,6 +7,7 @@ import { relative } from "node:path";
 import { z } from "zod";
 import { AgdaSession } from "../agda-process.js";
 import {
+  errorDiagnostic,
   errorEnvelope,
   groupDiagnosticsByFile,
   infoDiagnostic,
@@ -18,6 +19,7 @@ import {
   warningDiagnostic,
 } from "./tool-helpers.js";
 import { applyBatchEditAndReload } from "../session/reload-and-diagnose.js";
+import { goalIdSchema } from "./tool-schemas.js";
 
 export function register(
   server: McpServer,
@@ -152,6 +154,13 @@ export function register(
               errorsByFile: [],
               warningsByFile: [],
             },
+            diagnostics: [errorDiagnostic(
+              message,
+              "metas-error",
+              "Confirm a file is loaded with `agda_session_status`. " +
+              "If none, call `agda_load`. If load failed, the meta query " +
+              "can't run until the load is fixed.",
+            )],
           }),
           message,
         );
@@ -219,7 +228,7 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_solveOne"],
     inputSchema: {
-      goalId: z.number().describe("The goal ID to solve if it has a unique solution"),
+      goalId: goalIdSchema.describe("The goal ID to solve if it has a unique solution"),
       writeToFile: z.boolean().optional().describe("Write the solution to the source file and reload (default: true)"),
     },
     callback: async ({ goalId, writeToFile }) => {

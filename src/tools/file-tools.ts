@@ -122,6 +122,9 @@ export function register(
               severity: "error",
               message: `Tier directory not found: agda/${tier}`,
               code: "not-found",
+              nextAction:
+                "Pass an existing top-level directory under agda/ (e.g. MathLib, Foundation, Kernel, Research, Extensions, TrustedCompute). " +
+                "Use `agda_file_list` with no `tier` to see the available top-level directories in this project.",
             },
             {
               severity: "info",
@@ -338,6 +341,8 @@ export function register(
               severity: "error",
               message: "Provide either `query` or `typePattern`.",
               code: "invalid-input",
+              nextAction:
+                "Pass `query` for a substring search across module / definition names, or `typePattern` for a token-pattern match against type signatures (e.g. `Nat → _ → Nat`).",
             },
           ],
           data: { query: actualQuery, tier },
@@ -358,10 +363,24 @@ export function register(
           logger.trace("agda_search_definitions: version detection best-effort failed", { err });
         }
       }
+      // Hard cap on the matches array so a pathological query
+      // (`pattern: " "`, etc.) on a huge repo can't OOM the server.
+      // The visible cap (slice(0, 50)) is much lower; this is the
+      // memory-safety backstop. 5000 matches × ~200 bytes/entry ≈ 1MB.
+      const MAX_RAW_MATCHES = 5000;
       const matches: Array<{ file: string; line: number; text: string }> = [];
       const unreadableDirs: string[] = [];
       const unreadableFiles: string[] = [];
+      let truncatedAtCap = false;
       function searchDir(dir: string, requestedDir: string, displayPrefix: string): void {
+        // Short-circuit the entire walk once we hit the cap. Without
+        // this check, a broad query on a huge repo continues recursing
+        // into sibling subtrees and reading more files even after
+        // `matches` is already full — pure I/O / CPU waste because
+        // the inner loop's cap check would just `return` after each
+        // file's first line. Bail at the directory boundary so an
+        // entire skipped subtree stops at one stat instead of N reads.
+        if (truncatedAtCap) return;
         let entries: import("node:fs").Dirent[];
         try {
           entries = readdirSync(dir, { withFileTypes: true });
@@ -373,6 +392,7 @@ export function register(
           return;
         }
         for (const entry of entries) {
+          if (truncatedAtCap) return;
           const nextRequestedPath = resolve(requestedDir, entry.name);
           const nextDisplayPath = join(displayPrefix, entry.name);
           if (entry.isDirectory()) {
@@ -396,6 +416,10 @@ export function register(
               continue;
             }
             for (let i = 0; i < fileLines.length; i++) {
+              if (matches.length >= MAX_RAW_MATCHES) {
+                truncatedAtCap = true;
+                return;
+              }
               const line = fileLines[i];
               if (mode === "name") {
                 if (!line.includes(actualQuery)) continue;
@@ -431,6 +455,9 @@ export function register(
           output += ` and ${unreadableFiles.length} unreadable file(s)`;
         }
         output += `; check file permissions or broken symlinks._`;
+      }
+      if (truncatedAtCap) {
+        output += `\n_Truncated at ${MAX_RAW_MATCHES} raw matches; refine the query to see the rest._`;
       }
       return output;
     },

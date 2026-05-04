@@ -4,6 +4,7 @@
 // the current session state for one-call agent introspection.
 
 import { z } from "zod";
+import { existsSync } from "node:fs";
 import { relative } from "node:path";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -24,6 +25,13 @@ export const sessionSnapshotDataSchema = z.object({
   phase: z.string(),
   loadedFile: z.string().nullable(),
   projectRoot: z.string(),
+  /**
+   * Whether the resolved `projectRoot` exists on disk. Set to `false`
+   * when AGDA_MCP_ROOT is misconfigured — surfaces the misconfiguration
+   * to an agent calling `agda_session_snapshot` to debug a wave of
+   * `not-found` errors. Always `true` on a healthy session.
+   */
+  projectRootExists: z.boolean(),
   stale: z.boolean(),
   goalCount: z.number(),
   goalIds: z.array(z.number()),
@@ -61,6 +69,10 @@ export function registerSessionSnapshot(
         phase: session.getPhase(),
         loadedFile: relFile,
         projectRoot,
+        // Re-check on every snapshot call (cheap stat) so a root that
+        // was deleted mid-session shows up immediately, not just at
+        // server startup.
+        projectRootExists: existsSync(projectRoot),
         stale: session.isFileStale(),
         goalIds: session.getGoalIds(),
         invisibleGoalCount: session.getInvisibleGoalCount(),

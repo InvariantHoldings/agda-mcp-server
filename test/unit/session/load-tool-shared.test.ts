@@ -7,7 +7,12 @@
 
 import { test, expect } from "vitest";
 
-import { validateCommandLineOptionsOrError } from "../../../src/session/load-tool-shared.js";
+import {
+  invalidPathResult,
+  missingFileResult,
+  processErrorResult,
+  validateCommandLineOptionsOrError,
+} from "../../../src/session/load-tool-shared.js";
 
 test("validateCommandLineOptionsOrError returns null on valid input", () => {
   const result = validateCommandLineOptionsOrError(
@@ -87,4 +92,46 @@ test("multiple bad inputs produce multiple enriched errors", () => {
   expect(data.errors.length).toBe(2);
   expect(data.errors.some((e: string) => e.includes("--Werror"))).toBe(true);
   expect(data.errors.some((e: string) => e.includes("--safe"))).toBe(true);
+});
+
+// ── nextAction hints on every error envelope ─────────────────────────
+
+test("missingFileResult diagnostic includes a nextAction hint", () => {
+  const result = missingFileResult("agda_load", "/tmp/nope.agda");
+  const diags = result.structuredContent.diagnostics ?? [];
+  expect(diags.length).toBeGreaterThan(0);
+  expect(diags[0].code).toBe("file-not-found");
+  expect(diags[0].nextAction).toBeDefined();
+  expect(diags[0].nextAction).toMatch(/PROJECT_ROOT|agda_file_list/u);
+});
+
+test("processErrorResult diagnostic includes a toolchain-recovery nextAction", () => {
+  const result = processErrorResult("agda_load", "Foo.agda", "Agda subprocess crashed");
+  const diags = result.structuredContent.diagnostics ?? [];
+  expect(diags.length).toBeGreaterThan(0);
+  expect(diags[0].code).toBe("process-error");
+  expect(diags[0].nextAction).toBeDefined();
+  expect(diags[0].nextAction).toMatch(/agda --version|AGDA_BIN/u);
+});
+
+test("invalidPathResult diagnostic includes a sandbox-relative nextAction", () => {
+  const result = invalidPathResult("agda_typecheck", "../escape.agda");
+  const diags = result.structuredContent.diagnostics ?? [];
+  expect(diags.length).toBeGreaterThan(0);
+  expect(diags[0].code).toBe("invalid-path");
+  expect(diags[0].nextAction).toBeDefined();
+  expect(diags[0].nextAction).toMatch(/sandbox|PROJECT_ROOT/u);
+});
+
+test("invalid-command-line-options diagnostic includes a nextAction", () => {
+  const result = validateCommandLineOptionsOrError(
+    "agda_load",
+    "Test.agda",
+    ["bad-no-dash"],
+  );
+  expect(result).not.toBeNull();
+  const diags = result!.structuredContent.diagnostics ?? [];
+  expect(diags.length).toBeGreaterThan(0);
+  expect(diags[0].nextAction).toBeDefined();
+  expect(diags[0].nextAction).toMatch(/agda_project_config|reserved/u);
 });

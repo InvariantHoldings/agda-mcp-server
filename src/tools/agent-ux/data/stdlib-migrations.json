@@ -1,0 +1,9 @@
+{
+  "$comment": "Curated cross-version stdlib renames consumed by agda_stdlib_migration_map. Each entry: name in `from` was renamed to `to` between `fromVersion` and `toVersion`. Validated at module load via Zod; format change must be matched by src/tools/agent-ux/migration-tools.ts.",
+  "entries": [
+    { "fromVersion": "1.7", "toVersion": "2.0", "from": "proj1", "to": "proj₁" },
+    { "fromVersion": "1.7", "toVersion": "2.0", "from": "proj2", "to": "proj₂" },
+    { "fromVersion": "1.7", "toVersion": "2.0", "from": "_,_", "to": "_,_" },
+    { "fromVersion": "2.0", "toVersion": "2.1", "from": "Data.Nat.Properties.≤-refl", "to": "Data.Nat.Properties.≤-refl" }
+  ]
+}

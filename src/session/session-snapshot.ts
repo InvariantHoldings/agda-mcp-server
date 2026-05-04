@@ -18,6 +18,13 @@ export interface SessionSnapshot {
   loadedFile: string | null;
   /** Project root directory. */
   projectRoot: string;
+  /**
+   * Whether `projectRoot` resolves to an existing directory on disk.
+   * Set to `false` when AGDA_MCP_ROOT is misconfigured (typo, deleted
+   * after server start). Surfaces the misconfiguration to an agent
+   * debugging a wave of `not-found` errors.
+   */
+  projectRootExists: boolean;
   /** Whether the loaded file is stale (modified on disk since last load). */
   stale: boolean;
   /** Number of visible goals (interaction points). */
@@ -54,6 +61,9 @@ export interface SnapshotInput {
   phase: SessionPhase;
   loadedFile: string | null;
   projectRoot: string;
+  /** Whether `projectRoot` exists on disk (caller-provided so the
+   *  derivation stays a pure function with no I/O). */
+  projectRootExists: boolean;
   stale: boolean;
   goalIds: number[];
   invisibleGoalCount: number;
@@ -85,6 +95,7 @@ export function deriveSessionSnapshot(input: SnapshotInput): SessionSnapshot {
     phase: input.phase,
     loadedFile: input.loadedFile,
     projectRoot: input.projectRoot,
+    projectRootExists: input.projectRootExists,
     stale: input.stale,
     goalCount,
     goalIds: [...input.goalIds],

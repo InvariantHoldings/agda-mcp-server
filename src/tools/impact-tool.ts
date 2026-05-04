@@ -13,14 +13,14 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { existsSync, realpathSync } from "node:fs";
 import { relative } from "node:path";
 
 import type { AgdaSession } from "../agda-process.js";
 import { buildImportGraph, computeImpact } from "../agda/import-graph.js";
+import { canonicalizeOrFallback, resolveProjectFile } from "./path-utils.js";
 import { filePathDescription } from "../agda/version-support.js";
-import { PathSandboxError, resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import {
+  errorDiagnostic,
   errorEnvelope,
   makeToolResult,
   okEnvelope,
@@ -62,52 +62,27 @@ export function register(
     },
     outputDataSchema: impactDataSchema,
     callback: async ({ file, limit }: { file: string; limit?: number }) => {
-      let requestedFilePath: string;
-      try {
-        requestedFilePath = resolveFileWithinRoot(repoRoot, file);
-      } catch (err) {
-        if (err instanceof PathSandboxError) {
-          return makeToolResult(
-            errorEnvelope({
-              tool: "agda_impact",
-              summary: `Invalid file path: ${file}`,
-              classification: "invalid-path",
-              data: emptyImpactData(file),
-              diagnostics: [{ severity: "error", message: `Invalid file path: ${file}`, code: "invalid-path" }],
-            }),
-          );
-        }
-        throw err;
-      }
-      if (!existsSync(requestedFilePath)) {
+      // Three-step path resolution (sandbox check → existsSync →
+      // canonicalisation) is shared with every other file-input tool;
+      // delegate to the helper and route the discriminated error
+      // through the per-tool empty-data shape.
+      const resolved = resolveProjectFile(repoRoot, file);
+      if (resolved.error) {
         return makeToolResult(
           errorEnvelope({
             tool: "agda_impact",
-            summary: `File not found: ${file}`,
-            classification: "not-found",
+            summary: resolved.error.message,
+            classification: resolved.error.classification,
             data: emptyImpactData(file),
-            diagnostics: [{ severity: "error", message: `File not found: ${requestedFilePath}`, code: "not-found" }],
+            diagnostics: [errorDiagnostic(
+              resolved.error.message,
+              resolved.error.classification,
+              resolved.error.nextAction,
+            )],
           }),
         );
       }
-
-      let filePath: string;
-      try {
-        filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
-      } catch (err) {
-        if (err instanceof PathSandboxError) {
-          return makeToolResult(
-            errorEnvelope({
-              tool: "agda_impact",
-              summary: `Invalid file path: ${file}`,
-              classification: "invalid-path",
-              data: emptyImpactData(file),
-              diagnostics: [{ severity: "error", message: `Invalid file path: ${file}`, code: "invalid-path" }],
-            }),
-          );
-        }
-        throw err;
-      }
+      const filePath = resolved.filePath;
       // Canonicalize the project root the same way `resolveExistingPathWithinRoot`
       // canonicalizes the source path, otherwise on macOS the graph
       // keys (built from `realpath(repoRoot)`) won't match the
@@ -136,11 +111,11 @@ export function register(
             summary: `File is not part of the Agda import graph: ${notInGraphRel}`,
             classification: "not-in-graph",
             data: emptyImpactData(notInGraphRel),
-            diagnostics: [{
-              severity: "error",
-              message: `File exists but is not part of the scanned Agda import graph for ${notInGraphRel}; it may have been filtered out, may not be a recognized Agda source file, or no module declaration was parsed.`,
-              code: "not-in-graph",
-            }],
+            diagnostics: [errorDiagnostic(
+              `File exists but is not part of the scanned Agda import graph for ${notInGraphRel}; it may have been filtered out, may not be a recognized Agda source file, or no module declaration was parsed.`,
+              "not-in-graph",
+              "Verify the file has a recognised Agda extension and a `module Foo where` declaration. If both are present, run `agda_load` on the file to confirm Agda parses it.",
+            )],
           }),
         );
       }
@@ -207,14 +182,6 @@ function renderList(title: string, items: string[], limit: number): string[] {
     lines.push(`…and ${items.length - limit} more (full list in structured data; raise \`limit\` to render more).`);
   }
   return lines;
-}
-
-function canonicalizeOrFallback(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
 }
 
 function emptyImpactData(file: string) {
