@@ -269,17 +269,37 @@ export function registerTextTool(args: {
 }
 
 /**
+ * Reserved envelope-data keys the wrapper controls. A tool callback
+ * cannot override them via its `data` payload — letting it would let
+ * `data.text` desync from the markdown body, or let `data.goalId`
+ * disagree with the validated `cbArgs.goalId`.
+ */
+const RESERVED_TEXT_DATA_KEYS = new Set(["text"]);
+const RESERVED_GOAL_TEXT_DATA_KEYS = new Set(["text", "goalId"]);
+
+/**
  * Normalize a `registerTextTool` / `registerGoalTextTool` callback
  * return value to the `{ text, extra }` shape the envelope builder
  * expects. Accepts the legacy bare-string form for backward compat.
+ *
+ * `reserved` names any keys the wrapper itself owns (`text`, plus
+ * `goalId` for goal tools); they are stripped from `extra` so a
+ * callback's `data` payload cannot clobber them on merge.
  */
 function unpackTextCallbackResult(
   raw: string | { text: string; data?: Record<string, unknown> },
+  reserved: Set<string> = RESERVED_TEXT_DATA_KEYS,
 ): { text: string; extra: Record<string, unknown> } {
   if (typeof raw === "string") {
     return { text: raw, extra: {} };
   }
-  return { text: raw.text, extra: raw.data ?? {} };
+  const data = raw.data ?? {};
+  const extra: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (reserved.has(key)) continue;
+    extra[key] = value;
+  }
+  return { text: raw.text, extra };
 }
 
 /**
@@ -341,7 +361,10 @@ export function registerGoalTextTool<A extends Record<string, unknown>>(args: {
       try {
         const warn = stalenessWarning(args.session);
         const raw = await args.callback(cbArgs);
-        const { text: body, extra } = unpackTextCallbackResult(raw);
+        const { text: body, extra } = unpackTextCallbackResult(
+          raw,
+          RESERVED_GOAL_TEXT_DATA_KEYS,
+        );
         const textValue = warn + body;
         return makeToolResult(
           okEnvelope({

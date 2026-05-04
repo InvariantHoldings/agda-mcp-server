@@ -115,8 +115,10 @@ test("modeGoalCommand and rewriteGoalCommand keep goalId before noRange", async 
 test("iotcmEnvelope wraps any inner command without altering its body", async () => {
   await fc.assert(
     fc.property(
-      // Path generator: avoid `"` and newlines so the envelope shape is well-defined.
-      fc.string({ maxLength: 80 }).filter((path) => !path.includes('"') && !path.includes("\n")),
+      // Cover arbitrary file paths including ones with `"`, `\`, and `\n`
+      // — the escape inside iotcmEnvelope must keep the envelope shape
+      // well-formed for any string the OS could legitimately produce.
+      fc.string({ maxLength: 80 }),
       fc.constantFrom(
         topLevelCommand("Cmd_show_version"),
         topLevelCommand("Cmd_abort"),
@@ -125,14 +127,18 @@ test("iotcmEnvelope wraps any inner command without altering its body", async ()
       ),
       (path, inner) => {
         const envelope = iotcmEnvelope(path, inner);
-        expect(envelope.startsWith(`IOTCM "${path}" NonInteractive Direct (`)).toBeTruthy();
+        // Reconstruct the expected escaped path the same way `quoted`
+        // does so an embedded `"` can't trick us into a vacuous match.
+        const escapedPath = quoted(path);
+        const prefix = `IOTCM ${escapedPath} NonInteractive Direct (`;
+        expect(envelope.startsWith(prefix)).toBeTruthy();
         expect(envelope.endsWith(")")).toBeTruthy();
         // The inner command must appear verbatim inside the parentheses.
-        const innerRendered = envelope.slice(
-          `IOTCM "${path}" NonInteractive Direct (`.length,
-          -1,
-        );
+        const innerRendered = envelope.slice(prefix.length, -1);
         expect(innerRendered).toBe(inner);
+        // The envelope must contain no raw newlines — they would
+        // otherwise corrupt the line-delimited stdin transport.
+        expect(envelope.includes("\n")).toBeFalsy();
       },
     ),
   );

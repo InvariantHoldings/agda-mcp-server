@@ -184,6 +184,54 @@ describe("completeness invariants — load/typecheck agreement", () => {
     expect(loadStatus.isComplete).toBe(false);
   });
 
+  test("load classifies source-only hole markers as ok-with-holes even when goals/invisibleGoalCount are zero", () => {
+    // Issue #11 / regression for the v0.6.6 source-hole scan: a load
+    // can succeed, report zero protocol goals AND zero invisible
+    // goals, yet still be ok-with-holes if the source contains
+    // explicit hole markers (`{!!}` / `?` / `{! expr !}`) that Agda
+    // failed to surface (e.g. holes inside `abstract` blocks).
+    // `LoadResult.hasHoles` carries the source-scan signal — when it
+    // is true and the load was successful, the classification must be
+    // `ok-with-holes`, not `ok-complete`. `classifyCompleteness`
+    // alone can't see the source markers because its `CompletenessInput`
+    // only sees the protocol counts, but `completenessFromLoadResult`
+    // pulls from a `LoadResult` that already encodes the merged
+    // signal. Pin the merged shape so any future refactor that
+    // re-derives completeness from `goals.length` only is caught
+    // here.
+    const sourceOnlyHoleResult = completenessFromLoadResult({
+      success: true,
+      errors: [],
+      warnings: [],
+      goals: [],
+      allGoalsText: "",
+      invisibleGoalCount: 0,
+      goalCount: 0,
+      hasHoles: true,
+      isComplete: false,
+      classification: "ok-with-holes",
+    });
+
+    // The completeness helper round-trips the protocol-derived counts;
+    // the merged hasHoles signal lives on the LoadResult itself. The
+    // classification on the result must already be ok-with-holes —
+    // assert that it survives the helper unchanged so a future bug
+    // that recomputes the field from `goals.length` (and would yield
+    // ok-complete) is caught.
+    expect(sourceOnlyHoleResult.classification).toBe("ok-with-holes");
+
+    // And the protocol-input form (no source-scan signal) must agree
+    // with its own zero-counts shape — surfacing the divergence
+    // precisely as the load helper reading from the merged result.
+    const protocolOnly = classifyCompleteness({
+      success: true,
+      goals: [],
+      invisibleGoalCount: 0,
+    });
+    expect(protocolOnly.classification).toBe("ok-complete");
+    expect(protocolOnly.hasHoles).toBe(false);
+  });
+
   test("load and typecheck classification agree on type-error", () => {
     const baseline = {
       success: false,
