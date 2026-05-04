@@ -10,20 +10,22 @@ import {
   listAllToolFamilyExamples,
   listExampleToolNames,
 } from "../../../src/tools/tool-family-examples.js";
-import { listToolManifest } from "../../../src/tools/manifest.js";
+import { clearToolManifest, listToolManifest } from "../../../src/tools/manifest.js";
 import { registerCoreTools } from "../../../src/tools/register-core-tools.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AgdaSession } from "../../../src/agda-process.js";
 
 beforeAll(() => {
   // Register the full core tool surface so we can assert that every
-  // example references a tool the server actually exposes. Tests run
-  // sequentially within a file, and the manifest is process-global, so
-  // a single registration is sufficient.
-  if (listToolManifest().length === 0) {
-    const server = new McpServer({ name: "test", version: "0.0.0-test" });
-    const session = new AgdaSession(process.cwd());
+  // example references a tool the server actually exposes. The manifest
+  // is process-global; clear-then-register so this file doesn't depend
+  // on whatever state a previous test in the run left behind.
+  clearToolManifest();
+  const server = new McpServer({ name: "test", version: "0.0.0-test" });
+  const session = new AgdaSession(process.cwd());
+  try {
     registerCoreTools(server, session, process.cwd());
+  } finally {
     session.destroy();
   }
 });
