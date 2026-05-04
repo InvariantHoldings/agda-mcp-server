@@ -15,6 +15,17 @@ import {
 import { resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../repo-root.js";
 import { goalIdSchema } from "./tool-schemas.js";
 
+/**
+ * Schema for the decoded display-state snapshot Agda returns on its
+ * status events. `null` distinguishes "Agda did not report this flag"
+ * from a known true/false. Reused by every display-control tool.
+ */
+const displayStateSchema = z.object({
+  showImplicitArguments: z.boolean().nullable(),
+  showIrrelevantArguments: z.boolean().nullable(),
+  checked: z.boolean().nullable(),
+});
+
 export function register(
   server: McpServer,
   session: AgdaSession,
@@ -27,6 +38,11 @@ export function register(
     category: "highlighting",
     protocolCommands: ["Cmd_load_highlighting_info"],
     inputSchema: { file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)) },
+    outputDataSchema: z.object({
+      text: z.string(),
+      file: z.string(),
+      state: displayStateSchema,
+    }),
     callback: async ({ file }: { file: string }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(requestedFilePath)) {
@@ -34,7 +50,18 @@ export function register(
       }
       const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const result = await session.display.loadHighlightingInfo(filePath);
-      return `## Highlighting info loaded\n\nFile: ${relative(repoRoot, requestedFilePath)}\n\n${result.output}\n`;
+      const text = `## Highlighting info loaded\n\nFile: ${relative(repoRoot, requestedFilePath)}\n\n${result.output}\n`;
+      return {
+        text,
+        data: {
+          file: relative(repoRoot, requestedFilePath),
+          state: {
+            showImplicitArguments: result.showImplicitArguments,
+            showIrrelevantArguments: result.showIrrelevantArguments,
+            checked: result.checked,
+          },
+        },
+      };
     },
   });
 
@@ -47,6 +74,11 @@ export function register(
     inputSchema: {
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      file: z.string(),
+      state: displayStateSchema,
+    }),
     callback: async ({ file }: { file: string }) => {
       const requestedFilePath = resolveFileWithinRoot(repoRoot, file);
       if (!existsSync(requestedFilePath)) {
@@ -54,7 +86,18 @@ export function register(
       }
       const filePath = resolveExistingPathWithinRoot(repoRoot, requestedFilePath);
       const result = await session.display.tokenHighlighting(filePath);
-      return `## Token highlighting\n\nFile: ${relative(repoRoot, requestedFilePath)}\n\n${result.output}\n`;
+      const text = `## Token highlighting\n\nFile: ${relative(repoRoot, requestedFilePath)}\n\n${result.output}\n`;
+      return {
+        text,
+        data: {
+          file: relative(repoRoot, requestedFilePath),
+          state: {
+            showImplicitArguments: result.showImplicitArguments,
+            showIrrelevantArguments: result.showIrrelevantArguments,
+            checked: result.checked,
+          },
+        },
+      };
     },
   });
 
@@ -69,9 +112,26 @@ export function register(
       goalId: goalIdSchema.describe("Goal ID used as highlighting context"),
       expr: z.string().describe("Expression to highlight"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      expr: z.string(),
+      state: displayStateSchema,
+    }),
     callback: async ({ goalId, expr }) => {
       const result = await session.display.highlight(goalId, expr as string);
-      return `## Highlight\n\nGoal: ?${goalId}\nExpression: \`${expr}\`\n\n${result.output}\n`;
+      const text = `## Highlight\n\nGoal: ?${goalId}\nExpression: \`${expr}\`\n\n${result.output}\n`;
+      return {
+        text,
+        data: {
+          expr: expr as string,
+          state: {
+            showImplicitArguments: result.showImplicitArguments,
+            showIrrelevantArguments: result.showIrrelevantArguments,
+            checked: result.checked,
+          },
+        },
+      };
     },
   });
 
@@ -82,9 +142,25 @@ export function register(
     category: "process",
     protocolCommands: ["ShowImplicitArgs"],
     inputSchema: { enabled: z.boolean().describe("True to show implicit arguments, false to hide them") },
+    outputDataSchema: z.object({
+      text: z.string(),
+      requested: z.boolean(),
+      state: displayStateSchema,
+    }),
     callback: async ({ enabled }: { enabled: boolean }) => {
       const result = await session.display.showImplicitArgs(enabled);
-      return `## Show implicit arguments\n\nRequested: ${enabled}\n\n${result.output}\n`;
+      const text = `## Show implicit arguments\n\nRequested: ${enabled}\n\n${result.output}\n`;
+      return {
+        text,
+        data: {
+          requested: enabled,
+          state: {
+            showImplicitArguments: result.showImplicitArguments,
+            showIrrelevantArguments: result.showIrrelevantArguments,
+            checked: result.checked,
+          },
+        },
+      };
     },
   });
 
@@ -95,9 +171,23 @@ export function register(
     category: "process",
     protocolCommands: ["ToggleImplicitArgs"],
     inputSchema: {},
+    outputDataSchema: z.object({
+      text: z.string(),
+      state: displayStateSchema,
+    }),
     callback: async () => {
       const result = await session.display.toggleImplicitArgs();
-      return `## Toggle implicit arguments\n\n${result.output}\n`;
+      const text = `## Toggle implicit arguments\n\n${result.output}\n`;
+      return {
+        text,
+        data: {
+          state: {
+            showImplicitArguments: result.showImplicitArguments,
+            showIrrelevantArguments: result.showIrrelevantArguments,
+            checked: result.checked,
+          },
+        },
+      };
     },
   });
 
@@ -108,9 +198,25 @@ export function register(
     category: "process",
     protocolCommands: ["ShowIrrelevantArgs"],
     inputSchema: { enabled: z.boolean().describe("True to show irrelevant arguments, false to hide them") },
+    outputDataSchema: z.object({
+      text: z.string(),
+      requested: z.boolean(),
+      state: displayStateSchema,
+    }),
     callback: async ({ enabled }: { enabled: boolean }) => {
       const result = await session.display.showIrrelevantArgs(enabled);
-      return `## Show irrelevant arguments\n\nRequested: ${enabled}\n\n${result.output}\n`;
+      const text = `## Show irrelevant arguments\n\nRequested: ${enabled}\n\n${result.output}\n`;
+      return {
+        text,
+        data: {
+          requested: enabled,
+          state: {
+            showImplicitArguments: result.showImplicitArguments,
+            showIrrelevantArguments: result.showIrrelevantArguments,
+            checked: result.checked,
+          },
+        },
+      };
     },
   });
 
@@ -121,9 +227,23 @@ export function register(
     category: "process",
     protocolCommands: ["ToggleIrrelevantArgs"],
     inputSchema: {},
+    outputDataSchema: z.object({
+      text: z.string(),
+      state: displayStateSchema,
+    }),
     callback: async () => {
       const result = await session.display.toggleIrrelevantArgs();
-      return `## Toggle irrelevant arguments\n\n${result.output}\n`;
+      const text = `## Toggle irrelevant arguments\n\n${result.output}\n`;
+      return {
+        text,
+        data: {
+          state: {
+            showImplicitArguments: result.showImplicitArguments,
+            showIrrelevantArguments: result.showIrrelevantArguments,
+            checked: result.checked,
+          },
+        },
+      };
     },
   });
 }

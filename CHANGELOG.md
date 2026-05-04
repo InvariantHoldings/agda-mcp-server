@@ -9,28 +9,55 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Typed IOTCM command builder finalized (issue #10).** The IOTCM
+- **Typed IOTCM command builder — issue #10 closed.** The IOTCM
   transport envelope (`IOTCM "<file>" NonInteractive Direct (...)`)
   is now built through a single `iotcmEnvelope` helper in
   `src/protocol/command-builder.ts`; `AgdaSession.iotcm`,
   `iotcmFor`, and `runIndependentCommand` all delegate to it, so the
-  envelope shape is no longer hand-assembled in two duplicate
-  template literals inside `session.ts`. The last bare-string inner
-  command (`Cmd_show_version`) now goes through `topLevelCommand`,
-  matching the rest of the surface. Property-based tests cover
-  escaping (`quoted`/`stringList`), `noRange` placement for goal
-  builders, and round-tripping of arbitrary inner commands through
-  `iotcmEnvelope`.
-- **Output-schema and completeness invariants (issue #11).** A new
-  unit suite at `test/unit/tools/output-schema-invariants.test.ts`
-  registers the full core tool surface and asserts that every
-  exposed tool declares a non-empty output schema with typed fields,
-  closing the regression hole where a tool could be registered with
-  an empty `z.object({})`. The same suite pins the load/typecheck
-  agreement contract: identical underlying signal must yield
-  identical completeness classification (`ok-complete`,
-  `ok-with-holes`, `type-error`) regardless of which entry point
-  produced the result.
+  envelope shape is no longer hand-assembled in duplicate template
+  literals inside `session.ts`. Every remaining bare-string inner
+  command — `Cmd_show_version`, `Cmd_abort`, `Cmd_exit`,
+  `ToggleImplicitArgs`, `ToggleIrrelevantArgs` — now goes through
+  the typed `topLevelCommand` / `command` builders. Property-based
+  tests in `test/property/protocol/command-builder.property.test.ts`
+  cover escaping (`quoted` / `stringList`), `noRange` placement for
+  goal builders, and round-tripping of arbitrary inner commands
+  through `iotcmEnvelope`. A regression fence at
+  `test/unit/protocol/no-bare-command-strings.test.ts` walks the
+  source tree and fails if any file outside the builder reintroduces
+  hand-assembled IOTCM envelopes or bare-string `Cmd_…` literals
+  passed into `iotcm` / `sendCommand` / `runControl` /
+  `runIndependentCommand`.
+- **Structured output rollout for every text tool — issue #11
+  closed.** Every previously text-only tool (33 in total —
+  `agda_apply_edit`, `agda_auto`, `agda_auto_all`, `agda_backend_*`,
+  `agda_case_split`, `agda_check_postulates`, `agda_compile`,
+  `agda_constraints`, `agda_context`, `agda_elaborate`,
+  `agda_give`, `agda_goal`, `agda_goal_analysis`, `agda_goal_type`,
+  `agda_goal_type_context_*`, `agda_helper_function`,
+  `agda_highlight`, `agda_intro`, `agda_list_modules`,
+  `agda_load_highlighting_info`, `agda_proof_status`,
+  `agda_read_module`, `agda_refine`, `agda_refine_exact`,
+  `agda_reload`, `agda_search_definitions`, `agda_show_implicit_args`,
+  `agda_show_irrelevant_args`, `agda_solve_all`, `agda_solve_one`,
+  `agda_term_search`, `agda_toggle_implicit_args`,
+  `agda_toggle_irrelevant_args`, `agda_token_highlighting`) now
+  emits a richer structured payload alongside its text rendering —
+  display-state snapshots for the toggle/show family, parsed solve
+  solutions and `rawSolutions`, structured `clauses` for case-split,
+  `goalType` / `context` arrays for goal queries, `success` /
+  `output` for backends, classification + goal diff for `agda_reload`,
+  pagination metadata for module/definition search, and so on. To
+  make enrichment a 2-3 line change instead of a full rewrite,
+  `registerTextTool` and `registerGoalTextTool` now accept a
+  callback returning either a bare string (legacy path) or an
+  `{ text, data }` pair; the wrapper merges `data` into the envelope
+  alongside the canonical `text` field. A new invariant test asserts
+  that every exposed tool exposes at least one structured field
+  beyond `text` / `goalId`, and the load/typecheck agreement
+  contract is pinned across `ok-complete` / `ok-with-holes` /
+  `type-error` so completeness fields cannot drift between entry
+  points.
 - **Declared supported-Agda range (issue #41 part 2).** A new
   `agdaMcpServer` block in `package.json` records `minAgdaVersion`
   and `maxTestedAgdaVersion`. The server now (a) emits a stderr

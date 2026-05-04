@@ -159,9 +159,19 @@ export function register(
       goalId: goalIdSchema.describe("The goal ID for context"),
       expr: z.string().describe("The Agda expression to elaborate"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      expr: z.string(),
+      elaboration: z.string(),
+    }),
     callback: async ({ goalId, expr }) => {
       const result = await session.query.elaborate(goalId, expr as string);
-      return `## Elaborate \`${expr}\` in ?${goalId}\n\n\`\`\`agda\n${result.elaboration || "(no result)"}\n\`\`\`\n`;
+      const text = `## Elaborate \`${expr}\` in ?${goalId}\n\n\`\`\`agda\n${result.elaboration || "(no result)"}\n\`\`\`\n`;
+      return {
+        text,
+        data: { expr: expr as string, elaboration: result.elaboration ?? "" },
+      };
     },
   });
 
@@ -176,9 +186,19 @@ export function register(
       goalId: goalIdSchema.describe("The goal ID for context"),
       expr: z.string().describe("The expression to generate a helper for"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      expr: z.string(),
+      helperType: z.string(),
+    }),
     callback: async ({ goalId, expr }) => {
       const result = await session.query.helperFunction(goalId, expr as string);
-      return `## Helper function for \`${expr}\` in ?${goalId}\n\n\`\`\`agda\n${result.helperType || "(no result)"}\n\`\`\`\n`;
+      const text = `## Helper function for \`${expr}\` in ?${goalId}\n\n\`\`\`agda\n${result.helperType || "(no result)"}\n\`\`\`\n`;
+      return {
+        text,
+        data: { expr: expr as string, helperType: result.helperType ?? "" },
+      };
     },
   });
 }

@@ -88,6 +88,13 @@ export function registerAgdaApplyEdit(
         .optional()
         .describe("1-based occurrence number when oldText appears multiple times."),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      file: z.string(),
+      applied: z.boolean(),
+      sandboxRejected: z.boolean(),
+      message: z.string(),
+    }),
     callback: async ({ file, oldText, newText, occurrence }) => {
       // Resolve AND canonicalize within the project root. Unlike the
       // lexical-only `resolveFileWithinRoot`, this helper runs
@@ -103,13 +110,31 @@ export function registerAgdaApplyEdit(
         canonicalPath = resolveExistingPathWithinRoot(repoRoot, file as string);
       } catch (err) {
         if (err instanceof PathSandboxError) {
-          return `## agda_apply_edit\n\n**Error:** ${err.message}\n`;
+          const text = `## agda_apply_edit\n\n**Error:** ${err.message}\n`;
+          return {
+            text,
+            data: {
+              file: file as string,
+              applied: false,
+              sandboxRejected: true,
+              message: err.message,
+            },
+          };
         }
         // realpath failure (ENOENT, permissions, etc.) — the file
         // either doesn't exist yet or is unreadable. Surface a
         // structured failure rather than throwing.
         const msg = err instanceof Error ? err.message : String(err);
-        return `## agda_apply_edit\n\n**Error:** Could not resolve file path: ${msg}\n`;
+        const text = `## agda_apply_edit\n\n**Error:** Could not resolve file path: ${msg}\n`;
+        return {
+          text,
+          data: {
+            file: file as string,
+            applied: false,
+            sandboxRejected: false,
+            message: `Could not resolve file path: ${msg}`,
+          },
+        };
       }
 
       // Extension allowlist: agda_apply_edit is meant for Agda
@@ -120,12 +145,20 @@ export function registerAgdaApplyEdit(
       // ".agda" suffix trick like `shell.sh/..%2f/foo.agda` from
       // bypassing the check.
       if (!hasAgdaSourceExtension(canonicalPath)) {
-        return (
-          `## agda_apply_edit\n\n` +
-          `**Error:** Refusing to edit \`${file}\`: agda_apply_edit is ` +
+        const message =
+          `Refusing to edit \`${file}\`: agda_apply_edit is ` +
           `restricted to Agda source files (${AGDA_SOURCE_EXTENSIONS.join(", ")}). ` +
-          `Use a general-purpose file-editing tool for non-Agda files.\n`
-        );
+          `Use a general-purpose file-editing tool for non-Agda files.`;
+        const text = `## agda_apply_edit\n\n**Error:** ${message}\n`;
+        return {
+          text,
+          data: {
+            file: file as string,
+            applied: false,
+            sandboxRejected: true,
+            message,
+          },
+        };
       }
 
       // Capture goal IDs before the edit so the reload can report a
@@ -154,7 +187,15 @@ export function registerAgdaApplyEdit(
 
       if (!editResult.applied) {
         output += `**Edit not applied:** ${editResult.message}\n`;
-        return output;
+        return {
+          text: output,
+          data: {
+            file: file as string,
+            applied: false,
+            sandboxRejected: false,
+            message: editResult.message,
+          },
+        };
       }
 
       output += `${editResult.message}\n`;
@@ -166,7 +207,15 @@ export function registerAgdaApplyEdit(
       // detection on subsequent calls.
       output += await reloadAndDiagnose(session, canonicalPath, "\n", goalIdsBefore);
 
-      return output;
+      return {
+        text: output,
+        data: {
+          file: file as string,
+          applied: true,
+          sandboxRejected: false,
+          message: editResult.message,
+        },
+      };
     },
   });
 }

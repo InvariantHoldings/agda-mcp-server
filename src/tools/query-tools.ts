@@ -176,13 +176,23 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_autoAll"],
     inputSchema: {},
+    outputDataSchema: z.object({
+      text: z.string(),
+      solution: z.string(),
+      hasSolution: z.boolean(),
+    }),
     callback: async () => {
       const result = await session.query.autoAll();
-      let output = `## Auto-solve all goals\n\n`;
-      output += result.solution
-        ? `**Result:**\n\`\`\`\n${result.solution}\n\`\`\`\n`
-        : `No automatic solutions found.\n`;
-      return output;
+      const text = result.solution
+        ? `## Auto-solve all goals\n\n**Result:**\n\`\`\`\n${result.solution}\n\`\`\`\n`
+        : `## Auto-solve all goals\n\nNo automatic solutions found.\n`;
+      return {
+        text,
+        data: {
+          solution: result.solution ?? "",
+          hasSolution: Boolean(result.solution),
+        },
+      };
     },
   });
 
@@ -196,27 +206,43 @@ export function register(
     inputSchema: {
       writeToFile: z.boolean().optional().describe("Write solutions to the source file and reload (default: true)"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      solutionCount: z.number(),
+      solutions: z.array(z.string()),
+      rawSolutions: z.array(z.object({ goalId: z.number(), expr: z.string() })),
+      written: z.boolean(),
+    }),
     callback: async ({ writeToFile }) => {
       const shouldWrite = writeToFile !== false;
       const goalIdsBefore = session.getGoalIds();
       const result = await session.query.solveAll();
       let output = `## Solve all\n\n`;
+      let written = false;
 
       if (result.solutions.length === 0) {
         output += `No goals with unique solutions found.\n`;
-        return output;
+      } else {
+        output += `**Solutions:**\n`;
+        for (const s of result.solutions) output += `- ${s}\n`;
+
+        if (shouldWrite && session.currentFile && result.rawSolutions.length > 0) {
+          output += await applyBatchEditAndReload(
+            session, goalIdsBefore, session.currentFile, result.rawSolutions,
+          );
+          written = true;
+        }
       }
 
-      output += `**Solutions:**\n`;
-      for (const s of result.solutions) output += `- ${s}\n`;
-
-      if (shouldWrite && session.currentFile && result.rawSolutions.length > 0) {
-        output += await applyBatchEditAndReload(
-          session, goalIdsBefore, session.currentFile, result.rawSolutions,
-        );
-      }
-
-      return output;
+      return {
+        text: output,
+        data: {
+          solutionCount: result.solutions.length,
+          solutions: result.solutions,
+          rawSolutions: result.rawSolutions,
+          written,
+        },
+      };
     },
   });
 
@@ -231,26 +257,43 @@ export function register(
       goalId: goalIdSchema.describe("The goal ID to solve if it has a unique solution"),
       writeToFile: z.boolean().optional().describe("Write the solution to the source file and reload (default: true)"),
     },
+    outputDataSchema: z.object({
+      text: z.string(),
+      goalId: goalIdSchema,
+      solutionCount: z.number(),
+      solutions: z.array(z.string()),
+      rawSolutions: z.array(z.object({ goalId: z.number(), expr: z.string() })),
+      written: z.boolean(),
+    }),
     callback: async ({ goalId, writeToFile }) => {
       const shouldWrite = writeToFile !== false;
       const goalIdsBefore = session.getGoalIds();
       const result = await session.query.solveOne(goalId);
       let output = `## Solve one ?${goalId}\n\n`;
+      let written = false;
 
       if (result.solutions.length === 0) {
         output += "No unique solution found for that goal.\n";
-        return output;
+      } else {
+        for (const solution of result.solutions) output += `- ${solution}\n`;
+
+        if (shouldWrite && session.currentFile && result.rawSolutions.length > 0) {
+          output += await applyBatchEditAndReload(
+            session, goalIdsBefore, session.currentFile, result.rawSolutions,
+          );
+          written = true;
+        }
       }
 
-      for (const solution of result.solutions) output += `- ${solution}\n`;
-
-      if (shouldWrite && session.currentFile && result.rawSolutions.length > 0) {
-        output += await applyBatchEditAndReload(
-          session, goalIdsBefore, session.currentFile, result.rawSolutions,
-        );
-      }
-
-      return output;
+      return {
+        text: output,
+        data: {
+          solutionCount: result.solutions.length,
+          solutions: result.solutions,
+          rawSolutions: result.rawSolutions,
+          written,
+        },
+      };
     },
   });
 
@@ -262,11 +305,23 @@ export function register(
     category: "proof",
     protocolCommands: ["Cmd_constraints"],
     inputSchema: {},
+    outputDataSchema: z.object({
+      text: z.string(),
+      raw: z.string(),
+      hasConstraints: z.boolean(),
+    }),
     callback: async () => {
       const result = await session.query.constraints();
-      let output = `## Constraints\n\n`;
-      output += result.text ? `\`\`\`\n${result.text}\n\`\`\`\n` : `No constraints.\n`;
-      return output;
+      const output = result.text
+        ? `## Constraints\n\n\`\`\`\n${result.text}\n\`\`\`\n`
+        : `## Constraints\n\nNo constraints.\n`;
+      return {
+        text: output,
+        data: {
+          raw: result.text,
+          hasConstraints: result.text.trim().length > 0,
+        },
+      };
     },
   });
 }

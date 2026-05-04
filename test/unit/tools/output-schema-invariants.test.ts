@@ -82,6 +82,39 @@ describe("output-schema invariants — every exposed tool", () => {
     );
     expect(uncategorized.map((e) => e.name)).toEqual([]);
   });
+
+  test(
+    "every exposed tool exposes at least one structured field beyond text/goalId — issue #11",
+    () => {
+      // Issue #11 scope item: "expand richer per-tool data beyond plain
+      // text where still missing". Every tool must expose at least one
+      // output field beyond the bare-minimum `text` and (optionally)
+      // `goalId` — so a tool that ships with a default `{text}` (or
+      // `{text, goalId}`) schema fails the suite. This is the
+      // forward-looking fence: any new tool added without a richer
+      // schema has to either earn an enrichment or get an explicit
+      // exception in this list.
+      //
+      // The exception list is empty by design today — every tool was
+      // enriched in the same PR that added this fence. Keep it empty
+      // unless there is a well-argued reason a future tool genuinely
+      // has no machine-decodable data beyond the prose body.
+      const TEXT_ONLY_EXCEPTIONS = new Set<string>();
+
+      const offenders = listToolManifest().filter((entry) => {
+        if (TEXT_ONLY_EXCEPTIONS.has(entry.name)) return false;
+        const richFields = entry.outputFields.filter(
+          (f) => f !== "text" && f !== "goalId",
+        );
+        return richFields.length === 0;
+      });
+
+      expect(
+        offenders.map((e) => e.name),
+        "tools with no structured data beyond {text}/{text,goalId}",
+      ).toEqual([]);
+    },
+  );
 });
 
 describe("completeness invariants — load/typecheck agreement", () => {

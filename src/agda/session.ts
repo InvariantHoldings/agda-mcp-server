@@ -53,7 +53,7 @@ import {
   loadProjectConfig,
   mergeCommandLineOptions,
 } from "../session/project-config.js";
-import { iotcmEnvelope } from "../protocol/command-builder.js";
+import { iotcmEnvelope, topLevelCommand } from "../protocol/command-builder.js";
 import { statSync } from "node:fs";
 
 export { findAgdaBinary };
@@ -325,13 +325,13 @@ export class AgdaSession {
 
   /** Send Cmd_abort to the running Agda process. */
   async abort(): Promise<AgdaResponse[]> {
-    return this.runIndependentCommand("Cmd_abort", 10_000);
+    return this.runIndependentCommand(topLevelCommand("Cmd_abort"), 10_000);
   }
 
   /** Send Cmd_exit to the running Agda process. */
   async exit(): Promise<AgdaResponse[]> {
     this.exiting = true;
-    return this.runIndependentCommand("Cmd_exit", 10_000);
+    return this.runIndependentCommand(topLevelCommand("Cmd_exit"), 10_000);
   }
 
   // ── Accessors ─────────────────────────────────────────────────────

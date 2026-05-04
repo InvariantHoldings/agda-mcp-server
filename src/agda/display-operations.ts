@@ -100,7 +100,11 @@ export async function showImplicitArgs(
 export async function toggleImplicitArgs(
   ctx: AgdaCommandContext,
 ): Promise<DisplayControlResult> {
-  return runControl(ctx, "ToggleImplicitArgs", "Toggled implicit arguments visibility.");
+  return runControl(
+    ctx,
+    command("ToggleImplicitArgs"),
+    "Toggled implicit arguments visibility.",
+  );
 }
 
 export async function showIrrelevantArgs(
@@ -119,7 +123,7 @@ export async function toggleIrrelevantArgs(
 ): Promise<DisplayControlResult> {
   return runControl(
     ctx,
-    "ToggleIrrelevantArgs",
+    command("ToggleIrrelevantArgs"),
     "Toggled irrelevant arguments visibility.",
   );
 }
