@@ -53,12 +53,50 @@ describe("tool-family examples", () => {
     }
   });
 
-  test("getToolFamilyExamples returns a stable copy per call", () => {
-    const a = getToolFamilyExamples("session");
-    const b = getToolFamilyExamples("session");
-    expect(a).toEqual(b);
-    a.push({ tool: "leak", summary: "should not persist", args: {} });
-    expect(getToolFamilyExamples("session")).toEqual(b);
+  test("getToolFamilyExamples is immutable — array mutation throws and does not leak", () => {
+    const before = getToolFamilyExamples("session");
+    const snapshot = structuredClone(before) as typeof before;
+    expect(() => {
+      (before as unknown as { push: (x: unknown) => void }).push({ tool: "leak", summary: "x", args: {} });
+    }).toThrow(TypeError);
+    expect(getToolFamilyExamples("session")).toEqual(snapshot);
+  });
+
+  test("getToolFamilyExamples is immutable — object mutation throws and does not leak", () => {
+    // Per PR #52 review: a previous version returned shallow copies, so
+    // a caller could rewrite an example's `summary` or `args` and watch
+    // the change appear in the next agda_tools_catalog response. Deep
+    // freezing prevents this — both reassignment and nested-object
+    // mutation must throw in strict mode.
+    const before = getToolFamilyExamples("session");
+    const snapshot = structuredClone(before) as typeof before;
+    expect(before.length).toBeGreaterThan(0);
+    expect(() => {
+      (before[0] as unknown as { summary: string }).summary = "tampered";
+    }).toThrow(TypeError);
+    expect(() => {
+      (before[0].args as Record<string, unknown>).injected = true;
+    }).toThrow(TypeError);
+    expect(getToolFamilyExamples("session")).toEqual(snapshot);
+  });
+
+  test("listAllToolFamilyExamples is immutable across families and elements", () => {
+    const families = listAllToolFamilyExamples();
+    const snapshot = structuredClone(families) as Record<string, ReadonlyArray<{ tool: string; summary: string; args: Record<string, unknown> }>>;
+    // Outer record frozen.
+    expect(() => {
+      (families as unknown as Record<string, unknown>).injected = "x";
+    }).toThrow(TypeError);
+    // Inner arrays frozen.
+    const sessionExamples = families["session"]!;
+    expect(() => {
+      (sessionExamples as unknown as { pop: () => void }).pop();
+    }).toThrow(TypeError);
+    // Inner objects frozen all the way down.
+    expect(() => {
+      (sessionExamples[0] as unknown as { tool: string }).tool = "agda_tampered";
+    }).toThrow(TypeError);
+    expect(listAllToolFamilyExamples()).toEqual(snapshot);
   });
 
   test("every referenced tool name is registered in the live manifest", () => {
