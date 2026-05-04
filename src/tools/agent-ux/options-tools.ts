@@ -16,7 +16,6 @@ import {
 } from "../../agda/agent-ux.js";
 import { createLibraryRegistration } from "../../agda/library-registration.js";
 import { filePathDescription } from "../../agda/version-support.js";
-import { resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../../repo-root.js";
 import {
   effectiveProjectFlags,
   ENV_DEFAULT_FLAGS,
@@ -25,7 +24,10 @@ import {
   mergeCommandLineOptions,
 } from "../../session/project-config.js";
 import { projectConfigDiagnostics } from "../../session/project-config-diagnostics.js";
+import { resolveProjectFile } from "../path-utils.js";
 import {
+  errorDiagnostic,
+  errorEnvelope,
   makeToolResult,
   okEnvelope,
   registerStructuredTool,
@@ -53,7 +55,23 @@ export function registerOptionsTools(
       deduplicated: z.array(z.string()),
     }),
     callback: async ({ file }: { file: string }) => {
-      const filePath = resolveExistingPathWithinRoot(repoRoot, resolveFileWithinRoot(repoRoot, file));
+      const resolved = resolveProjectFile(repoRoot, file);
+      if (resolved.error) {
+        return makeToolResult(
+          errorEnvelope({
+            tool: "agda_effective_options",
+            summary: resolved.error.message,
+            classification: resolved.error.classification,
+            data: { file, options: [], deduplicated: [] },
+            diagnostics: [errorDiagnostic(
+              resolved.error.message,
+              resolved.error.classification,
+              resolved.error.nextAction,
+            )],
+          }),
+        );
+      }
+      const filePath = resolved.filePath;
       const source = readFileSync(filePath, "utf8");
       const options: Array<{ option: string; source: "file-pragma" | "agda-lib" | "wrapper-script" | "mcp-default" | "project-config" | "env-var" }> = [];
       for (const opt of parseOptionsPragmas(source)) {

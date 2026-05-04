@@ -373,6 +373,14 @@ export function register(
       const unreadableFiles: string[] = [];
       let truncatedAtCap = false;
       function searchDir(dir: string, requestedDir: string, displayPrefix: string): void {
+        // Short-circuit the entire walk once we hit the cap. Without
+        // this check, a broad query on a huge repo continues recursing
+        // into sibling subtrees and reading more files even after
+        // `matches` is already full — pure I/O / CPU waste because
+        // the inner loop's cap check would just `return` after each
+        // file's first line. Bail at the directory boundary so an
+        // entire skipped subtree stops at one stat instead of N reads.
+        if (truncatedAtCap) return;
         let entries: import("node:fs").Dirent[];
         try {
           entries = readdirSync(dir, { withFileTypes: true });
@@ -384,6 +392,7 @@ export function register(
           return;
         }
         for (const entry of entries) {
+          if (truncatedAtCap) return;
           const nextRequestedPath = resolve(requestedDir, entry.name);
           const nextDisplayPath = join(displayPrefix, entry.name);
           if (entry.isDirectory()) {

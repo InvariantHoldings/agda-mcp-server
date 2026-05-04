@@ -18,7 +18,10 @@ import {
 import { buildImportGraph, computeImpact } from "../../agda/import-graph.js";
 import { filePathDescription } from "../../agda/version-support.js";
 import { resolveExistingPathWithinRoot, resolveFileWithinRoot } from "../../repo-root.js";
+import { resolveProjectFile } from "../path-utils.js";
 import {
+  errorDiagnostic,
+  errorEnvelope,
   makeToolResult,
   okEnvelope,
   registerStructuredTool,
@@ -59,7 +62,28 @@ export function registerProjectTools(
       })),
     }),
     callback: async ({ file, symbol }: { file: string; symbol?: string }) => {
-      const filePath = resolveExistingPathWithinRoot(repoRoot, resolveFileWithinRoot(repoRoot, file));
+      const resolved = resolveProjectFile(repoRoot, file);
+      if (resolved.error) {
+        return makeToolResult(
+          errorEnvelope({
+            tool: "agda_postulate_closure",
+            summary: resolved.error.message,
+            classification: resolved.error.classification,
+            data: {
+              file,
+              symbol: symbol ?? null,
+              postulates: [],
+              groupedBySubdirectory: [],
+            },
+            diagnostics: [errorDiagnostic(
+              resolved.error.message,
+              resolved.error.classification,
+              resolved.error.nextAction,
+            )],
+          }),
+        );
+      }
+      const filePath = resolved.filePath;
       const graph = buildImportGraph(repoRoot, session.getAgdaVersion() ?? undefined);
       const impact = computeImpact(graph, repoRoot, filePath);
       const deps = new Set<string>();

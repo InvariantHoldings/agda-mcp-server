@@ -12,6 +12,7 @@ import { z } from "zod";
 
 import { clearToolManifest } from "../../../src/tools/manifest.js";
 import { registerStructuredTool } from "../../../src/tools/tool-registration.js";
+import { toolEnvelopeSchema } from "../../../src/tools/tool-envelope.js";
 
 function makeCapturingServer() {
   const registrations = new Map<string, { callback: (args: any) => any }>();
@@ -92,6 +93,50 @@ test("the elapsedMs timer still fires for callbacks that throw", async () => {
   // pin that the timer wrapper still ran around the throwing path.
   expect(typeof result.structuredContent.elapsedMs).toBe("number");
   expect(result.structuredContent.elapsedMs).toBeGreaterThanOrEqual(0);
+});
+
+test("strict outputSchema validation on ok=true (regression: schema must NOT be relaxed for success path)", () => {
+  // Pin the schema contract: a successful envelope with WRONG `data`
+  // shape must fail the registered output schema. Without this, a
+  // tool author's typo on the happy path would silently produce a
+  // schema-non-conforming success payload that the safety-net's
+  // looseness used to mask. The superRefine path enforces strict
+  // dataSchema validation only when ok === true.
+  const dataSchema = z.object({ file: z.string(), count: z.number() });
+  const envelopeSchema = toolEnvelopeSchema(dataSchema);
+
+  // Wrong shape on a success envelope: `count` missing.
+  const bad = envelopeSchema.safeParse({
+    tool: "x",
+    ok: true,
+    classification: "ok",
+    summary: "ok",
+    data: { file: "Foo.agda" },
+    diagnostics: [],
+  });
+  expect(bad.success).toBe(false);
+
+  // Correct shape on a success envelope: passes.
+  const good = envelopeSchema.safeParse({
+    tool: "x",
+    ok: true,
+    classification: "ok",
+    summary: "ok",
+    data: { file: "Foo.agda", count: 3 },
+    diagnostics: [],
+  });
+  expect(good.success).toBe(true);
+
+  // Loose shape on an error envelope: still passes (safety-net path).
+  const errLoose = envelopeSchema.safeParse({
+    tool: "x",
+    ok: false,
+    classification: "tool-error",
+    summary: "boom",
+    data: {},
+    diagnostics: [],
+  });
+  expect(errLoose.success).toBe(true);
 });
 
 test("safety-net error envelope satisfies the registered outputSchema (required-data tools)", async () => {

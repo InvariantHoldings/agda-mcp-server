@@ -64,22 +64,44 @@ const envelopeBaseSchema = z.object({
 
 /**
  * Build a schema for a tool envelope whose `data` shape conforms to
- * `dataSchema`. Wraps `dataSchema` in `z.union([dataSchema, z.record(...)])`
- * so the schema validates STRICT data on success but tolerates the
- * looser `{}` / partial shape that `makeTextToolErrorResult` produces
- * when the structural safety net catches an uncaught exception.
+ * `dataSchema` on success. Three constraints in tension:
  *
- * The MCP SDK's introspection looks for `type: "object"` at the top
- * level (so e.g. `tools/list` exposes a sane outputSchema), so we
- * KEEP the envelope as an object schema and only relax the `data`
- * field — not the whole envelope.
+ *  - **Strict on `ok: true`** — successful envelopes must carry the
+ *    declared data shape. Without this, a typo on a happy-path return
+ *    would silently produce a schema-non-conforming payload that the
+ *    framework rejects later.
+ *  - **Lenient on `ok: false`** — the structural safety net in
+ *    `registerStructuredTool` translates uncaught throws into an
+ *    error envelope with `data: {}` (or a partial toolError.data),
+ *    which doesn't conform to most tools' `outputDataSchema`. Without
+ *    relaxation, the framework rejects that envelope and re-throws,
+ *    defeating the safety net.
+ *  - **Top-level `type: "object"` preserved** — the MCP SDK's
+ *    `tools/list` introspection looks at `outputSchema.type` to
+ *    advertise the schema; a `z.union` / `z.discriminatedUnion`
+ *    surfaces as `anyOf` / `oneOf` and breaks that discovery.
+ *
+ * The reconciliation: keep a single object schema (so `type: "object"`
+ * survives), declare `data` as `z.unknown()` at the top level, and
+ * use `.superRefine` to enforce strict `dataSchema` validation only
+ * when `ok === true`. Error envelopes pass through untouched.
  */
 export function toolEnvelopeSchema(
   dataSchema: z.ZodTypeAny,
 ): z.ZodTypeAny {
-  return envelopeBaseSchema.extend({
-    data: z.union([dataSchema, z.record(z.string(), z.unknown())]),
-  });
+  return envelopeBaseSchema
+    .extend({ data: z.unknown() })
+    .superRefine((env, ctx) => {
+      if (env.ok !== true) return;
+      const result = dataSchema.safeParse(env.data);
+      if (result.success) return;
+      for (const issue of result.error.issues) {
+        ctx.addIssue({
+          ...issue,
+          path: ["data", ...(issue.path ?? [])],
+        });
+      }
+    });
 }
 
 export function makeToolResult<T extends Record<string, unknown>>(
