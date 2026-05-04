@@ -8,21 +8,30 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
+import { AgdaSession } from "../agda-process.js";
 import {
   getKnownProtocolGaps,
   getProtocolParitySummary,
   listProtocolParityMatrix,
 } from "../protocol/parity-matrix.js";
-import { getServerVersion } from "../server-version.js";
+import {
+  classifyAgdaAgainstSupportedRange,
+  describeOutOfRangeWarning,
+  getServerVersion,
+  getSupportedAgdaRange,
+} from "../server-version.js";
 
 import { makeToolResult, okEnvelope, registerStructuredTool } from "./tool-helpers.js";
 import { protocolParityDataSchema } from "./reporting-schemas.js";
 
-export function registerProtocolParity(server: McpServer): void {
+export function registerProtocolParity(
+  server: McpServer,
+  session: AgdaSession,
+): void {
   registerStructuredTool({
     server,
     name: "agda_protocol_parity",
-    description: "Return the current Agda IOTCM parity matrix, distinguishing mapped commands from semantically verified commands and known gaps.",
+    description: "Return the current Agda IOTCM parity matrix, distinguishing mapped commands from semantically verified commands and known gaps. Also reports the declared supported-Agda range and how the detected Agda compares against it.",
     category: "reporting",
     outputDataSchema: protocolParityDataSchema,
     callback: async () => {
@@ -30,6 +39,20 @@ export function registerProtocolParity(server: McpServer): void {
       const entries = listProtocolParityMatrix();
       const knownGaps = getKnownProtocolGaps();
       const serverVersion = getServerVersion();
+      const supportedAgdaRange = getSupportedAgdaRange();
+      const detectedVersion = session.getAgdaVersion();
+      const baseStatus = classifyAgdaAgainstSupportedRange(detectedVersion);
+      const warning = describeOutOfRangeWarning(baseStatus);
+      // Only attach a status block when at least one side is known —
+      // otherwise the field would be a noisy "all-undefined" payload
+      // that adds no information for the agent.
+      const haveStatus =
+        baseStatus.detected !== undefined ||
+        supportedAgdaRange.minAgdaVersion !== undefined ||
+        supportedAgdaRange.maxTestedAgdaVersion !== undefined;
+      const agdaVersionRangeStatus = haveStatus
+        ? { ...baseStatus, ...(warning ? { warning } : {}) }
+        : undefined;
 
       let output = "## Protocol parity\n\n";
       output += `**Server version:** ${serverVersion}\n`;
@@ -39,7 +62,19 @@ export function registerProtocolParity(server: McpServer): void {
       output += `**End-to-end:** ${summary.endToEndCount}\n`;
       output += `**Verified:** ${summary.verifiedCount}\n`;
       output += `**Mapped:** ${summary.mappedCount}\n`;
-      output += `**Known gaps:** ${summary.knownGapCount}\n\n`;
+      output += `**Known gaps:** ${summary.knownGapCount}\n`;
+      if (supportedAgdaRange.minAgdaVersion || supportedAgdaRange.maxTestedAgdaVersion) {
+        const min = supportedAgdaRange.minAgdaVersion ?? "(unspecified)";
+        const max = supportedAgdaRange.maxTestedAgdaVersion ?? "(unspecified)";
+        output += `**Supported Agda range:** ${min} – ${max}\n`;
+      }
+      if (agdaVersionRangeStatus?.detected) {
+        output += `**Detected Agda:** ${agdaVersionRangeStatus.detected} [${agdaVersionRangeStatus.classification}]\n`;
+      }
+      if (warning) {
+        output += `**Warning:** ${warning}\n`;
+      }
+      output += "\n";
 
       if (knownGaps.length > 0) {
         output += "### Known gaps\n";
@@ -73,6 +108,8 @@ export function registerProtocolParity(server: McpServer): void {
             ...summary,
             knownGaps,
             entries,
+            supportedAgdaRange,
+            agdaVersionRangeStatus,
           },
         }),
         output,

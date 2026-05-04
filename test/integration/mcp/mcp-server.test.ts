@@ -74,6 +74,12 @@ test("MCP harness can call agda_tools_catalog", async () => {
     expect(result.structuredContent.tool).toBe("agda_tools_catalog");
     expect(Array.isArray(result.structuredContent.data.tools)).toBeTruthy();
     expect(result.structuredContent.data.tools.some((tool: any) => tool.name === "agda_load")).toBeTruthy();
+    // #18: catalog must surface representative examples per family so
+    // assistants can plan multi-step workflows without source diving.
+    const examples = result.structuredContent.data.toolFamilyExamples;
+    expect(examples).toBeTruthy();
+    expect(Array.isArray(examples.session)).toBeTruthy();
+    expect(examples.session.some((entry: any) => entry.tool === "agda_load")).toBeTruthy();
   });
 });
 
@@ -88,6 +94,12 @@ test("MCP harness can call agda_protocol_parity", async () => {
     const searchAbout = result.structuredContent.data.entries.find((entry: any) => entry.agdaCommand === "Cmd_search_about_toplevel");
     expect(searchAbout).toBeTruthy();
     expect(searchAbout.parityStatus).toBe("end-to-end");
+    // #41(2): parity output must surface the declared supported-Agda
+    // range so callers can see whether their installed Agda is in
+    // tested territory.
+    expect(result.structuredContent.data.supportedAgdaRange).toBeTruthy();
+    expect(typeof result.structuredContent.data.supportedAgdaRange.minAgdaVersion).toBe("string");
+    expect(typeof result.structuredContent.data.supportedAgdaRange.maxTestedAgdaVersion).toBe("string");
   });
 });
 

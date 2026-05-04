@@ -1,0 +1,111 @@
+{
+  "$comment": "Representative MCP tool invocations per tool family (manifest category). Surfaces agent-friendly examples through agda_tools_catalog so callers can plan multi-step workflows without reading source. Validated at module load via Zod; format change must be matched by src/tools/tool-family-examples.ts.",
+  "families": {
+    "session": [
+      {
+        "tool": "agda_load",
+        "summary": "Load a file to start the interactive session.",
+        "args": { "file": "src/Example.agda" },
+        "note": "After this call, agda_session_status returns the live goal IDs."
+      },
+      {
+        "tool": "agda_session_status",
+        "summary": "Inspect the current session phase and available goal IDs.",
+        "args": {},
+        "note": "Cheap to call between operations to confirm the session is healthy."
+      }
+    ],
+    "proof": [
+      {
+        "tool": "agda_case_split",
+        "summary": "Split a goal on a variable and write the new clauses back.",
+        "args": { "goalId": 0, "variable": "xs" },
+        "note": "Set writeToFile=false to preview without modifying the source."
+      },
+      {
+        "tool": "agda_give",
+        "summary": "Fill a goal with a candidate term.",
+        "args": { "goalId": 0, "expression": "zero" }
+      },
+      {
+        "tool": "agda_auto",
+        "summary": "Ask Agda to find a term for the goal automatically.",
+        "args": { "goalId": 0 }
+      }
+    ],
+    "navigation": [
+      {
+        "tool": "agda_search_about",
+        "summary": "Search loaded modules for definitions matching a query.",
+        "args": { "query": "Vec _ _" }
+      },
+      {
+        "tool": "agda_show_module",
+        "summary": "List the names exported by a module (top-level or visible from a goal).",
+        "args": { "moduleName": "Data.Nat" }
+      },
+      {
+        "tool": "agda_check_postulates",
+        "summary": "Audit a file for postulate declarations.",
+        "args": { "file": "src/Example.agda" }
+      }
+    ],
+    "process": [
+      {
+        "tool": "agda_show_version",
+        "summary": "Report the underlying Agda binary version.",
+        "args": {}
+      },
+      {
+        "tool": "agda_abort",
+        "summary": "Abort the in-flight Agda command without restarting the session.",
+        "args": {}
+      }
+    ],
+    "highlighting": [
+      {
+        "tool": "agda_load_highlighting_info",
+        "summary": "Fetch syntax-highlighting + token-class information for a loaded file.",
+        "args": { "file": "src/Example.agda" }
+      }
+    ],
+    "backend": [
+      {
+        "tool": "agda_compile",
+        "summary": "Compile a loaded module through a chosen backend.",
+        "args": { "backend": "GHC", "file": "src/Example.agda" }
+      }
+    ],
+    "analysis": [
+      {
+        "tool": "agda_goal_analysis",
+        "summary": "Inspect a goal's expected type, locals, and useful suggestions.",
+        "args": { "goalId": 0 }
+      }
+    ],
+    "reporting": [
+      {
+        "tool": "agda_tools_catalog",
+        "summary": "List all exposed MCP tools, categories, schemas, and worked examples.",
+        "args": {},
+        "note": "Recommended first call for an agent that hasn't seen this server before."
+      },
+      {
+        "tool": "agda_protocol_parity",
+        "summary": "Report which IOTCM commands are end-to-end vs. mapped vs. known gaps, plus the supported-Agda range.",
+        "args": {}
+      },
+      {
+        "tool": "agda_bug_report_bundle",
+        "summary": "Produce a stable bug-report payload (with fingerprint) for a failing tool call.",
+        "args": {
+          "affectedTool": "agda_load",
+          "classification": "process-error",
+          "observed": "load reported zero goals on a file with two holes",
+          "expected": "two interaction points returned",
+          "reproduction": ["agda_load { file: 'src/Foo.agda' }"]
+        }
+      }
+    ]
+  }
+}

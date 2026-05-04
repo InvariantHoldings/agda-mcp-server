@@ -73,6 +73,7 @@ test("toolsCatalogDataSchema accepts minimal valid catalog data", () => {
   expect(() => toolsCatalogDataSchema.parse({
     serverVersion: "0.6.5",
     tools: [],
+    toolFamilyExamples: {},
   })).not.toThrow();
 });
 
@@ -85,6 +86,9 @@ test("toolsCatalogDataSchema accepts full catalog data", () => {
     supportedFeatureFlags: ["--cubical"],
     structuredGiveResult: false,
     tools,
+    toolFamilyExamples: {
+      session: [{ tool: "agda_load", summary: "Load file", args: { file: "Foo.agda" } }],
+    },
   })).not.toThrow();
 });
 
@@ -123,6 +127,7 @@ test("live parity matrix passes protocolParityDataSchema validation", () => {
     ...summary,
     knownGaps,
     entries,
+    supportedAgdaRange: { minAgdaVersion: "2.6.4.3", maxTestedAgdaVersion: "2.9.0" },
   })).not.toThrow();
 });
 
