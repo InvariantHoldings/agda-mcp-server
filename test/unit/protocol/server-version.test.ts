@@ -3,12 +3,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  agdaMcpServerBlockSchema,
   agdaVersionStringSchema,
   classifyAgdaAgainstSupportedRange,
   describeOutOfRangeWarning,
   getServerVersion,
   getSupportedAgdaRange,
   packageMetadataSchema,
+  parsePackageMetadata,
 } from "../../../src/server-version.js";
 import { parseAgdaVersion } from "../../../src/agda/agda-version.js";
 
@@ -128,5 +130,71 @@ describe("agdaVersionStringSchema", () => {
       readFileSync(resolve(import.meta.dirname, "../../../package.json"), "utf8"),
     );
     expect(() => packageMetadataSchema.parse(packageJson)).not.toThrow();
+  });
+
+  test("agdaMcpServerBlockSchema rejects malformed bounds independently of version", () => {
+    // PR #52 review #4: a malformed bound used to invalidate the
+    // whole package metadata, blanking the server version. The two
+    // concerns are now parsed independently — assert the block
+    // schema fails on bad bounds without the test having to know
+    // anything about the version field.
+    const bad = agdaMcpServerBlockSchema.safeParse({ minAgdaVersion: "latest" });
+    expect(bad.success).toBe(false);
+    const ok = agdaMcpServerBlockSchema.safeParse({ minAgdaVersion: "2.6.4.3" });
+    expect(ok.success).toBe(true);
+  });
+});
+
+describe("server-version is decoupled from agdaMcpServer block", () => {
+  test("getServerVersion returns the real package version, not the FALLBACK", () => {
+    // Regression guard for PR #52 review #4: a typo in the range
+    // metadata used to make this assertion fail (server reported
+    // "0.0.0-dev"). The split parse keeps `version` valid even when
+    // the range block is malformed.
+    expect(getServerVersion()).not.toBe("0.0.0-dev");
+    expect(getServerVersion()).toMatch(/^\d+\.\d+\.\d+/u);
+  });
+
+  test("parsePackageMetadata: malformed bound does not invalidate version", () => {
+    // The exact scenario from PR #52 review #4. Pre-fix, the unified
+    // .parse() rejected the whole shape, readPackageJsonOnce
+    // swallowed the error, and SERVER_VERSION fell back to
+    // "0.0.0-dev". Post-fix, version is preserved and only the bad
+    // block is dropped.
+    const result = parsePackageMetadata({
+      version: "0.7.0",
+      agdaMcpServer: { minAgdaVersion: "latest" },
+    });
+    expect(result.version).toBe("0.7.0");
+    expect(result.agdaMcpServer).toBeUndefined();
+  });
+
+  test("parsePackageMetadata: valid block + valid version round-trip", () => {
+    const result = parsePackageMetadata({
+      version: "0.7.0",
+      agdaMcpServer: { minAgdaVersion: "2.6.4.3", maxTestedAgdaVersion: "2.9.0" },
+    });
+    expect(result.version).toBe("0.7.0");
+    expect(result.agdaMcpServer).toEqual({
+      minAgdaVersion: "2.6.4.3",
+      maxTestedAgdaVersion: "2.9.0",
+    });
+  });
+
+  test("parsePackageMetadata: non-string version is dropped, block is preserved", () => {
+    const result = parsePackageMetadata({
+      version: 123,
+      agdaMcpServer: { minAgdaVersion: "2.6.4.3" },
+    });
+    expect(result.version).toBeUndefined();
+    expect(result.agdaMcpServer?.minAgdaVersion).toBe("2.6.4.3");
+  });
+
+  test("parsePackageMetadata: non-object input gives empty metadata", () => {
+    for (const bogus of [null, undefined, "package.json", 42, []]) {
+      const result = parsePackageMetadata(bogus);
+      expect(result.version).toBeUndefined();
+      expect(result.agdaMcpServer).toBeUndefined();
+    }
   });
 });

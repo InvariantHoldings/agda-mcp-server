@@ -39,17 +39,32 @@ export const agdaVersionStringSchema = z
   .string()
   .regex(/^\d+(?:\.\d+)*(?:-[A-Za-z0-9.]+)?$/u);
 
-export const packageMetadataSchema = z.object({
-  version: z.string().optional(),
-  agdaMcpServer: z
-    .object({
-      minAgdaVersion: agdaVersionStringSchema.optional(),
-      maxTestedAgdaVersion: agdaVersionStringSchema.optional(),
-    })
-    .optional(),
+/**
+ * Schema for the `agdaMcpServer` block alone. Kept separate from the
+ * top-level `version` field so a typo in the range metadata cannot
+ * blow away the version reading — see PR #52 review comment 4.
+ */
+export const agdaMcpServerBlockSchema = z.object({
+  minAgdaVersion: agdaVersionStringSchema.optional(),
+  maxTestedAgdaVersion: agdaVersionStringSchema.optional(),
 });
 
-type PackageMetadata = z.infer<typeof packageMetadataSchema>;
+/**
+ * Schema for the whole `package.json` shape we care about. Used by
+ * tests that want to assert the live file satisfies the contract.
+ * The runtime loader does not use this directly — it parses `version`
+ * and the `agdaMcpServer` block independently so a malformed range
+ * field does not invalidate `version`.
+ */
+export const packageMetadataSchema = z.object({
+  version: z.string().optional(),
+  agdaMcpServer: agdaMcpServerBlockSchema.optional(),
+});
+
+interface PackageMetadata {
+  version: string | undefined;
+  agdaMcpServer: z.infer<typeof agdaMcpServerBlockSchema> | undefined;
+}
 
 /**
  * The declared range of Agda versions this server release was tested
@@ -65,19 +80,30 @@ export interface SupportedAgdaRange {
   maxTestedAgdaVersion: string | undefined;
 }
 
+/**
+ * Pure parser for a parsed-JSON `package.json` value. Splits the two
+ * concerns (`version` and `agdaMcpServer`) so one bad field cannot
+ * invalidate the other — a typo in `agdaMcpServer.minAgdaVersion`
+ * must not cause `getServerVersion()` to fall back to "0.0.0-dev"
+ * (PR #52 review comment 4). Exported so unit tests can exercise
+ * the split-parse contract without writing temp files.
+ */
+export function parsePackageMetadata(raw: unknown): PackageMetadata {
+  const rawObject = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const version = typeof rawObject.version === "string" ? rawObject.version : undefined;
+  const blockResult = agdaMcpServerBlockSchema.safeParse(rawObject.agdaMcpServer);
+  const agdaMcpServer = blockResult.success ? blockResult.data : undefined;
+  return { version, agdaMcpServer };
+}
+
 function readPackageJsonOnce(): PackageMetadata {
   try {
     const here = dirname(fileURLToPath(import.meta.url));
     const packageJsonPath = resolve(here, "..", "package.json");
-    const raw = JSON.parse(readFileSync(packageJsonPath, "utf8")) as unknown;
-    // Strict-parse against the schema so malformed bound strings or
-    // unexpected types fail at module init. The catch below also
-    // covers schema rejection, so the server still starts on bad
-    // metadata — it just falls back to FALLBACK_VERSION and an empty
-    // range, which surfaces as "unknown" in the parity tool.
-    return packageMetadataSchema.parse(raw);
+    return parsePackageMetadata(JSON.parse(readFileSync(packageJsonPath, "utf8")));
   } catch {
-    return {};
+    // File missing or non-JSON — server still boots with empty metadata.
+    return { version: undefined, agdaMcpServer: undefined };
   }
 }
 
