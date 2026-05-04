@@ -105,6 +105,21 @@ type ExtensionRegister = (
 // its session state, leaving tools with divergent views of what is
 // loaded. See issue #39 for the concrete regression this invariant
 // fixes.
+// Validate the resolved project root exists at startup. A typo'd
+// AGDA_MCP_ROOT used to surface only as a wave of `not-found`
+// envelopes from the first tool call; the agent had no signal that
+// the ROOT itself was wrong. Emit a stderr warning so MCP clients
+// that mirror server stderr show it; the server still starts so a
+// caller can inspect via `agda_session_status` and recover.
+if (!existsSync(PROJECT_ROOT)) {
+  process.stderr.write(
+    `agda-mcp-server: PROJECT_ROOT does not exist on disk: ${PROJECT_ROOT}\n` +
+    `  Set AGDA_MCP_ROOT to an existing directory, or invoke the server\n` +
+    `  from inside the project root. Tools that resolve files will return\n` +
+    `  invalid-path / not-found errors until the root is fixed.\n`,
+  );
+}
+
 const session = new AgdaSession(PROJECT_ROOT);
 
 // Stamp the server version and (best-effort) the Agda version into every

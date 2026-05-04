@@ -15,6 +15,7 @@ function baseInput(overrides: Partial<SnapshotInput> = {}): SnapshotInput {
     phase: "loaded",
     loadedFile: "/project/Foo.agda",
     projectRoot: "/project",
+    projectRootExists: true,
     stale: false,
     goalIds: [],
     invisibleGoalCount: 0,
@@ -35,6 +36,15 @@ describe("deriveSessionSnapshot", () => {
     expect(snap.classification).toBe("ok-complete");
     expect(snap.stale).toBe(false);
     expect(snap.agdaVersion).toBe("2.6.4.3");
+    expect(snap.projectRootExists).toBe(true);
+  });
+
+  it("propagates projectRootExists=false when the caller reports a misconfigured root", () => {
+    // Regression: a typo'd AGDA_MCP_ROOT used to be invisible to the
+    // agent — every tool returned `not-found` with no signal that the
+    // root itself was wrong. The snapshot now surfaces it directly.
+    const snap = deriveSessionSnapshot(baseInput({ projectRootExists: false }));
+    expect(snap.projectRootExists).toBe(false);
   });
 
   it("returns ok-with-holes when goals exist", () => {
