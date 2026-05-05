@@ -26,6 +26,22 @@ interface PostulateBlock {
 }
 
 /**
+ * Strip `-- …` line comments and `{- … -}` block comments from the
+ * trailing portion of a line so the postulate scanner does not
+ * mistake comment text for declarations. Conservative: only strips
+ * comment runs that begin at or after the first non-keyword position
+ * — anything before is left untouched. Single-line approximation for
+ * `{- -}` (Agda block comments can span lines, but the postulate
+ * header line itself is what we tokenize).
+ */
+function stripAgdaComments(line: string): string {
+  const blockStripped = line.replace(/\{-[\s\S]*?-\}/gu, " ");
+  const lineCommentIndex = blockStripped.indexOf("--");
+  if (lineCommentIndex === -1) return blockStripped;
+  return blockStripped.slice(0, lineCommentIndex);
+}
+
+/**
  * Extract every postulate block (inline or indented body) from an
  * already-read source. Pure function so unit tests can drive it
  * directly without round-tripping through the filesystem.
@@ -41,8 +57,13 @@ function findPostulates(fileContent: string): PostulateBlock[] {
     }
 
     // Inline form: `postulate ax : Set` or `postulate p q : Set` —
-    // anything to the right of the keyword is the declaration.
-    const inlineMatch = /^postulate\s+(\S.*)$/.exec(trimmed);
+    // anything non-comment to the right of the keyword is the
+    // declaration. Strip `-- …` line comments and `{- … -}` block
+    // comments first so a header like `postulate -- TODO` is treated
+    // as a block-style header (no declarations on this line) rather
+    // than parsed as `postulate <TODO>`.
+    const stripped = stripAgdaComments(trimmed).trimEnd();
+    const inlineMatch = /^postulate\s+(\S.*)$/.exec(stripped);
     if (inlineMatch) {
       const lhs = inlineMatch[1].split(":")[0].trim();
       const declNames = lhs.split(/\s+/u).filter((t) => t.length > 0 && !t.startsWith("--"));

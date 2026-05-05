@@ -40,10 +40,25 @@ export function relativeToRequestedRoot(
 
 /**
  * Sandboxed variant of `resolveExistingPathWithinRoot` that returns
- * `null` instead of throwing when the candidate falls outside the root
- * — used inside directory walks where one hostile entry must not
- * abort the whole listing. Other errors (ENOENT, permission denied,
- * …) still propagate.
+ * `null` instead of throwing for any error a tolerant directory walk
+ * should treat as "skip this entry":
+ *
+ * - `PathSandboxError` — entry resolves outside the project root
+ *   (e.g. a symlink pointing at `/etc`). Skipping is the
+ *   security-preserving default; the entry never enters the listing.
+ * - `ENOENT` — the entry was visible to `readdir` but disappeared by
+ *   the time `realpath` ran (TOCTOU race) or is a broken symlink whose
+ *   target no longer exists. Both cases are normal for a long walk
+ *   over a live filesystem and must not crash the entire listing.
+ * - `EACCES` / `EPERM` — permission denied. Same tolerance applies;
+ *   the caller surfaces the skipped entry through its own
+ *   "unreadable" reporting (see `agda_list_modules` /
+ *   `agda_search_definitions` output).
+ *
+ * Any other error (programmer bug, filesystem corruption) still
+ * propagates — silent suppression of unknown failures would mask
+ * real problems. The intent matches the rest of the file-tool walks:
+ * one bad entry does not abort the whole tree.
  */
 export function resolveExistingChildWithinRoot(
   repoRoot: string,
@@ -53,6 +68,10 @@ export function resolveExistingChildWithinRoot(
     return resolveExistingPathWithinRoot(repoRoot, path);
   } catch (error) {
     if (error instanceof PathSandboxError) {
+      return null;
+    }
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    if (code === "ENOENT" || code === "EACCES" || code === "EPERM" || code === "ELOOP") {
       return null;
     }
     throw error;

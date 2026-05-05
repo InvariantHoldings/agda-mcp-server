@@ -72,7 +72,7 @@ export function register(
               code: "not-found",
               nextAction:
                 "Pass an existing top-level directory under agda/ (e.g. MathLib, Foundation, Kernel, Research, Extensions, TrustedCompute). " +
-                "Use `agda_file_list` with no `tier` to see the available top-level directories in this project.",
+                "Use `agda_search_definitions` with no `tier` to scan the whole project root if you don't know which tier to pick.",
             },
             {
               severity: "info",
