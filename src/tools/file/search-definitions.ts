@@ -41,6 +41,10 @@ export function register(
     name: "agda_search_definitions",
     description: "Search for a definition, theorem, or type name across Agda modules.",
     category: "navigation",
+    // Pure filesystem grep across the project — no Agda session
+    // required. Surface in the unloaded list so this is reachable
+    // from a missing-file recovery hint without first loading.
+    requiresLoadedSession: false,
     inputSchema: {
       query: z.string().optional().describe("The name or pattern to search for"),
       typePattern: z.string().optional().describe("Type-shape query (wildcard `_` supported), e.g. `_ ≤ _ + _`"),

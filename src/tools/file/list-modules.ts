@@ -38,6 +38,10 @@ export function register(
     name: "agda_list_modules",
     description: "List Agda modules in a directory tier (MathLib, Foundation, Kernel, Research, Extensions, etc.). Always reports the total module count; paginated to keep responses small (default page size 25). Use `offset` to scroll, `limit` to enlarge the page, and `pattern` for a case-insensitive substring filter on the relative path.",
     category: "navigation",
+    // Filesystem-only walk + best-effort version detection — works
+    // without a loaded file. Discoverable via `agda_session_status`
+    // before any load so an agent can pick which module to load.
+    requiresLoadedSession: false,
     inputSchema: {
       tier: z.string().describe("The tier to list, e.g. 'Kernel', 'Foundation', 'MathLib'"),
       offset: z.number().int().min(0).optional().describe("0-based starting index into the sorted result list. Defaults to 0."),

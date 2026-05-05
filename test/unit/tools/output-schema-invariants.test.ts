@@ -13,7 +13,7 @@
 // and act as a regression fence so any future tool added without
 // declared output fields fails the suite at registration time.
 
-import { describe, test, expect, beforeAll } from "vitest";
+import { describe, test, expect, beforeAll, afterAll } from "vitest";
 
 import {
   clearToolManifest,
@@ -41,6 +41,12 @@ beforeAll(() => {
   } finally {
     session.destroy();
   }
+});
+
+afterAll(() => {
+  // Tear down so the duplicate-name guard in registerManifestEntry
+  // doesn't make a sibling test order-dependent.
+  clearToolManifest();
 });
 
 describe("output-schema invariants — every exposed tool", () => {

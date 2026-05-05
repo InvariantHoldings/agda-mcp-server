@@ -29,6 +29,11 @@ export function register(
     name: "agda_read_module",
     description: "Read an Agda module file and return its contents with line numbers. For literate files (.lagda.md, .lagda.tex, etc.), use `codeOnly: true` to extract just the Agda code blocks, stripping prose wrappers.",
     category: "navigation",
+    // Pure filesystem read — no Agda subprocess interaction, no
+    // dependence on a loaded session. Surface in the unloaded
+    // tool list so an agent can inspect a file before deciding
+    // whether/how to load it.
+    requiresLoadedSession: false,
     inputSchema: {
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
       codeOnly: z.boolean().optional().describe("When true, extract only Agda code blocks from literate files, stripping prose. Has no effect on plain .agda files."),

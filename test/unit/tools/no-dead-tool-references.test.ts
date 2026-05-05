@@ -8,7 +8,7 @@
 // This suite walks src/ and fails if any hint references a tool name
 // that the runtime manifest does not know about.
 
-import { describe, test, expect, beforeAll } from "vitest";
+import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -35,6 +35,15 @@ beforeAll(() => {
     session.destroy();
   }
   registeredNames = new Set(listToolManifest().map((entry) => entry.name));
+});
+
+afterAll(() => {
+  // The manifest is process-global; the duplicate-name guard in
+  // registerManifestEntry would make a sibling test order-dependent
+  // if we left it populated. Snapshot the names in `beforeAll` and
+  // tear the manifest down here so subsequent test files start from
+  // a clean slate.
+  clearToolManifest();
 });
 
 function listSourceFiles(dir: string): string[] {

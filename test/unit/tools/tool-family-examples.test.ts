@@ -3,7 +3,7 @@
 // Unit tests for the curated tool-family example table that
 // agda_tools_catalog surfaces to assistants.
 
-import { describe, test, expect, beforeAll } from "vitest";
+import { describe, test, expect, beforeAll, afterAll } from "vitest";
 
 import {
   getToolFamilyExamples,
@@ -28,6 +28,12 @@ beforeAll(() => {
   } finally {
     session.destroy();
   }
+});
+
+afterAll(() => {
+  // Tear down so the duplicate-name guard in registerManifestEntry
+  // doesn't make a sibling test order-dependent.
+  clearToolManifest();
 });
 
 describe("tool-family examples", () => {

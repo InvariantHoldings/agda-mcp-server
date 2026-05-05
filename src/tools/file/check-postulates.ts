@@ -107,6 +107,10 @@ export function register(
     name: "agda_check_postulates",
     description: "Check an Agda file for postulate declarations. In Kernel/ files, postulates are forbidden by construction.",
     category: "navigation",
+    // Pure source scan — no Agda subprocess. Discoverable in the
+    // unloaded set so a CI gate or pre-commit hook can run it
+    // without having to load the file first.
+    requiresLoadedSession: false,
     inputSchema: { file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)) },
     outputDataSchema: z.object({
       text: z.string(),
