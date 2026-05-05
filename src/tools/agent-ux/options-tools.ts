@@ -43,6 +43,9 @@ export function registerOptionsTools(
     name: "agda_effective_options",
     description: "Return effective Agda options for a file with source attribution (OPTIONS pragma, .agda-lib flags, wrapper hints, and MCP defaults).",
     category: "analysis",
+    // Pure config introspection — parses pragmas / .agda-lib /
+    // .agda-mcp.json without invoking Agda. Useful before a load.
+    requiresLoadedSession: false,
     inputSchema: {
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
     },
@@ -165,6 +168,9 @@ export function registerOptionsTools(
       "with provenance and validation warnings. Use this when an agent wants to confirm which compiler " +
       "flags will be applied to subsequent agda_load / agda_typecheck calls before running them.",
     category: "analysis",
+    // Config introspection — by design useful BEFORE any load
+    // (the docstring above explicitly says "before running them").
+    requiresLoadedSession: false,
     inputSchema: {},
     outputDataSchema: z.object({
       configFilePath: z.string().nullable(),

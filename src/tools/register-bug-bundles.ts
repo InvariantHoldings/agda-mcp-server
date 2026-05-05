@@ -75,6 +75,7 @@ export function registerBugReportBundle(server: McpServer, session: AgdaSession)
     name: "agda_bug_report_bundle",
     description: "Emit a structured bundle for a new bug report or regression, suitable for issue filing or later updates.",
     category: "reporting",
+    requiresLoadedSession: false,
     inputSchema: {
       kind: z.enum(["new-bug", "regression"]).optional().describe("Bundle kind. Defaults to new-bug."),
       affectedTool: z.string().describe("The MCP tool affected by the bug"),
@@ -143,6 +144,7 @@ export function registerBugReportUpdateBundle(server: McpServer, session: AgdaSe
     name: "agda_bug_report_update_bundle",
     description: "Emit a structured update bundle for an existing bug report, preserving stable fingerprints and issue linkage.",
     category: "reporting",
+    requiresLoadedSession: false,
     inputSchema: {
       existingIssue: z.number().int().min(1).describe("Existing GitHub issue number (positive integer)"),
       affectedTool: z.string().describe("The MCP tool affected by the bug"),

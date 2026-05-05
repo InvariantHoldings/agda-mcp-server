@@ -77,6 +77,11 @@ export function registerAgdaApplyEdit(
     description:
       "Apply a targeted text substitution to an Agda file and reload it. For edits that aren't goal actions — adding imports, renaming symbols, fixing typos. oldText must match exactly once unless `occurrence` is provided. Auto-reloads the file after writing so the Agda session stays in sync. Runs even when the session is in a type-error state, since the whole point is to repair that state. Restricted to Agda source files (.agda, .lagda, .lagda.{md,rst,tex,org,typ}) and to source files ≤ 512 KiB; refuses symlink targets and out-of-sandbox paths.",
     category: "session",
+    // The whole point of agda_apply_edit is to repair files that
+    // failed to load (or haven't been loaded yet) — gating it on a
+    // loaded session would defeat its purpose. The internal reload
+    // re-establishes session state on success.
+    requiresLoadedSession: false,
     inputSchema: {
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
       oldText: z.string().describe("Exact text to replace. Must match once (or specify `occurrence`)."),

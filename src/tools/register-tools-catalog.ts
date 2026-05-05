@@ -27,6 +27,7 @@ export function registerToolsCatalog(server: McpServer, session: AgdaSession): v
     description: "Return the generated manifest view of exposed MCP tools, categories, protocol mappings, schema field names, and representative example invocations per tool family. Also reports the detected Agda version and which extensions, feature flags, and protocol features are available.",
     category: "reporting",
     outputDataSchema: toolsCatalogDataSchema,
+    requiresLoadedSession: false,
     callback: async () => {
       const tools = listToolManifest();
       const schemas = listToolSchemas();

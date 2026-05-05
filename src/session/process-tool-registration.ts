@@ -73,6 +73,7 @@ export function registerSessionProcessTools(
     category: "process",
     protocolCommands: ["Cmd_show_version"],
     outputDataSchema: versionDataSchema,
+    requiresLoadedSession: false,
     callback: async () => {
       try {
         const result = await session.query.showVersion();
@@ -131,6 +132,7 @@ export function registerSessionProcessTools(
     category: "process",
     protocolCommands: ["Cmd_abort"],
     outputDataSchema: processCommandDataSchema,
+    requiresLoadedSession: false,
     callback: async () => {
       try {
         await session.abort();
@@ -165,6 +167,7 @@ export function registerSessionProcessTools(
     category: "process",
     protocolCommands: ["Cmd_exit"],
     outputDataSchema: processCommandDataSchema,
+    requiresLoadedSession: false,
     callback: async () => {
       try {
         await session.exit();

@@ -57,6 +57,11 @@ export function register(
     name: "agda_cache_info",
     description: "Report the state of every `.agdai` interface artifact for a source file. Lists each artifact's path, the Agda version that produced it (for separated builds under `_build/<version>/agda/`), and whether it's older than the on-disk source. Pairs with `agda_load`'s `forceRecompile: true` escape hatch — call this first to decide whether to bust the cache.",
     category: "navigation",
+    // Pure filesystem inspection of `.agdai` artifacts — no Agda
+    // session interaction needed. Useful before `agda_load` to
+    // decide whether to bust the cache, so it must be discoverable
+    // in the unloaded set.
+    requiresLoadedSession: false,
     inputSchema: {
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
     },

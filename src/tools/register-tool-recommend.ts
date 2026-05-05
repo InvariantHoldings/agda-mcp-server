@@ -38,6 +38,7 @@ export function registerToolRecommend(
       "Suggest likely next MCP tool calls based on the current semantic proof state. Returns recommendations ordered by priority with rationale, pre-filled arguments, and blockers.",
     category: "reporting",
     outputDataSchema: toolRecommendDataSchema,
+    requiresLoadedSession: false,
     callback: async () => {
       const loadedFile = session.getLoadedFile();
 

@@ -56,6 +56,7 @@ export function registerSessionSnapshot(
       "Return a structured snapshot of the current session state: loaded file, phase, goal counts, completeness, staleness, and suggested next actions. Designed for one-call agent introspection.",
     category: "reporting",
     outputDataSchema: sessionSnapshotDataSchema,
+    requiresLoadedSession: false,
     callback: async () => {
       // Trigger version detection if needed
       const detectedVersion = await tryGetAgdaVersion(session);
