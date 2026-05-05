@@ -93,7 +93,7 @@ export function register(
             diagnostics: [errorDiagnostic(
               `File not found: ${requestedFilePath}`,
               "not-found",
-              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_file_list` or `agda_search` to discover available files.",
+              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_list_modules` or `agda_search_definitions` to discover available files.",
             )],
           }),
         );
@@ -119,7 +119,7 @@ export function register(
             diagnostics: [errorDiagnostic(
               `Could not stat ${requestedFilePath}: ${err instanceof Error ? err.message : String(err)}`,
               "not-found",
-              "The file disappeared between existsSync and statSync (deletion race) or is unreadable (permissions). Retry, or verify the path with `agda_file_list`.",
+              "The file disappeared between existsSync and statSync (deletion race) or is unreadable (permissions). Retry, or verify the path with `agda_list_modules`.",
             )],
           }),
         );

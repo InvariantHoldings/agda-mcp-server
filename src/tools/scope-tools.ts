@@ -148,7 +148,7 @@ export function register(
               message,
               "show-module-error",
               "Confirm the module name is exact and reachable from the loaded file. " +
-              "Use `agda_search_about` for a fuzzy lookup, or `agda_file_list` to find the module's source file.",
+              "Use `agda_search_about` for a fuzzy lookup, or `agda_search_definitions` to find the module's source file.",
             )],
           }),
           message,

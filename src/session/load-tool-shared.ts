@@ -55,7 +55,7 @@ export function missingFileResult(tool: LoadToolName, filePath: string) {
         message,
         "file-not-found",
         "Confirm the path is relative to AGDA_MCP_ROOT (or absolute and within it). " +
-        "Use `agda_file_list` to see available modules, or `agda_search` to locate one.",
+        "Use `agda_list_modules` to enumerate modules in a tier, or `agda_search_definitions` to locate one by symbol name.",
       )],
     }),
   );
