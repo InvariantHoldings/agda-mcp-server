@@ -58,6 +58,7 @@ export function registerAgdaLoad(
     description: "Load and type-check an Agda file. This establishes the interactive session — subsequent commands operate on the loaded file's goals.",
     category: "session",
     protocolCommands: ["Cmd_load", "Cmd_metas"],
+    requiresLoadedSession: false,
     inputSchema: {
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
       profileOptions: z.array(z.string()).optional().describe(

@@ -102,7 +102,7 @@ test("missingFileResult diagnostic includes a nextAction hint", () => {
   expect(diags.length).toBeGreaterThan(0);
   expect(diags[0].code).toBe("file-not-found");
   expect(diags[0].nextAction).toBeDefined();
-  expect(diags[0].nextAction).toMatch(/PROJECT_ROOT|agda_file_list/u);
+  expect(diags[0].nextAction).toMatch(/AGDA_MCP_ROOT|agda_list_modules|agda_search_definitions/u);
 });
 
 test("processErrorResult diagnostic includes a toolchain-recovery nextAction", () => {

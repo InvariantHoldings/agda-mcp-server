@@ -103,3 +103,37 @@ test("availableSessionTools filters interactive tools when no file is loaded", (
     clearToolManifest();
   }
 });
+
+test("availableSessionTools is derived from manifest.requiresLoadedSession (no hardcoded names)", () => {
+  // The unloaded set must equal exactly the manifest entries with
+  // `requiresLoadedSession: false`. This pins the SSOT property:
+  // adding a new no-load-needed tool means setting the flag at the
+  // registration site, not editing this filter.
+  clearToolManifest();
+  const server = createServer();
+  const session = new AgdaSession(projectRoot);
+
+  try {
+    registerSessionTools(server, session, projectRoot);
+    registerReportingTools(server, session, projectRoot);
+
+    const expected = new Set(
+      listToolManifest()
+        .filter((entry) => !entry.requiresLoadedSession)
+        .map((entry) => entry.name),
+    );
+    const actual = new Set(availableSessionTools(false).map((entry) => entry.name));
+
+    expect(actual).toEqual(expected);
+
+    // Sanity: at least the four canonical no-load tools are in the
+    // expected set. If a future refactor accidentally toggles their
+    // flags, this catches it without us having to update the filter.
+    for (const required of ["agda_load", "agda_load_no_metas", "agda_typecheck", "agda_session_status"]) {
+      expect(expected.has(required), `${required} should be in unloaded set`).toBe(true);
+    }
+  } finally {
+    session.destroy();
+    clearToolManifest();
+  }
+});

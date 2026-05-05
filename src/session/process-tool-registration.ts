@@ -29,6 +29,7 @@ export function registerSessionProcessTools(
     description: "Show the current Agda session status: phase, loaded file, and available goal IDs.",
     category: "session",
     outputDataSchema: sessionStatusDataSchema,
+    requiresLoadedSession: false,
     callback: async () => {
       const loadedFile = session.getLoadedFile();
       const goalIds = session.getGoalIds();
