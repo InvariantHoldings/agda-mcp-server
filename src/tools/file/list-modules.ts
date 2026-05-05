@@ -28,6 +28,33 @@ import {
   resolveExistingChildWithinRoot,
 } from "./shared.js";
 
+/**
+ * Discover the immediate child directories of `<repoRoot>/agda` so
+ * a not-found-tier diagnostic can list the actually-available
+ * tiers instead of a hardcoded project-specific list. Returns an
+ * empty array if `agda/` doesn't exist, isn't readable, or contains
+ * no directories — the caller falls through to a generic hint.
+ *
+ * Defensive against unreadable directories (permission-denied races,
+ * broken symlinks): swallow the error and return whatever was seen
+ * so far. The diagnostic is informational, not authoritative — a
+ * partial list beats a crash.
+ */
+function discoverAvailableTiers(repoRoot: string): string[] {
+  const agdaRoot = resolve(repoRoot, "agda");
+  if (!existsSync(agdaRoot)) return [];
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = readdirSync(agdaRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => entry.name)
+    .sort();
+}
+
 export function register(
   server: McpServer,
   session: AgdaSession,
@@ -36,14 +63,14 @@ export function register(
   registerTextTool({
     server,
     name: "agda_list_modules",
-    description: "List Agda modules in a directory tier (MathLib, Foundation, Kernel, Research, Extensions, etc.). Always reports the total module count; paginated to keep responses small (default page size 25). Use `offset` to scroll, `limit` to enlarge the page, and `pattern` for a case-insensitive substring filter on the relative path.",
+    description: "List Agda modules under a tier directory (`agda/<tier>/...`). Always reports the total module count; paginated to keep responses small (default page size 25). Use `offset` to scroll, `limit` to enlarge the page, and `pattern` for a case-insensitive substring filter on the relative path. Call with an unknown tier to get a not-found diagnostic that lists the tier directories actually present in the project.",
     category: "navigation",
     // Filesystem-only walk + best-effort version detection — works
     // without a loaded file. Discoverable via `agda_session_status`
     // before any load so an agent can pick which module to load.
     requiresLoadedSession: false,
     inputSchema: {
-      tier: z.string().describe("The tier to list, e.g. 'Kernel', 'Foundation', 'MathLib'"),
+      tier: z.string().describe("The tier directory under agda/ to list. Pass any subdirectory name; agda_list_modules itself is the discovery tool — call with an unknown tier to get a list of what's available in this project."),
       offset: z.number().int().min(0).optional().describe("0-based starting index into the sorted result list. Defaults to 0."),
       limit: z.number().int().min(1).max(LIST_MODULES_MAX_LIMIT).optional().describe(
         `Maximum number of modules to return in this page. Defaults to ${LIST_MODULES_DEFAULT_LIMIT}; capped at ${LIST_MODULES_MAX_LIMIT}.`,
@@ -66,6 +93,16 @@ export function register(
     callback: async ({ tier, offset, limit, pattern }: { tier: string; offset?: number; limit?: number; pattern?: string }) => {
       const requestedTierDir = resolveFileWithinRoot(repoRoot, join("agda", tier));
       if (!existsSync(requestedTierDir)) {
+        const availableTiers = discoverAvailableTiers(repoRoot);
+        const tierList = availableTiers.length > 0
+          ? availableTiers.join(", ")
+          : "(no tier subdirectories found under agda/)";
+        const nextAction = availableTiers.length > 0
+          ? `Pass an existing tier directory. Available in this project: ${tierList}. ` +
+            "Use `agda_search_definitions` with no `tier` to scan the whole project root."
+          : "No tier subdirectories were found under `agda/`. " +
+            "Either the tier path is wrong or this project does not use a tier layout. " +
+            "Use `agda_search_definitions` with no `tier` to scan the project root directly.";
         throw new ToolInvocationError({
           message: `Tier directory not found: agda/${tier}`,
           classification: "not-found",
@@ -74,18 +111,16 @@ export function register(
               severity: "error",
               message: `Tier directory not found: agda/${tier}`,
               code: "not-found",
-              nextAction:
-                "Pass an existing top-level directory under agda/ (e.g. MathLib, Foundation, Kernel, Research, Extensions, TrustedCompute). " +
-                "Use `agda_search_definitions` with no `tier` to scan the whole project root if you don't know which tier to pick.",
+              nextAction,
             },
             {
               severity: "info",
-              message: "Available tiers: MathLib, Foundation, Kernel, Research, Extensions, TrustedCompute",
+              message: `Available tiers: ${tierList}`,
               code: "available-tiers",
             },
           ],
           data: { tier },
-          text: `Tier directory not found: agda/${tier}\nAvailable: MathLib, Foundation, Kernel, Research, Extensions, TrustedCompute`,
+          text: `Tier directory not found: agda/${tier}\nAvailable: ${tierList}`,
         });
       }
       const tierDir = resolveExistingPathWithinRoot(repoRoot, requestedTierDir);

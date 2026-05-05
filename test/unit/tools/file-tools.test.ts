@@ -326,3 +326,61 @@ test("agda_check_postulates uses canonical relative path for symlinked repo root
     rmSync(fixture.sandbox, { recursive: true, force: true });
   }
 });
+
+test("agda_list_modules not-found diagnostic lists tiers actually present in the project", async () => {
+  // The previous implementation hardcoded a project-specific tier
+  // list (`MathLib, Foundation, Kernel, …`) that was wrong for any
+  // project that doesn't follow that convention. The diagnostic
+  // must now derive the tier list from `<repoRoot>/agda/`'s actual
+  // child directories.
+  clearToolManifest();
+  const sandbox = mkdtempSync(join(tmpdir(), "agda-mcp-tier-diag-"));
+  try {
+    mkdirSync(join(sandbox, "agda", "Alpha"), { recursive: true });
+    mkdirSync(join(sandbox, "agda", "Beta"));
+    mkdirSync(join(sandbox, "agda", "Gamma"));
+    // Hidden dotdirs and non-dirs must be excluded from the listing.
+    mkdirSync(join(sandbox, "agda", ".cache"));
+    writeFileSync(join(sandbox, "agda", "loose.agda"), "module loose where\n");
+
+    const server = createCapturingServer();
+    registerFileTools(server as unknown as McpServer, { getAgdaVersion: () => null } as any, sandbox);
+
+    const result = await server.get("agda_list_modules")!.callback({ tier: "DoesNotExist" });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.classification).toBe("not-found");
+    const text: string = result.content[0].text;
+    expect(text).toContain("Alpha");
+    expect(text).toContain("Beta");
+    expect(text).toContain("Gamma");
+    // Hidden dirs and files must NOT be reported as tiers.
+    expect(text.includes(".cache")).toBe(false);
+    expect(text.includes("loose.agda")).toBe(false);
+    // The previous hardcoded list must NOT appear.
+    expect(text.includes("MathLib")).toBe(false);
+    expect(text.includes("TrustedCompute")).toBe(false);
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("agda_list_modules not-found diagnostic falls through gracefully when agda/ is empty or missing", async () => {
+  clearToolManifest();
+  const sandbox = mkdtempSync(join(tmpdir(), "agda-mcp-tier-empty-"));
+  try {
+    // No `agda/` dir at all — diagnostic must still render without
+    // crashing, and must explicitly say no tiers were found.
+    const server = createCapturingServer();
+    registerFileTools(server as unknown as McpServer, { getAgdaVersion: () => null } as any, sandbox);
+
+    const result = await server.get("agda_list_modules")!.callback({ tier: "Anything" });
+
+    expect(result.isError).toBe(true);
+    const text: string = result.content[0].text;
+    expect(text).toContain("Tier directory not found");
+    expect(text).toMatch(/no tier subdirectories|^Available: \(no tier/u);
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
