@@ -34,6 +34,7 @@ export function registerProtocolParity(
     description: "Return the current Agda IOTCM parity matrix, distinguishing mapped commands from semantically verified commands and known gaps. Also reports the declared supported-Agda range and how the detected Agda compares against it.",
     category: "reporting",
     outputDataSchema: protocolParityDataSchema,
+    requiresLoadedSession: false,
     callback: async () => {
       const summary = getProtocolParitySummary();
       const entries = listProtocolParityMatrix();

@@ -39,10 +39,36 @@ touching `src/`.
         └─────────────────────┘
 ```
 
-The flow is one-way: `protocol` → `agda` → `session` → `tools`.
-Anything flowing the other direction (a tool needing a protocol
-helper) imports the inner module directly; the layers don't expose
-each other through their barrels.
+The diagram describes **data flow**, not module imports. An Agda
+response arrives at `src/agda/`, is normalized by `src/protocol/`,
+flows up through `src/session/` for stateful interpretation, and
+exits via `src/tools/` to the MCP transport. The reverse direction
+(a tool reaching down for a wire-format helper) is handled by
+importing the inner module directly; layers don't expose each other
+through their barrels.
+
+A handful of cross-cutting modules deliberately sit outside the
+strict data-flow direction and may be imported by any layer:
+
+- `src/tools/manifest.ts` — runtime tool registry consulted by
+  `src/session/tool-recommendation.ts` (so recommendations can name
+  real tools) and `src/session/tool-presentation.ts` (so
+  `agda_session_status` can list them).
+- `src/tools/tool-envelope.ts` / `src/tools/tool-helpers.ts` —
+  output-envelope types and registration helpers used by every
+  tool registration file, including the `register-agda-*.ts`
+  files in `src/session/` that wrap session-domain operations as
+  MCP tools.
+- `src/agda/types.ts` — semantic result types (`LoadResult`,
+  `TypeCheckResult`, `CompletenessStatus`, etc.) referenced by
+  callers up and down the stack.
+
+These are infrastructure, not data flow. The architectural
+constraint is: domain logic stays in the layer it belongs to (load
+orchestration in `src/session/`, wire decoding in `src/protocol/`,
+etc.). A tool callback that does its own constraint-decoding work
+is the violation, not a session-tier file that imports an envelope
+type to construct a structured response.
 
 ## Module-size convention
 

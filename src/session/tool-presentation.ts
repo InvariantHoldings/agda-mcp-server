@@ -141,22 +141,24 @@ export function renderLoadLikeText(args: {
   return output;
 }
 
+/**
+ * Derived from the manifest, not a hand-curated list. A tool appears
+ * in the unloaded set iff its registration declared
+ * `requiresLoadedSession: false` — the load-establishing trio plus
+ * `agda_session_status`. When `loaded === true`, every registered
+ * tool is included. The previous implementation hardcoded four tool
+ * names directly, which (a) silently went stale if the canonical
+ * load tools were renamed, and (b) made it impossible for a future
+ * tool to opt into the unloaded set without editing this function.
+ * The flag-based filter moves the source of truth back to the
+ * registration sites.
+ */
 export function availableSessionTools(
   loaded: boolean,
 ): Array<{ name: string; category: ToolCategory; description: string }> {
   const manifest = listToolManifest();
   return manifest
-    .filter((entry) => {
-      if (entry.name === "agda_session_status") {
-        return true;
-      }
-
-      if (entry.name === "agda_load" || entry.name === "agda_load_no_metas" || entry.name === "agda_typecheck") {
-        return true;
-      }
-
-      return loaded;
-    })
+    .filter((entry) => loaded || !entry.requiresLoadedSession)
     .map((entry) => ({
       name: entry.name,
       category: entry.category,

@@ -50,9 +50,10 @@ export function missingPathToolError(kind: "file" | "directory", path: string): 
         "not-found",
         kind === "file"
           ? "Confirm the path is relative to PROJECT_ROOT (or absolute and within it). " +
-            "Use `agda_file_list` or `agda_search` to discover available files."
+            "Use `agda_list_modules` to enumerate modules in a tier or " +
+            "`agda_search_definitions` to locate a file by symbol name."
           : "Confirm the directory exists relative to PROJECT_ROOT. " +
-            "Use `agda_file_list` to see what's available.",
+            "Use `agda_list_modules` to enumerate available tiers and modules.",
       ),
       infoDiagnostic(
         "Check the file path relative to the project root.",

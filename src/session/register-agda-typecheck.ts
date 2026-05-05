@@ -54,6 +54,7 @@ export function registerAgdaTypecheck(
     description: "Type-check an Agda file and return a compact classification-only response. This routes through the same singleton session as agda_load (since issue #39) — it updates the session's loaded file, goal IDs, and mtime, so subsequent tool calls operate on the typechecked file. The only difference from agda_load is the response shape: agda_typecheck omits the full goals-and-warnings text block for a smaller payload. If you want the interactive goals listing, call agda_load instead.",
     category: "session",
     protocolCommands: ["Cmd_load", "Cmd_metas"],
+    requiresLoadedSession: false,
     inputSchema: {
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
       profileOptions: z.array(z.string()).optional().describe(

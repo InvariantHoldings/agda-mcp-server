@@ -44,6 +44,7 @@ export function registerAgdaLoadNoMetas(
     description: "Load and type-check an Agda file, failing if unsolved metavariables remain after loading. Note: Cmd_load_no_metas does not accept command-line options, so Agda profiling options cannot be passed directly. Use agda_load with profileOptions for profiled type-checking.",
     category: "session",
     protocolCommands: ["Cmd_load_no_metas"],
+    requiresLoadedSession: false,
     inputSchema: {
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
     },

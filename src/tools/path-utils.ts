@@ -80,7 +80,7 @@ export function resolveProjectFile(repoRoot: string, file: string): ResolveProje
         classification: "not-found",
         message: `File not found: ${file}`,
         nextAction:
-          "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_file_list` or `agda_search` to discover available files.",
+          "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_list_modules` or `agda_search_definitions` to discover available files.",
       },
     };
   }

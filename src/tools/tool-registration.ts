@@ -139,6 +139,12 @@ export function registerStructuredTool(args: {
   inputSchema?: unknown;
   outputDataSchema: z.ZodTypeAny;
   annotations?: ToolAnnotations;
+  /**
+   * Defaults to `true`. See `ToolManifestEntry.requiresLoadedSession`
+   * for semantics. Pass `false` for tools that must run in a
+   * no-file state (load-establishers, session introspection).
+   */
+  requiresLoadedSession?: boolean;
   callback: (cbArgs: any) => unknown;
 }): void {
   registerManifestEntry({
@@ -149,6 +155,7 @@ export function registerStructuredTool(args: {
     inputSchema: args.inputSchema,
     outputDataSchema: args.outputDataSchema,
     annotations: args.annotations,
+    requiresLoadedSession: args.requiresLoadedSession,
   });
 
   // Wrap the callback to automatically measure wall-clock time AND
@@ -216,6 +223,10 @@ export function registerTextTool(args: {
    */
   session?: AgdaSession;
   /**
+   * Defaults to `true`. See `ToolManifestEntry.requiresLoadedSession`.
+   */
+  requiresLoadedSession?: boolean;
+  /**
    * Either return a text body (legacy path) or a structured payload
    * with the same text rendering plus extra fields. Tools that have
    * machine-decoded data — solve solutions, display state, postulate
@@ -238,6 +249,7 @@ export function registerTextTool(args: {
     inputSchema: args.inputSchema,
     annotations: args.annotations,
     outputDataSchema,
+    requiresLoadedSession: args.requiresLoadedSession,
     callback: async (cbArgs: any) => {
       const startMs = performance.now();
       if (args.session) {

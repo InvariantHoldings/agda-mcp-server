@@ -143,14 +143,24 @@ Use this when you want errors and warnings without creating a persistent session
 
 ## Semantic outputs
 
-Every tool now returns:
+Every tool returns:
 
-- Human-readable text for existing MCP clients.
-- Structured content with stable fields such as `tool`, `ok`, `classification`, `summary`, `data`, and `diagnostics`.
+- Human-readable text for existing MCP clients (in `content[].text`).
+- Structured content with stable envelope fields (`tool`, `ok`, `classification`, `summary`, `data`, `diagnostics`, `provenance`, `elapsedMs`).
 
-Core session tools such as `agda_load`, `agda_load_no_metas`, and `agda_typecheck`
-also expose completeness fields including `goalCount`, `invisibleGoalCount`,
-`hasHoles`, and `isComplete`.
+Every tool's `data` carries at least the rendered text plus a tool-specific
+structured payload — e.g. `solutions` / `rawSolutions` / `written` for
+`agda_solve_*`, parsed `clauses` for `agda_case_split`, `goalType` and
+`context` arrays for goal queries, `success` and `output` for backends,
+display-state snapshots for the toggle/show family, and so on. Agents
+should prefer the structured fields over scraping the markdown body.
+
+Core session tools (`agda_load`, `agda_load_no_metas`, `agda_typecheck`)
+expose completeness fields — `goalCount`, `invisibleGoalCount`,
+`hasHoles`, `isComplete`, and a `classification` of `ok-complete` /
+`ok-with-holes` / `type-error` — derived from a merged source-hole +
+protocol-counts signal so explicit hole markers (`{!!}` / `?`) inside
+`abstract` blocks cannot trick the load into a false `ok-complete`.
 
 ## MCP client configuration
 

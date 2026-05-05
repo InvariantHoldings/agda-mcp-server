@@ -65,6 +65,8 @@ export function registerMigrationTools(server: McpServer, _repoRoot: string): vo
     name: "agda_stdlib_migration_map",
     description: "Return the curated stdlib rename map keyed by source and target versions. Use this before applying mechanical rename repairs.",
     category: "reporting",
+    // Pure data lookup against bundled JSON — no Agda interaction.
+    requiresLoadedSession: false,
     inputSchema: {
       fromVersion: z.string().optional().describe("Optional source stdlib version filter"),
       toVersion: z.string().optional().describe("Optional destination stdlib version filter"),
@@ -105,6 +107,8 @@ export function registerMigrationTools(server: McpServer, _repoRoot: string): vo
     name: "agda_builtin_migration_map",
     description: "Return curated builtin rename/removal records across Agda versions.",
     category: "reporting",
+    // Pure data lookup against bundled JSON.
+    requiresLoadedSession: false,
     inputSchema: {
       name: z.string().optional().describe("Optional builtin name filter"),
     },
@@ -149,6 +153,8 @@ export function registerMigrationTools(server: McpServer, _repoRoot: string): vo
     name: "agda_verify_builtin",
     description: "Given a builtin name, report whether it is resolvable from the curated builtin map and provide migration hints.",
     category: "analysis",
+    // Pure JSON lookup — no Agda subprocess. Useful pre-load.
+    requiresLoadedSession: false,
     inputSchema: {
       name: z.string().describe("Builtin name, e.g. Nat, Sigma, IO"),
       options: z.object({

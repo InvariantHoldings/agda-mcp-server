@@ -7,6 +7,30 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-05-04
+
+### Notes for upgraders
+
+- **Structured-output rollout is non-breaking but visible** — every
+  text-only tool that previously emitted `data: { text }` now ships a
+  richer payload (e.g. `data: { text, solutions, rawSolutions,
+  written, … }`). The `text` field is preserved verbatim, so any
+  client that reads `data.text` or the markdown body keeps working
+  unchanged. Clients that serialise `data` whole, assert on field
+  counts, or pin `outputSchema` snapshots will see the new fields.
+  See the "Structured output rollout" entry below for the per-tool
+  schemas.
+- **Declared supported-Agda range was locally verified, not yet CI-gated**
+  — the new `agdaMcpServer` block (`minAgdaVersion: 2.6.4.3`,
+  `maxTestedAgdaVersion: 2.9.0`) was confirmed against locally
+  installed Agda binaries during release prep. Issue #41 tracks the
+  follow-up CI matrix that exercises the full declared range on every
+  push; until that lands, treat the bounds as "tested at release
+  time" rather than "tested on every commit". Out-of-range Agda
+  versions still run — the server emits a stderr warning and surfaces
+  the classification (`below-min` / `above-max`) through
+  `agda_protocol_parity` rather than refusing to start.
+
 ### Added
 
 - **Typed IOTCM command builder — issue #10 closed.** The IOTCM
@@ -81,7 +105,7 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - **`nextAction` recovery hints on every error envelope** —
   `ToolDiagnostic.nextAction` was always part of the schema but was
   populated nowhere. Every load-shared error path
-  (`file-not-found` / `process-error` / `invalid-path` /
+  (`not-found` / `process-error` / `invalid-path` /
   `invalid-profile-options` / `invalid-command-line-options`) and
   every `tool-errors.ts` path (`PathSandboxError`, generic
   `ToolInvocationError`, `missingPathToolError`) now ships a concrete

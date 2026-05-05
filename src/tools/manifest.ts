@@ -23,6 +23,25 @@ export interface ToolManifestEntry {
   inputFields: string[];
   outputFields: string[];
   annotations?: ToolAnnotations;
+  /**
+   * `true` when the tool needs a loaded Agda file (or a goal id
+   * captured from a prior load) to do anything useful. `false` for
+   * tools that are meaningful in any session state — load
+   * establishers, session/process introspection, reporting and
+   * bundling tools, filesystem-only navigation, curated data
+   * lookups, and recovery primitives like `agda_apply_edit` that
+   * exist precisely to repair a broken-or-missing load.
+   *
+   * Default `true`: proof actions, goal queries, and anything that
+   * reads current proof state cannot answer correctly without a
+   * loaded module, so we filter them out of the unloaded UI by
+   * default. The single source of truth for "what can an agent
+   * call from a fresh process?" — see `availableSessionTools` in
+   * src/session/tool-presentation.ts. Categorisation per tool
+   * lives at the registration site, not as an enumerated list
+   * here, so this comment stays valid as new tools are added.
+   */
+  requiresLoadedSession: boolean;
 }
 
 /** Extended manifest entry with schema details for agent discovery. */
@@ -71,7 +90,32 @@ export function registerManifestEntry(args: {
   inputSchema?: unknown;
   outputDataSchema: z.ZodTypeAny;
   annotations?: ToolAnnotations;
+  /**
+   * Defaults to `true` (the tool needs a loaded file). Pass
+   * `false` for any tool that is meaningful when no file has been
+   * loaded — including but not limited to load establishers,
+   * introspection / reporting tools, filesystem-only helpers, and
+   * recovery primitives. The single source of truth for which
+   * tools surface in `agda_session_status`'s unloaded "Available
+   * tools" list; see `availableSessionTools` for the consumer.
+   */
+  requiresLoadedSession?: boolean;
 }): void {
+  // A duplicate name is almost always a bug — two registration
+  // sites collided on the same tool, which would silently overwrite
+  // the first registration's schema, description, and category. The
+  // surviving manifest entry would be a Frankenstein hybrid where
+  // the SDK's registered tool name still routes to the first
+  // callback (because `server.registerTool` dedupes differently)
+  // but the manifest reports the second tool's metadata. Refuse the
+  // second registration so the conflict surfaces at startup rather
+  // than as confused-deputy behavior at tool-call time.
+  if (toolManifest.has(args.name)) {
+    throw new Error(
+      `Duplicate tool registration for ${args.name}: the manifest already contains an entry. ` +
+        `Two registration sites collided — pick a single owner or rename one of the callers.`,
+    );
+  }
   toolManifest.set(args.name, {
     name: args.name,
     description: args.description,
@@ -80,6 +124,7 @@ export function registerManifestEntry(args: {
     inputFields: schemaKeys(args.inputSchema),
     outputFields: dataSchemaKeys(args.outputDataSchema),
     annotations: args.annotations,
+    requiresLoadedSession: args.requiresLoadedSession ?? true,
   });
   toolSchemas.set(args.name, {
     inputSchema: args.inputSchema,

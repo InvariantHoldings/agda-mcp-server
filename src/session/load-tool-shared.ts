@@ -3,11 +3,14 @@
 // Shared helpers for load-family session tools (agda_load,
 // agda_load_no_metas, agda_typecheck). These tools all have the same
 // pre-flight error paths: a sandbox-escaping path becomes
-// `invalid-path`, a non-existent file becomes `file-not-found`, and a
-// subprocess failure becomes `process-error`. Centralising the error-
-// envelope shapes here keeps the three tool registrations in sync —
-// if a new field is added to LoadResult the error data shape only has
-// to change in one place.
+// `invalid-path`, a non-existent file becomes `not-found`, and a
+// subprocess failure becomes `process-error`. The classification
+// strings here match the rest of the server (cache-tools.ts,
+// path-utils.ts, tool-errors.ts, list-modules.ts) so an agent can
+// branch on classification without remembering load-specific
+// synonyms. Centralising the error-envelope shapes here keeps the
+// three tool registrations in sync — if a new field is added to
+// LoadResult the error data shape only has to change in one place.
 
 import { errorDiagnostic, errorEnvelope, makeToolResult } from "../tools/tool-helpers.js";
 import { PathSandboxError } from "../repo-root.js";
@@ -46,16 +49,16 @@ export function missingFileResult(tool: LoadToolName, filePath: string) {
     errorEnvelope({
       tool,
       summary: message,
-      classification: "file-not-found",
+      classification: "not-found",
       data: {
-        ...baseErrorData(filePath, message, "file-not-found"),
+        ...baseErrorData(filePath, message, "not-found"),
         ...reloadFields(tool),
       },
       diagnostics: [errorDiagnostic(
         message,
-        "file-not-found",
+        "not-found",
         "Confirm the path is relative to AGDA_MCP_ROOT (or absolute and within it). " +
-        "Use `agda_file_list` to see available modules, or `agda_search` to locate one.",
+        "Use `agda_list_modules` to enumerate modules in a tier, or `agda_search_definitions` to locate one by symbol name.",
       )],
     }),
   );

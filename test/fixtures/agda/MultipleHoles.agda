@@ -9,4 +9,5 @@ hole1 : Nat
 hole1 = {!!}
 
 hole2 : Nat → Nat
-hole2 n = {!!}
+hole2 zero = ?
+hole2 (suc n) = ?

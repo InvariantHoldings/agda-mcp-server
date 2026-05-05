@@ -57,6 +57,11 @@ export function register(
     name: "agda_cache_info",
     description: "Report the state of every `.agdai` interface artifact for a source file. Lists each artifact's path, the Agda version that produced it (for separated builds under `_build/<version>/agda/`), and whether it's older than the on-disk source. Pairs with `agda_load`'s `forceRecompile: true` escape hatch — call this first to decide whether to bust the cache.",
     category: "navigation",
+    // Pure filesystem inspection of `.agdai` artifacts — no Agda
+    // session interaction needed. Useful before `agda_load` to
+    // decide whether to bust the cache, so it must be discoverable
+    // in the unloaded set.
+    requiresLoadedSession: false,
     inputSchema: {
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
     },
@@ -93,7 +98,7 @@ export function register(
             diagnostics: [errorDiagnostic(
               `File not found: ${requestedFilePath}`,
               "not-found",
-              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_file_list` or `agda_search` to discover available files.",
+              "Confirm the path is relative to PROJECT_ROOT and the file exists. Use `agda_list_modules` or `agda_search_definitions` to discover available files.",
             )],
           }),
         );
@@ -119,7 +124,7 @@ export function register(
             diagnostics: [errorDiagnostic(
               `Could not stat ${requestedFilePath}: ${err instanceof Error ? err.message : String(err)}`,
               "not-found",
-              "The file disappeared between existsSync and statSync (deletion race) or is unreadable (permissions). Retry, or verify the path with `agda_file_list`.",
+              "The file disappeared between existsSync and statSync (deletion race) or is unreadable (permissions). Retry, or verify the path with `agda_list_modules`.",
             )],
           }),
         );
