@@ -86,6 +86,54 @@ describe("findPostulates — inline-comment handling", () => {
     expect(first.declarations).toEqual(["a", "b", "c"]);
   });
 
+  test("ignores `postulate` keyword inside a multi-line block comment", () => {
+    // Agda's `{- … -}` block comments can span lines. A
+    // commented-out postulate must not be reported — otherwise a
+    // Kernel/ violation would be raised on a developer's
+    // commented-out scratch code.
+    const source = [
+      "module M where",
+      "{-",
+      "postulate fake : Set",
+      "postulate also-fake : Set",
+      "-}",
+      "x : Set",
+      "x = Set",
+    ].join("\n");
+
+    expect(findPostulates(source)).toEqual([]);
+  });
+
+  test("handles nested block comments without leaking the inner content", () => {
+    // Agda block comments nest. `{- {- -} -}` is a single comment;
+    // a postulate inside the inner pair must not be reported until
+    // both layers close.
+    const source = [
+      "module M where",
+      "{- outer {- inner -} postulate hidden : Set -}",
+      "y : Set",
+      "y = Set",
+    ].join("\n");
+
+    expect(findPostulates(source)).toEqual([]);
+  });
+
+  test("a real postulate after a block comment is still detected with the right line number", () => {
+    const source = [
+      "module M where",         // 1
+      "{-",                     // 2
+      "postulate fake : Set",   // 3 — inside comment
+      "-}",                     // 4
+      "",                       // 5
+      "postulate real : Set",   // 6 — actual postulate
+    ].join("\n");
+
+    const blocks = findPostulates(source);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].line).toBe(6);
+    expect(blocks[0].declarations).toEqual(["real"]);
+  });
+
   test("ignores comment-only lines within a block body", () => {
     const source = [
       "module M where",

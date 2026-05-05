@@ -26,19 +26,64 @@ interface PostulateBlock {
 }
 
 /**
- * Strip `-- …` line comments and `{- … -}` block comments from the
- * trailing portion of a line so the postulate scanner does not
- * mistake comment text for declarations. Conservative: only strips
- * comment runs that begin at or after the first non-keyword position
- * — anything before is left untouched. Single-line approximation for
- * `{- -}` (Agda block comments can span lines, but the postulate
- * header line itself is what we tokenize).
+ * Strip `-- …` line comments from a single line. Block comments
+ * (`{- … -}`) are handled at the file level by
+ * `stripAgdaBlockComments` before per-line scanning so a multi-line
+ * block comment cannot leak a `postulate` token into the scanner.
  */
-function stripAgdaComments(line: string): string {
-  const blockStripped = line.replace(/\{-[\s\S]*?-\}/gu, " ");
-  const lineCommentIndex = blockStripped.indexOf("--");
-  if (lineCommentIndex === -1) return blockStripped;
-  return blockStripped.slice(0, lineCommentIndex);
+function stripLineComment(line: string): string {
+  const lineCommentIndex = line.indexOf("--");
+  if (lineCommentIndex === -1) return line;
+  return line.slice(0, lineCommentIndex);
+}
+
+/**
+ * Replace every `{- … -}` block comment in `source` with whitespace
+ * of the same shape (newlines preserved, content blanked). Necessary
+ * because Agda's block comments can span lines:
+ *
+ *     {-
+ *     postulate fake : Set
+ *     -}
+ *
+ * — without this pass, the per-line scanner below would see the
+ * `postulate` keyword and report a false positive. Preserving the
+ * line structure means reported line numbers continue to match the
+ * original source.
+ *
+ * Agda block comments nest in principle (the lexer's `{-`/`-}`
+ * matcher is a depth counter), so this implementation walks the
+ * source character-by-character with a depth counter rather than
+ * using a non-greedy regex (which would mis-handle `{- {- -} -}`).
+ */
+function stripAgdaBlockComments(source: string): string {
+  const out: string[] = [];
+  let i = 0;
+  let depth = 0;
+  while (i < source.length) {
+    if (source[i] === "{" && source[i + 1] === "-") {
+      depth += 1;
+      out.push("  ");
+      i += 2;
+      continue;
+    }
+    if (depth > 0 && source[i] === "-" && source[i + 1] === "}") {
+      depth -= 1;
+      out.push("  ");
+      i += 2;
+      continue;
+    }
+    if (depth > 0) {
+      // Replace comment content with whitespace; preserve newlines so
+      // postulate-block line numbers still match the original.
+      out.push(source[i] === "\n" ? "\n" : " ");
+      i += 1;
+      continue;
+    }
+    out.push(source[i]);
+    i += 1;
+  }
+  return out.join("");
 }
 
 /**
@@ -47,7 +92,10 @@ function stripAgdaComments(line: string): string {
  * directly without round-tripping through the filesystem.
  */
 function findPostulates(fileContent: string): PostulateBlock[] {
-  const lines = fileContent.split("\n");
+  // Strip block comments file-wide first so a multi-line `{- … -}`
+  // around a `postulate` keyword cannot register as a real declaration.
+  const sourceForScan = stripAgdaBlockComments(fileContent);
+  const lines = sourceForScan.split("\n");
   const blocks: PostulateBlock[] = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -58,11 +106,11 @@ function findPostulates(fileContent: string): PostulateBlock[] {
 
     // Inline form: `postulate ax : Set` or `postulate p q : Set` —
     // anything non-comment to the right of the keyword is the
-    // declaration. Strip `-- …` line comments and `{- … -}` block
-    // comments first so a header like `postulate -- TODO` is treated
-    // as a block-style header (no declarations on this line) rather
-    // than parsed as `postulate <TODO>`.
-    const stripped = stripAgdaComments(trimmed).trimEnd();
+    // declaration. Strip `-- …` line comments first so a header
+    // like `postulate -- TODO` is treated as a block-style header
+    // (no declarations on this line) rather than parsed as
+    // `postulate <TODO>`.
+    const stripped = stripLineComment(trimmed).trimEnd();
     const inlineMatch = /^postulate\s+(\S.*)$/.exec(stripped);
     if (inlineMatch) {
       const lhs = inlineMatch[1].split(":")[0].trim();
