@@ -105,7 +105,7 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - **`nextAction` recovery hints on every error envelope** —
   `ToolDiagnostic.nextAction` was always part of the schema but was
   populated nowhere. Every load-shared error path
-  (`file-not-found` / `process-error` / `invalid-path` /
+  (`not-found` / `process-error` / `invalid-path` /
   `invalid-profile-options` / `invalid-command-line-options`) and
   every `tool-errors.ts` path (`PathSandboxError`, generic
   `ToolInvocationError`, `missingPathToolError`) now ships a concrete

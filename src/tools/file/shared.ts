@@ -50,15 +50,28 @@ export function relativeToRequestedRoot(
  *   the time `realpath` ran (TOCTOU race) or is a broken symlink whose
  *   target no longer exists. Both cases are normal for a long walk
  *   over a live filesystem and must not crash the entire listing.
- * - `EACCES` / `EPERM` — permission denied. Same tolerance applies;
- *   the caller surfaces the skipped entry through its own
- *   "unreadable" reporting (see `agda_list_modules` /
- *   `agda_search_definitions` output).
+ * - `EACCES` / `EPERM` / `ELOOP` — permission denied or symlink-loop.
+ *   Same tolerance applies; one bad entry must not abort the walk.
+ *
+ * **Caller responsibility for surfacing skipped entries.** Returning
+ * `null` here only signals "skip this entry"; whether the skip is
+ * reported to the agent depends on the caller. As of this writing:
+ *
+ * - `agda_search_definitions` records readdir-level failures in
+ *   `unreadableSubtrees` and readFile-level failures in
+ *   `unreadableFiles`, but a per-entry `null` from this helper is
+ *   silently dropped (the file simply doesn't appear in matches).
+ * - `agda_list_modules` records readdir-level failures in
+ *   `unreadableSubtrees` and silently drops per-entry `null`s.
+ *
+ * If you add a new caller and want every skip surfaced, track the
+ * `null` return at the call site and append the path to whatever
+ * "unreadable" array the tool exposes. Don't move that logic in
+ * here — different tools care about different granularities.
  *
  * Any other error (programmer bug, filesystem corruption) still
  * propagates — silent suppression of unknown failures would mask
- * real problems. The intent matches the rest of the file-tool walks:
- * one bad entry does not abort the whole tree.
+ * real problems.
  */
 export function resolveExistingChildWithinRoot(
   repoRoot: string,

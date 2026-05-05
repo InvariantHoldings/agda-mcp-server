@@ -24,15 +24,22 @@ export interface ToolManifestEntry {
   outputFields: string[];
   annotations?: ToolAnnotations;
   /**
-   * `true` when the tool needs an Agda session with a loaded file to
-   * be useful. `false` when it works without a load — `agda_load`
-   * itself, the load-establishing siblings (`agda_load_no_metas`,
-   * `agda_typecheck`), and `agda_session_status` (an introspection
-   * tool that must work in any state). Default `true`: most tools
-   * (proof actions, goal queries, expression evaluation in goal
-   * context) only make sense after a load. The single source of
-   * truth for "what can an agent call from a fresh process?" — see
-   * `availableSessionTools` in src/session/tool-presentation.ts.
+   * `true` when the tool needs a loaded Agda file (or a goal id
+   * captured from a prior load) to do anything useful. `false` for
+   * tools that are meaningful in any session state — load
+   * establishers, session/process introspection, reporting and
+   * bundling tools, filesystem-only navigation, curated data
+   * lookups, and recovery primitives like `agda_apply_edit` that
+   * exist precisely to repair a broken-or-missing load.
+   *
+   * Default `true`: proof actions, goal queries, and anything that
+   * reads current proof state cannot answer correctly without a
+   * loaded module, so we filter them out of the unloaded UI by
+   * default. The single source of truth for "what can an agent
+   * call from a fresh process?" — see `availableSessionTools` in
+   * src/session/tool-presentation.ts. Categorisation per tool
+   * lives at the registration site, not as an enumerated list
+   * here, so this comment stays valid as new tools are added.
    */
   requiresLoadedSession: boolean;
 }
@@ -84,12 +91,13 @@ export function registerManifestEntry(args: {
   outputDataSchema: z.ZodTypeAny;
   annotations?: ToolAnnotations;
   /**
-   * Defaults to `true` (the tool needs a loaded file). Tools that
-   * are meaningful in a fresh-server / no-file state must opt in
-   * with `requiresLoadedSession: false` — the load-establishing
-   * trio (`agda_load`, `agda_load_no_metas`, `agda_typecheck`) and
-   * `agda_session_status`. Anything else flows through the default
-   * and is filtered out of `availableSessionTools(false)`.
+   * Defaults to `true` (the tool needs a loaded file). Pass
+   * `false` for any tool that is meaningful when no file has been
+   * loaded — including but not limited to load establishers,
+   * introspection / reporting tools, filesystem-only helpers, and
+   * recovery primitives. The single source of truth for which
+   * tools surface in `agda_session_status`'s unloaded "Available
+   * tools" list; see `availableSessionTools` for the consumer.
    */
   requiresLoadedSession?: boolean;
 }): void {

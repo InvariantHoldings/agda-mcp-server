@@ -3,11 +3,14 @@
 // Shared helpers for load-family session tools (agda_load,
 // agda_load_no_metas, agda_typecheck). These tools all have the same
 // pre-flight error paths: a sandbox-escaping path becomes
-// `invalid-path`, a non-existent file becomes `file-not-found`, and a
-// subprocess failure becomes `process-error`. Centralising the error-
-// envelope shapes here keeps the three tool registrations in sync —
-// if a new field is added to LoadResult the error data shape only has
-// to change in one place.
+// `invalid-path`, a non-existent file becomes `not-found`, and a
+// subprocess failure becomes `process-error`. The classification
+// strings here match the rest of the server (cache-tools.ts,
+// path-utils.ts, tool-errors.ts, list-modules.ts) so an agent can
+// branch on classification without remembering load-specific
+// synonyms. Centralising the error-envelope shapes here keeps the
+// three tool registrations in sync — if a new field is added to
+// LoadResult the error data shape only has to change in one place.
 
 import { errorDiagnostic, errorEnvelope, makeToolResult } from "../tools/tool-helpers.js";
 import { PathSandboxError } from "../repo-root.js";
