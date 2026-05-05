@@ -152,6 +152,15 @@ export class AgdaSession {
    *  from the spawn helper's `close` callback. */
   private handleProcessClose(): void {
     this.proc = null;
+    // Release the per-session AGDA_DIR temp directory eagerly. If
+    // Agda crashed (process exit without an explicit destroy() from
+    // the host), the registration would otherwise leak its
+    // `mkdtempSync` directory until the OS cleans `os.tmpdir()` —
+    // which on long-running servers is "never". A re-spawn via
+    // `ensureProcess` will create a fresh registration for the new
+    // process; the old one is no longer reachable.
+    this.libraryRegistration?.cleanup();
+    this.libraryRegistration = null;
     this.currentFile = null;
     this.goalIds = [];
     this.lastLoadedMtime = null;

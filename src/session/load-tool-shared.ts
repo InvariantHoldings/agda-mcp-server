@@ -46,14 +46,14 @@ export function missingFileResult(tool: LoadToolName, filePath: string) {
     errorEnvelope({
       tool,
       summary: message,
-      classification: "file-not-found",
+      classification: "not-found",
       data: {
-        ...baseErrorData(filePath, message, "file-not-found"),
+        ...baseErrorData(filePath, message, "not-found"),
         ...reloadFields(tool),
       },
       diagnostics: [errorDiagnostic(
         message,
-        "file-not-found",
+        "not-found",
         "Confirm the path is relative to AGDA_MCP_ROOT (or absolute and within it). " +
         "Use `agda_list_modules` to enumerate modules in a tier, or `agda_search_definitions` to locate one by symbol name.",
       )],
