@@ -77,7 +77,11 @@ function procAlreadyExited(proc: ChildProcess): boolean {
  * Spawn a fresh `agda --interaction-json` subprocess for `repoRoot`
  * and wire its stdout/stderr to `transport`. Calls `onClose` and
  * `onError` so the session can reset its own state without exposing
- * internal fields to this module.
+ * internal fields to this module. `onClose` receives the proc
+ * handle so the caller does not have to close over its own
+ * `spawnAgdaProcess` return value (which can trip strict TypeScript
+ * use-before-initialization analysis when the closure is declared
+ * in the same statement as the spawn call).
  *
  * Returns the spawned process together with a `detachListeners`
  * function. The caller MUST call `detachListeners` before
@@ -90,7 +94,7 @@ export function spawnAgdaProcess(args: {
   repoRoot: string;
   registration: LibraryRegistration;
   transport: AgdaTransport;
-  onClose: () => void;
+  onClose: (proc: ChildProcess) => void;
   onError: (err: Error) => void;
 }): SpawnedAgdaProcess {
   const agdaBin = findAgdaBinary(args.repoRoot);
@@ -108,7 +112,7 @@ export function spawnAgdaProcess(args: {
   };
   const onClose = (): void => {
     args.transport.handleProcessClose();
-    args.onClose();
+    args.onClose(proc);
   };
   const onError = (err: Error): void => {
     args.transport.handleProcessError(err);

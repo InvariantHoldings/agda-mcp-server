@@ -39,18 +39,15 @@ import type {
 import { type AgdaVersion } from "./agda-version.js";
 import { findAgdaBinary } from "./binary-discovery.js";
 import {
-  assertProcSurvivedPreflight,
-  assertSessionAlive,
   destroySessionProcess,
   ensureProcessForSession,
   isProcLive,
-  resetFileBoundStateIfProcDied,
 } from "./session-process-lifecycle.js";
 import {
-  piggybackVersionFromResponses,
-  preflightVersionDetection,
-  VERSION_DETECTION_MAX_ATTEMPTS,
-} from "./agda-version-detection.js";
+  dispatchSessionCommand,
+  dispatchSessionControlCommand,
+} from "./session-command-dispatch.js";
+import { VERSION_DETECTION_MAX_ATTEMPTS } from "./agda-version-detection.js";
 import { runLoad, runLoadNoMetas } from "./session-load-impl.js";
 import {
   effectiveProjectFlags,
@@ -191,49 +188,7 @@ export class AgdaSession {
     command: string,
     timeoutMs = configuredCommandTimeoutMs(),
   ): Promise<AgdaResponse[]> {
-    const task = this.commandQueue.then(async () => {
-      assertSessionAlive(this);
-
-      const proc = this.ensureProcess();
-      const fileAtStart = this.currentFile;
-
-      let responses: AgdaResponse[];
-      try {
-        // Preflight + survival assertions live inside the try/finally
-        // so that `resetFileBoundStateIfProcDied` runs even when an
-        // assertion throws — otherwise a preflight timeout that
-        // killed the proc would leave `currentFile`/`goalIds`/load
-        // metadata referring to a dead Agda until the eventual
-        // `close` event fires, and status/snapshot APIs would report
-        // a loaded file against no process.
-        await preflightVersionDetection({
-          state: this,
-          transport: this.transport,
-          proc,
-          buildIotcm: (cmd) => this.iotcm(cmd),
-          userCommand: command,
-        });
-
-        assertSessionAlive(this);
-        assertProcSurvivedPreflight(this, proc, fileAtStart);
-
-        responses = await this.transport.sendCommand(proc, command, timeoutMs);
-      } finally {
-        resetFileBoundStateIfProcDied(this, proc);
-      }
-
-      piggybackVersionFromResponses({
-        state: this,
-        responses,
-        userCommand: command,
-      });
-
-      return responses;
-    });
-    // Chain onto the queue — swallow rejections so a failed command
-    // doesn't block subsequent commands from executing.
-    this.commandQueue = task.then(() => { }, () => { });
-    return task;
+    return dispatchSessionCommand(this, command, timeoutMs);
   }
 
   /**
@@ -367,36 +322,7 @@ export class AgdaSession {
   }
 
   private sendControlCommand(agdaCmd: string): Promise<AgdaResponse[]> {
-    // Two-step interruption pattern:
-    //
-    //   1. Synchronously reject the in-flight transport sendCommand
-    //      (if any) so the IOTCM that was already written to Agda's
-    //      stdin stops waiting on its per-command timeout. This is
-    //      the protocol-level intent of `Cmd_abort`/`Cmd_exit`.
-    //
-    //   2. Chain the fire-and-forget write itself through the
-    //      session command queue. The flush window inside
-    //      `sendFireAndForgetCommand` mutates shared transport state
-    //      (`collecting`, idle timer); routing it through the queue
-    //      guarantees no subsequent `sendCommand` starts until the
-    //      flush has resolved, so a queued regular command cannot
-    //      have its `collecting=true` flipped back to false mid-flight
-    //      by a late flush timer from the control command.
-    this.transport.rejectInFlightCommand(
-      "Interrupted by Agda control command",
-      { controlCommand: true },
-    );
-
-    const task = this.commandQueue.then(async () => {
-      assertSessionAlive(this);
-      const proc = this.ensureProcess();
-      return this.transport.sendFireAndForgetCommand(
-        proc,
-        iotcmEnvelope(this.currentFile ?? "", agdaCmd),
-      );
-    });
-    this.commandQueue = task.then(() => { }, () => { });
-    return task;
+    return dispatchSessionControlCommand(this, agdaCmd);
   }
 
   // ── Accessors ─────────────────────────────────────────────────────

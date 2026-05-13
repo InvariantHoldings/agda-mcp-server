@@ -115,6 +115,24 @@ export interface LoadResult {
    * `"ok-with-holes"` — success but holes/metas remain.
    * `"type-error"` — Agda reported errors (or, for `Cmd_load_no_metas`,
    * the strict contract was violated by remaining holes/metas).
+   * `"process-died-during-reconciliation"` — the `Cmd_load` succeeded
+   * but the best-effort post-load `metas()` reconciliation timed out
+   * and killed the Agda subprocess. The `LoadResult` carries
+   * `success: false` and the callers' next `agda_load` will respawn.
+   * Surfaces only from `runLoad`, not `runLoadNoMetas`.
+   * `"invalid-command-line-options"` — `commandLineOptions` passed in
+   * conflict with the MCP server's own flags (e.g. `--interaction-json`).
+   * `"invalid-profile-options"` — `profileOptions` contained an
+   * unrecognised profile name.
+   * `"not-found"` / `"invalid-path"` — the requested file is missing or
+   * is outside the project root.
+   * `"process-error"` — the Agda subprocess errored before responses
+   * could be parsed.
+   *
+   * Embedders MUST treat `classification` as an open string set:
+   * future releases may add new failure tags. Match the cases you
+   * care about explicitly and fall through to a generic-failure
+   * branch for the rest.
    */
   classification: string;
   /** Profiling output from Agda when --profile options are active. */

@@ -124,16 +124,20 @@ export function ensureProcessForSession(session: AgdaSession): ChildProcess {
     repoRoot: session.repoRoot,
   });
 
-  const spawned = adoptSpawnedProcessForSession(
-    session,
-    spawnAgdaProcess({
-      repoRoot: session.repoRoot,
-      registration: session.libraryRegistration,
-      transport: session.transport,
-      onClose: () => handleSessionProcessClose(session, spawned.proc),
-      onError: () => { /* transport already logged */ },
-    }),
-  );
+  // The `onClose` callback receives the spawned proc handle as an
+  // argument (rather than closing over the enclosing `spawned`
+  // declaration) so this initializer is not self-referential — the
+  // previous shape was flagged by strict TypeScript as a
+  // use-before-initialization pattern and would have been fragile
+  // if `spawnAgdaProcess` ever invoked the callback synchronously.
+  const spawned = spawnAgdaProcess({
+    repoRoot: session.repoRoot,
+    registration: session.libraryRegistration,
+    transport: session.transport,
+    onClose: (closingProc) => handleSessionProcessClose(session, closingProc),
+    onError: () => { /* transport already logged */ },
+  });
+  adoptSpawnedProcessForSession(session, spawned);
 
   return spawned.proc;
 }

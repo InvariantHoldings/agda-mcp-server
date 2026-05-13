@@ -29,6 +29,17 @@ import {
   terminateAgdaProcess,
 } from "../../../src/agda/agda-process-spawn.js";
 
+// POSIX-only test gate. On Windows, Node does not deliver POSIX
+// signals to child processes — `proc.kill("SIGTERM")` always
+// terminates the child immediately, there is no way for the child
+// to install a "SIGTERM-ignoring" handler, and `signalCode` is
+// reported differently. The SIGTERM-honouring and SIGKILL-fallback
+// assertions below rely on the POSIX signal contract, so we skip
+// them on `win32`. Windows still gets coverage for the kill path
+// via the unref()-spy test (uses a fake proc) and the no-op-on-exited
+// case (uses an immediately-exiting `node -e "process.exit(0)"`).
+const testPosix = process.platform === "win32" ? test.skip : test;
+
 function waitForExit(proc: ChildProcess): Promise<{
   code: number | null;
   signal: NodeJS.Signals | null;
@@ -69,7 +80,7 @@ async function spawnReady(script: string, marker: string): Promise<ChildProcess>
 }
 
 describe("terminateAgdaProcess", () => {
-  test("SIGTERM is enough for a well-behaved child", async () => {
+  testPosix("SIGTERM is enough for a well-behaved child", async () => {
     // A vanilla `setInterval` is killed by SIGTERM's default action,
     // so the SIGKILL fallback should never need to fire.
     const proc = spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000_000);"]);
@@ -80,7 +91,7 @@ describe("terminateAgdaProcess", () => {
     expect(signal).toBe("SIGTERM");
   });
 
-  test("SIGKILL fallback reaps a child that ignores SIGTERM", async () => {
+  testPosix("SIGKILL fallback reaps a child that ignores SIGTERM", async () => {
     // The child installs a SIGTERM handler that swallows the signal,
     // then prints "ready\n" so the test knows the handler is wired
     // up before we call `terminateAgdaProcess`. Replacing the old
