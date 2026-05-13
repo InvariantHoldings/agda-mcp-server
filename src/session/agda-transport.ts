@@ -83,6 +83,41 @@ export class AgdaTransport {
     }
   }
 
+  /** Write a fire-and-forget IOTCM control command (e.g. `Cmd_abort`,
+   *  `Cmd_exit`) and resolve after a short flush window. Unlike
+   *  `sendCommand`, this MUST NOT reject on the budget elapsing and
+   *  MUST NOT terminate the subprocess: Agda legitimately emits no
+   *  response when there is no in-progress operation to abort (or
+   *  emits a delayed `DoneAborting`/`DoneExiting` that we capture if
+   *  it arrives within the flush window). Resolving the Promise after
+   *  `flushMs` gives the protocol time to land a closing response
+   *  without forcing the tool layer to wait the full per-command
+   *  timeout — and without falsely turning a healthy proc into a
+   *  zombie via the timeout-driven kill path. */
+  sendFireAndForgetCommand(
+    proc: ChildProcess,
+    command: string,
+    flushMs = 250,
+  ): Promise<AgdaResponse[]> {
+    logger.trace("sendFireAndForgetCommand", { command: command.slice(0, 200), flushMs });
+    this.buffer = "";
+    this.responseQueue = [];
+    this.collecting = true;
+    this.sawStatusDone = false;
+    this.lastResponseAt = null;
+    this.lastResponseKind = null;
+
+    return new Promise<AgdaResponse[]>((resolve) => {
+      setTimeout(() => {
+        const responses = [...this.responseQueue];
+        this.collecting = false;
+        this.clearIdleCompletionTimer();
+        resolve(responses);
+      }, flushMs);
+      proc.stdin?.write(`${command}\n`);
+    });
+  }
+
   sendCommand(
     proc: ChildProcess,
     command: string,

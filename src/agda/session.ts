@@ -263,13 +263,6 @@ export class AgdaSession {
     return iotcmEnvelope(filePath, agdaCmd);
   }
 
-  private async runIndependentCommand(
-    agdaCmd: string,
-    timeoutMs = 120_000,
-  ): Promise<AgdaResponse[]> {
-    return this.sendCommand(iotcmEnvelope(this.currentFile ?? "", agdaCmd), timeoutMs);
-  }
-
   // ── Public API ────────────────────────────────────────────────────
 
   /**
@@ -342,15 +335,33 @@ export class AgdaSession {
     return this.backend.hole(goalId, holeContents, backendExpr, payload);
   }
 
-  /** Send Cmd_abort to the running Agda process. */
+  /** Send Cmd_abort to the running Agda process.
+   *
+   *  Fire-and-forget at the IOTCM protocol level: Agda emits no
+   *  response when there is no in-progress operation to abort (and a
+   *  brief `DoneAborting` when there is). We bypass the regular
+   *  per-command timeout — which would kill the proc on the elapsing
+   *  budget — and bypass the command queue so the abort can actually
+   *  interrupt instead of waiting for the prior command to finish. */
   async abort(): Promise<AgdaResponse[]> {
-    return this.runIndependentCommand(topLevelCommand("Cmd_abort"), 10_000);
+    return this.sendControlCommand(topLevelCommand("Cmd_abort"));
   }
 
-  /** Send Cmd_exit to the running Agda process. */
+  /** Send Cmd_exit to the running Agda process and let it shut down
+   *  cleanly. Like `abort`, fire-and-forget — the closing
+   *  `DoneExiting` may not arrive before the proc closes. */
   async exit(): Promise<AgdaResponse[]> {
     this.exiting = true;
-    return this.runIndependentCommand(topLevelCommand("Cmd_exit"), 10_000);
+    return this.sendControlCommand(topLevelCommand("Cmd_exit"));
+  }
+
+  private async sendControlCommand(agdaCmd: string): Promise<AgdaResponse[]> {
+    assertSessionAlive(this);
+    const proc = this.ensureProcess();
+    return this.transport.sendFireAndForgetCommand(
+      proc,
+      iotcmEnvelope(this.currentFile ?? "", agdaCmd),
+    );
   }
 
   // ── Accessors ─────────────────────────────────────────────────────
