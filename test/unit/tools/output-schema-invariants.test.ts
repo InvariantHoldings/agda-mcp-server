@@ -29,7 +29,7 @@ import {
   completenessFromTypeCheckResult,
 } from "../../../src/agda/completeness.js";
 
-beforeAll(() => {
+beforeAll(async () => {
   // The manifest is process-global. Clear-and-register so the suite is
   // self-contained and independent of order against other tests that
   // may have registered tools earlier in the run.
@@ -39,7 +39,7 @@ beforeAll(() => {
   try {
     registerCoreTools(server, session, process.cwd());
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 

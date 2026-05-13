@@ -29,7 +29,7 @@ it("searchAbout returns local definitions for a type query", async () => {
     expect(result.results.some((entry) => entry.name === "double")).toBeTruthy();
     expect(result.results.some((entry) => entry.name === "zero")).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 
@@ -44,7 +44,7 @@ it("searchAbout returns imported definitions as well as local ones", async () =>
     expect(result.results.some((entry) => entry.name === "safeHead")).toBeTruthy();
     expect(result.results.some((entry) => entry.name === "mapMaybe")).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 
@@ -65,6 +65,6 @@ it("searchAbout sees names opened from nested public modules", async () => {
     expect(maybe.results.some((entry) => entry.name === "maybeId")).toBeTruthy();
     expect(maybe.results.some((entry) => entry.name === "mapMaybe")).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });

@@ -30,7 +30,7 @@ async function loadFixture(name: string) {
   try {
     return await session.load(name);
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 }
 
@@ -39,7 +39,7 @@ async function loadFixtureNoMetas(name: string) {
   try {
     return await session.loadNoMetas(name);
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 }
 
@@ -157,7 +157,7 @@ it("TrulyUnsolvable.agda: hole that auto cannot solve", async () => {
       !auto.solution || auto.solution.includes("error") || auto.solution.includes("No"),
     ).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 
@@ -305,7 +305,7 @@ it("goal.typeContext returns type for a hole", async () => {
     expect(typeof info.type).toBe("string");
     expect(info.type.length > 0).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 
@@ -318,7 +318,7 @@ it("goal.typeContext works for imported-context holes", async () => {
     expect(typeof info.type).toBe("string");
     expect(info.type.includes("Nat")).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 
@@ -330,6 +330,6 @@ it("isFileStale returns false right after load", async () => {
     await session.load("CompleteFixture.agda");
     expect(session.isFileStale()).toBe(false);
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });

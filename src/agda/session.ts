@@ -348,15 +348,19 @@ export class AgdaSession {
    *  response when there is no in-progress operation to abort (and a
    *  brief `DoneAborting` when there is). We bypass the regular
    *  per-command timeout — which would kill the proc on the elapsing
-   *  budget — and bypass the command queue so the abort can actually
-   *  interrupt instead of waiting for the prior command to finish. */
+   *  budget — and use a two-step interruption: an in-flight
+   *  transport command is rejected synchronously (so it stops
+   *  waiting on its per-command timeout), then the fire-and-forget
+   *  write itself is chained through `commandQueue` so its flush
+   *  window cannot race with a subsequent `sendCommand`. See
+   *  `sendControlCommand` below. */
   async abort(): Promise<AgdaResponse[]> {
     return this.sendControlCommand(topLevelCommand("Cmd_abort"));
   }
 
   /** Send Cmd_exit to the running Agda process and let it shut down
-   *  cleanly. Like `abort`, fire-and-forget — the closing
-   *  `DoneExiting` may not arrive before the proc closes. */
+   *  cleanly. Same two-step interruption as `abort` — see that
+   *  method's docstring. */
   async exit(): Promise<AgdaResponse[]> {
     this.exiting = true;
     return this.sendControlCommand(topLevelCommand("Cmd_exit"));
@@ -378,7 +382,10 @@ export class AgdaSession {
     //      flush has resolved, so a queued regular command cannot
     //      have its `collecting=true` flipped back to false mid-flight
     //      by a late flush timer from the control command.
-    this.transport.rejectInFlightCommand("Interrupted by Agda control command");
+    this.transport.rejectInFlightCommand(
+      "Interrupted by Agda control command",
+      { controlCommand: true },
+    );
 
     const task = this.commandQueue.then(async () => {
       assertSessionAlive(this);

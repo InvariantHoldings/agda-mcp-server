@@ -82,7 +82,7 @@ it("forceRecompile busts the .agdai cache and Agda rebuilds it on reload", async
     const afterSecondLoad = findAgdaiArtifacts(resolve(root, "Probe.agda"), root);
     expect(afterSecondLoad.find((a) => a.kind === "separated"), "expected the separated artifact to be rebuilt").toBeDefined();
   } finally {
-    session.destroy();
+    await session.destroy();
     if (previousAgdaBin === undefined) delete process.env.AGDA_BIN;
     else process.env.AGDA_BIN = previousAgdaBin;
     if (previousAgdaDir === undefined) delete process.env.AGDA_DIR;

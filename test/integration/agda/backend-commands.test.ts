@@ -71,7 +71,7 @@ it("backend commands run against a live Agda session", async () => {
         expect(typeof holeResult.output).toBe("string");
       }
     } finally {
-      session.destroy();
+      await session.destroy();
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });

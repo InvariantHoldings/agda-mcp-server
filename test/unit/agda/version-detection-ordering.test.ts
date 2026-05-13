@@ -39,7 +39,7 @@ test("getAgdaVersion() is populated after the first sendCommand resolves", async
   expect(session.getAgdaVersion()).not.toBeNull();
   expect(session.getAgdaVersion()!.parts).toEqual([2, 9, 0]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 test("getAgdaVersion() is populated for subsequent commands too", async () => {
@@ -52,7 +52,7 @@ test("getAgdaVersion() is populated for subsequent commands too", async () => {
 
   expect(session.getAgdaVersion()!.parts).toEqual([2, 7, 0]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 // ── Filtering: non-Version DisplayInfo responses are not mis-parsed ─────────
@@ -81,7 +81,7 @@ test("detection ignores timing and other non-Version DisplayInfo responses", asy
   expect(session.getAgdaVersion()).not.toBeNull();
   expect(session.getAgdaVersion()!.parts).toEqual([2, 9, 0]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 test("detection stays null when Cmd_show_version returns only non-Version DisplayInfo", async () => {
@@ -104,7 +104,7 @@ test("detection stays null when Cmd_show_version returns only non-Version Displa
   // filter is working and "2.9" was not extracted from the Time response.
   expect(session.getAgdaVersion()).toBeNull();
 
-  session.destroy();
+  await session.destroy();
 });
 
 // ── Retry: transient detection failures are retried on the next command ────
@@ -131,7 +131,7 @@ test("detection retries after a transient transport failure", async () => {
   expect(session.getAgdaVersion()).not.toBeNull();
   expect(session.getAgdaVersion()!.parts).toEqual([2, 6, 4]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 test("detection stops retrying after VERSION_DETECTION_MAX_ATTEMPTS failures", async () => {
@@ -157,19 +157,19 @@ test("detection stops retrying after VERSION_DETECTION_MAX_ATTEMPTS failures", a
   await session.sendCommand("IOTCM extra");
   expect(session["versionDetectionAttempts"]).toBe(max);
 
-  session.destroy();
+  await session.destroy();
 });
 
 // ── Reset: destroy() and process restart reset detection state ─────────────
 
-test("destroy() resets versionDetectionAttempts and detectedVersion", () => {
+test("destroy() resets versionDetectionAttempts and detectedVersion", async () => {
   const session = new AgdaSession(process.cwd());
 
   // Simulate a session that already ran detection
   session["detectedVersion"] = { parts: [2, 9, 0], prerelease: false };
   session["versionDetectionAttempts"] = 2;
 
-  session.destroy();
+  await session.destroy();
 
   expect(session.getAgdaVersion()).toBeNull();
   expect(session["versionDetectionAttempts"]).toBe(0);
@@ -195,7 +195,7 @@ test("process close event resets detection state for the next process", async ()
   expect(session.getAgdaVersion()).not.toBeNull();
   expect(session.getAgdaVersion()!.parts).toEqual([2, 9, 0]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 // ── Piggyback: no double round-trip when user command IS Cmd_show_version ──
@@ -223,7 +223,7 @@ test("no pre-flight when user command is Cmd_show_version — version piggybacke
   expect(session.getAgdaVersion()).not.toBeNull();
   expect(session.getAgdaVersion()!.parts).toEqual([2, 9, 0]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 // ── Preflight respawn guard (PR #56 Copilot review) ───────────────────────
@@ -249,7 +249,7 @@ test("sendCommand rejects the user command when the preflight version probe kill
     /Agda subprocess was replaced during version preflight/,
   );
 
-  session.destroy();
+  await session.destroy();
 });
 
 test("subsequent non-version commands don't re-run detection after successful piggyback", async () => {
@@ -274,7 +274,7 @@ test("subsequent non-version commands don't re-run detection after successful pi
   // Only the user command itself — no pre-flight
   expect(cmdCount).toBe(2);
 
-  session.destroy();
+  await session.destroy();
 });
 
 // ── Stale-currentFile guard after a per-command timeout (PR #56) ──────────
@@ -310,5 +310,5 @@ test("a timeout that kills the proc resets currentFile so the next caller sees '
   expect(session.getLastClassification()).toBeNull();
   expect(session.getLastLoadedAt()).toBeNull();
 
-  session.destroy();
+  await session.destroy();
 });

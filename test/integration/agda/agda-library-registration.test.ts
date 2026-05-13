@@ -32,7 +32,7 @@ for (const scenario of libraryRegistrationMatrix.filter((entry) => entry.integra
         expect(load.success).toBe(true);
         expect(load.errors).toEqual([]);
       } finally {
-        session.destroy();
+        await session.destroy();
       }
 
       const batch = await typeCheckDisposable(scenario.integration!.loadFile, materialized.repoRoot);

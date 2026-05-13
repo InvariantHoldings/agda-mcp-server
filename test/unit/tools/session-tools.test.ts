@@ -41,7 +41,7 @@ test("renderLoadLikeText includes completeness and goal metadata", () => {
   expect(text).toMatch(/Warnings/);
 });
 
-test("session and reporting registrations populate manifest entries", () => {
+test("session and reporting registrations populate manifest entries", async () => {
   clearToolManifest();
   const server = createServer();
   const session = new AgdaSession(projectRoot);
@@ -74,12 +74,12 @@ test("session and reporting registrations populate manifest entries", () => {
     expect(bugEntry).toBeTruthy();
     expect(bugEntry!.outputFields.includes("bugFingerprint")).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
     clearToolManifest();
   }
 });
 
-test("availableSessionTools filters interactive tools when no file is loaded", () => {
+test("availableSessionTools filters interactive tools when no file is loaded", async () => {
   clearToolManifest();
   const server = createServer();
   const session = new AgdaSession(projectRoot);
@@ -99,12 +99,12 @@ test("availableSessionTools filters interactive tools when no file is loaded", (
     expect(loaded.length >= unloaded.length).toBeTruthy();
     expect(new Set(listToolManifest().map((entry) => entry.name)).size).toBe(listToolManifest().length);
   } finally {
-    session.destroy();
+    await session.destroy();
     clearToolManifest();
   }
 });
 
-test("availableSessionTools is derived from manifest.requiresLoadedSession (no hardcoded names)", () => {
+test("availableSessionTools is derived from manifest.requiresLoadedSession (no hardcoded names)", async () => {
   // The unloaded set must equal exactly the manifest entries with
   // `requiresLoadedSession: false`. This pins the SSOT property:
   // adding a new no-load-needed tool means setting the flag at the
@@ -133,7 +133,7 @@ test("availableSessionTools is derived from manifest.requiresLoadedSession (no h
       expect(expected.has(required), `${required} should be in unloaded set`).toBe(true);
     }
   } finally {
-    session.destroy();
+    await session.destroy();
     clearToolManifest();
   }
 });

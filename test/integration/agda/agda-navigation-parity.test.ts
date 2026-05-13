@@ -106,7 +106,7 @@ for (const scenario of navigationQueryMatrix) {
         }
       }
     } finally {
-      session.destroy();
+      await session.destroy();
     }
   });
 }
@@ -118,6 +118,6 @@ it("showVersion returns a version string from the live Agda process", async () =
     const result = await session.query.showVersion();
     expect(result.version).toMatch(/[0-9]+\.[0-9]+/);
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });

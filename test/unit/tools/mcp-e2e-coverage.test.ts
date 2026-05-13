@@ -26,7 +26,7 @@ test("MCP E2E coverage matrix entries are unique and point at real suites", () =
   }
 });
 
-test("every registered core tool has an MCP E2E coverage assignment", () => {
+test("every registered core tool has an MCP E2E coverage assignment", async () => {
   clearToolManifest();
   const server = createServer();
   const session = new AgdaSession(TEST_FIXTURE_PROJECT_ROOT);
@@ -39,7 +39,7 @@ test("every registered core tool has an MCP E2E coverage assignment", () => {
 
     expect(matrixNames).toEqual(manifestNames);
   } finally {
-    session.destroy();
+    await session.destroy();
     clearToolManifest();
   }
 });

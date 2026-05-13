@@ -35,6 +35,6 @@ export async function typeCheckDisposable(
       classification: result.classification,
     };
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 }

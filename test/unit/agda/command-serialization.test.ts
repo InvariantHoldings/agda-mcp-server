@@ -71,7 +71,7 @@ test("AgdaSession serializes concurrent sendCommand calls (Bug 3)", async () => 
         ["start", "end", "start", "end", "start", "end"],
       );
     } finally {
-      session.destroy();
+      await session.destroy();
     }
   });
 });
@@ -103,7 +103,63 @@ test("AgdaSession command queue does not block after a rejected command (Bug 3)"
   expect(result).toEqual([{ kind: "Status" }]);
   expect(callCount).toBe(2);
 
-  session.destroy();
+  await session.destroy();
+});
+
+test("AgdaSession control commands cancel a user command stuck inside preflight version detection (interruption propagates through preflight's best-effort catch)", async () => {
+  // Regression for Copilot review on PR #56 (round 7 /
+  // `session.ts:381`): `rejectInFlightCommand` interrupts whatever
+  // `transport.sendCommand` is currently awaiting. If the active
+  // session command is still inside `preflightVersionDetection` —
+  // the first sendCommand it dispatches is the version probe — that
+  // helper used to swallow ANY transport error as a best-effort
+  // probe failure. The interruption was lost; the user command
+  // proceeded to its real sendCommand call; the queued abort/exit
+  // ended up waiting BEHIND the very command it was supposed to
+  // cancel. The fix: `rejectInFlightCommand({ controlCommand: true })`
+  // emits a `ControlCommandInterruption`, which preflight re-throws.
+  const session = new AgdaSession(process.cwd());
+
+  let probeStarted = false;
+  let resolveProbeStarted!: () => void;
+  const probeStartedBarrier = new Promise<void>((resolve) => { resolveProbeStarted = resolve; });
+  let userCommandRan = false;
+
+  session["transport"].sendCommand = async function (_proc, command) {
+    if (command.includes("Cmd_show_version")) {
+      probeStarted = true;
+      resolveProbeStarted();
+      // Block here on the shared emitter until the control command
+      // interrupts us. Without the fix, the catch in preflight
+      // swallowed this error and let the user command run.
+      return await new Promise<never>((_resolve, reject) => {
+        session["transport"].emitter.once("error", (err) => reject(err));
+      });
+    }
+    // If we ever reach here, the regression has re-emerged: the
+    // user command ran despite the in-flight abort.
+    userCommandRan = true;
+    return [{ kind: "Status" }];
+  };
+  session["transport"].sendFireAndForgetCommand = (async () => []) as unknown as typeof session["transport"]["sendFireAndForgetCommand"];
+
+  session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
+
+  try {
+    const userCmd = session.sendCommand("IOTCM user_cmd");
+    await probeStartedBarrier;
+    expect(probeStarted).toBe(true);
+
+    // Fire abort while the user command is stuck inside preflight.
+    const aborted = session.abort();
+
+    await expect(userCmd).rejects.toThrow(/Interrupted by Agda control command/);
+    await aborted;
+
+    expect(userCommandRan).toBe(false);
+  } finally {
+    await session.destroy();
+  }
 });
 
 test("AgdaSession control commands (abort/exit) chain through commandQueue so their flush window cannot clobber a subsequent sendCommand's transport state", async () => {

@@ -15,7 +15,7 @@ import { registerCoreTools } from "../../../src/tools/register-core-tools.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AgdaSession } from "../../../src/agda-process.js";
 
-beforeAll(() => {
+beforeAll(async () => {
   // Register the full core tool surface so we can assert that every
   // example references a tool the server actually exposes. The manifest
   // is process-global; clear-then-register so this file doesn't depend
@@ -26,7 +26,7 @@ beforeAll(() => {
   try {
     registerCoreTools(server, session, process.cwd());
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 

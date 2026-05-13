@@ -25,14 +25,14 @@ const SRC_ROOT = resolve(import.meta.dirname, "..", "..", "..", "src");
 
 let registeredNames: Set<string>;
 
-beforeAll(() => {
+beforeAll(async () => {
   clearToolManifest();
   const server = new McpServer({ name: "test", version: "0.0.0-test" });
   const session = new AgdaSession(process.cwd());
   try {
     registerCoreTools(server, session, process.cwd());
   } finally {
-    session.destroy();
+    await session.destroy();
   }
   registeredNames = new Set(listToolManifest().map((entry) => entry.name));
 });

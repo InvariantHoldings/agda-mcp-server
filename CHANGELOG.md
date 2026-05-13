@@ -44,6 +44,15 @@ and this project follows [Semantic Versioning](https://semver.org/).
   counts, or pin `outputSchema` snapshots will see the new fields.
   See the "Structured output rollout" entry below for the per-tool
   schemas.
+- **`Cmd_abort` / `Cmd_exit` now cancel the in-flight command (not
+  wait behind it).** The control-command path interrupts the active
+  `transport.sendCommand` synchronously, then queues its
+  fire-and-forget write through `commandQueue` so its flush window
+  cannot race with a subsequent `sendCommand`. The interruption
+  surfaces as `ControlCommandInterruption` and survives the
+  best-effort error catch inside `preflightVersionDetection`, so an
+  abort fired while the session is still doing its version probe
+  cancels the user command instead of waiting its turn behind it.
 - **Declared supported-Agda range was locally verified, not yet CI-gated**
   — the new `agdaMcpServer` block (`minAgdaVersion: 2.6.4.3`,
   `maxTestedAgdaVersion: 2.9.0`) was confirmed against locally

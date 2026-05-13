@@ -40,7 +40,7 @@ it("goal analysis: WithHoles.agda returns Nat type and suggestions", async () =>
     expect(suggestions.length > 0).toBeTruthy();
     expect(suggestions.some((s) => s.action === "auto")).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 
@@ -59,7 +59,7 @@ it("goal analysis: PatternMatch.agda suggests case_split on n", async () => {
       suggestions.some((s) => s.action === "case_split"),
     ).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 
@@ -78,7 +78,7 @@ it("term search: finds matching terms in context", async () => {
     // Just verify it doesn't crash and returns an array
     expect(Array.isArray(matches)).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 
@@ -95,7 +95,7 @@ it("proof status: returns goal summary after load", async () => {
     expect(metas.goals.length >= 2).toBeTruthy();
     expect(metas.goals.every((g) => typeof g.goalId === "number")).toBeTruthy();
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 
@@ -117,7 +117,7 @@ it("reload: same file produces no solved/created diff", async () => {
     expect(solved.length).toBe(0);
     expect(created.length).toBe(0);
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });
 
@@ -130,6 +130,6 @@ it("reload: clean file has 0 goals", async () => {
     expect(result.success).toBe(true);
     expect(result.goals.length).toBe(0);
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 });

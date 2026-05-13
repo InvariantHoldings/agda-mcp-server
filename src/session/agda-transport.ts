@@ -17,6 +17,22 @@ import {
 } from "./command-completion.js";
 import { parseAgdaStdoutLine } from "./stdout-line.js";
 
+/**
+ * Marker error raised when an in-flight `transport.sendCommand` is
+ * interrupted by an Agda control command (`Cmd_abort` / `Cmd_exit`)
+ * via `rejectInFlightCommand`. Callers that catch transport errors
+ * for retry / best-effort purposes (e.g. `preflightVersionDetection`)
+ * MUST re-throw this class — swallowing it lets the queued
+ * control command wait its turn behind the user command instead of
+ * cancelling it, which defeats the IOTCM-level intent of `Cmd_abort`.
+ */
+export class ControlCommandInterruption extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "ControlCommandInterruption";
+  }
+}
+
 export class AgdaTransport {
   buffer = "";
   responseQueue: AgdaResponse[] = [];
@@ -80,11 +96,19 @@ export class AgdaTransport {
    *
    *  Public so `AgdaSession.sendControlCommand` can interrupt an
    *  in-flight transport command synchronously, *before* queueing the
-   *  fire-and-forget write through the session command queue. */
-  rejectInFlightCommand(reason: string): void {
-    if (this.emitter.listenerCount("error") > 0) {
-      this.emitter.emit("error", new Error(reason));
-    }
+   *  fire-and-forget write through the session command queue.
+   *
+   *  Pass `controlCommand: true` from the control-command path so the
+   *  rejection is a `ControlCommandInterruption` — best-effort error
+   *  catchers (e.g. `preflightVersionDetection`) re-throw that class
+   *  rather than swallow it, ensuring the queued abort/exit cancels
+   *  the user command instead of waiting behind it. */
+  rejectInFlightCommand(reason: string, options: { controlCommand?: boolean } = {}): void {
+    if (this.emitter.listenerCount("error") === 0) return;
+    const err = options.controlCommand
+      ? new ControlCommandInterruption(reason)
+      : new Error(reason);
+    this.emitter.emit("error", err);
   }
 
   /** Write a fire-and-forget IOTCM control command (e.g. `Cmd_abort`,

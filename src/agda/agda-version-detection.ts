@@ -15,7 +15,7 @@ import type { ChildProcess } from "node:child_process";
 import { decodeDisplayTextResponses } from "../protocol/responses/text-display.js";
 import { type AgdaVersion, parseAgdaVersion } from "./agda-version.js";
 import { logger } from "./logger.js";
-import type { AgdaTransport } from "../session/agda-transport.js";
+import { type AgdaTransport, ControlCommandInterruption } from "../session/agda-transport.js";
 import { topLevelCommand } from "../protocol/command-builder.js";
 import type { AgdaResponse } from "./types.js";
 
@@ -106,9 +106,19 @@ export async function preflightVersionDetection(args: {
         // retry will happen on the next command if under the limit.
       }
     }
-  } catch {
-    // Best-effort — command error consumes an attempt slot; will retry
-    // on subsequent commands up to VERSION_DETECTION_MAX_ATTEMPTS.
+  } catch (err) {
+    // Best-effort — most transport errors here are transient probe
+    // failures, so we swallow them and let the next user command
+    // retry detection (up to VERSION_DETECTION_MAX_ATTEMPTS).
+    //
+    // EXCEPTION: a `ControlCommandInterruption` means the caller
+    // fired `Cmd_abort`/`Cmd_exit` while the preflight was in
+    // flight. Swallowing it would let the user command proceed and
+    // the queued abort wait its turn behind it — defeating the
+    // protocol-level intent of `Cmd_abort`. Re-throw so
+    // `session.sendCommand` rejects the user command and the
+    // queued control command can run.
+    if (err instanceof ControlCommandInterruption) throw err;
   }
 }
 
