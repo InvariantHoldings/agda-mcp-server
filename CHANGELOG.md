@@ -308,10 +308,15 @@ and this project follows [Semantic Versioning](https://semver.org/).
   per-command timeout (default 120 s) before observing the shutdown.
   The transport now emits an `"error"` on its shared emitter so the
   command rejects promptly.
-- **`AgdaSession.sendCommand` re-acquires the process handle after
-  the inline version preflight.** A preflight timeout silently kills
-  the shared child; without the re-acquire, the user's command would
-  write into a dying process and trip another full timeout.
+- **`AgdaSession.sendCommand` rejects when the inline version
+  preflight killed the subprocess.** The user's IOTCM envelope was
+  built BEFORE this task ran (e.g. goal-operations bake `currentFile`
+  and goal IDs in at call site), so forwarding it into a respawned
+  Agda would either trip "No file loaded" on a fresh process or
+  target stale interaction IDs. The command rejects up front with
+  "Agda subprocess was replaced during version preflight; call
+  agda_load before retrying." instead of writing the stale envelope
+  into a dying or fresh process.
 - **`getPhase()` no longer reports a killed process as
   `hasProcess: true`.**
 - **`projectConfigDiagnostics()` mis-labelled `system`-source warnings

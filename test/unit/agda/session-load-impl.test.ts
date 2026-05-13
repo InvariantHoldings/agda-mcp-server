@@ -96,6 +96,54 @@ test("runLoad classifies explicit hole as ok-with-holes despite empty protocol g
   }
 });
 
+test("runLoad reports failure when post-load metas reconciliation killed the proc", async () => {
+  // Cmd_load succeeds, but the best-effort `metas()` reconciliation
+  // times out and kills the Agda subprocess. `AgdaSession.sendCommand`
+  // clears `currentFile` in its finally, then runLoad's catch
+  // suppresses the error and would otherwise return a success
+  // envelope — leaving the agent thinking the file is loaded while
+  // the session is actually empty. The fix detects the cleared
+  // `currentFile` and surfaces a process-died-during-reconciliation
+  // failure so the agent re-issues agda_load.
+  const root = makeTempRepo();
+  const file = "Reconcile.agda";
+  writeFileSync(resolve(root, file), "module Reconcile where\n", "utf8");
+  const absPath = resolve(root, file);
+
+  let metasCalls = 0;
+  const session = {
+    repoRoot: root,
+    currentFile: null as string | null,
+    goalIds: [],
+    lastLoadedMtime: 0,
+    lastClassification: null,
+    lastLoadedAt: null,
+    lastInvisibleGoalCount: 0,
+    goal: {
+      // Mimic AgdaSession.sendCommand's behavior on a timeout that
+      // killed the proc: the `finally` block clears `currentFile`.
+      metas: async () => {
+        metasCalls += 1;
+        (session as { currentFile: string | null }).currentFile = null;
+        throw new Error("sendCommand timed out after 60000ms (received 0 responses: {})");
+      },
+    },
+    sendCommand: async () => cleanLoadResponses(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, file);
+    expect(metasCalls).toBe(1);
+    expect(result.success).toBe(false);
+    expect(result.classification).toBe("process-died-during-reconciliation");
+    expect(result.errors[0]).toMatch(/died during post-load reconciliation/);
+    expect(result.errors[0]).toContain(absPath);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("runLoadNoMetas fails with type-error when explicit holes exist", async () => {
   const root = makeTempRepo();
   const file = "StrictHole.agda";

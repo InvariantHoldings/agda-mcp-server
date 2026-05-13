@@ -131,6 +131,42 @@ test("AgdaTransport.destroy unblocks an in-flight sendCommand instead of leaving
   expect(Date.now() - startedAt).toBeLessThan(1_000);
 });
 
+test("sendFireAndForgetCommand interrupts an in-flight sendCommand by rejecting it", async () => {
+  // Cmd_abort / Cmd_exit share the transport's mutable buffer +
+  // responseQueue + collecting state with regular sendCommand. If a
+  // normal command is in flight and the user fires agda_abort, the
+  // fire-and-forget path used to clobber that state and let the
+  // in-flight command's responses fall on the floor — leaving the
+  // original Promise to time out after the full per-command budget.
+  // The fix routes through `rejectInFlightCommand` so the active
+  // sendCommand rejects promptly, matching the IOTCM protocol
+  // intent of Cmd_abort (which is supposed to *interrupt* the
+  // active command, not wait its turn behind it).
+  const transport = new AgdaTransport();
+  const proc = { stdin: { write() { /* no traffic */ } } } as unknown as ChildProcess;
+
+  const pending = transport.sendCommand(
+    proc,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_load)",
+    60_000,
+  );
+
+  // Yield so sendCommand registers its done/error listeners on the
+  // shared emitter before the control command fires.
+  await Promise.resolve();
+
+  const startedAt = Date.now();
+  const fireResult = transport.sendFireAndForgetCommand(
+    proc,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_abort)",
+    50,
+  );
+
+  await expect(pending).rejects.toThrow(/Interrupted by Agda control command/);
+  await fireResult;
+  expect(Date.now() - startedAt).toBeLessThan(500);
+});
+
 test("handleStdout drops chunks that arrive while not collecting", () => {
   // After a per-command timeout fires `finish()` sets `collecting = false`
   // but the killed proc's stdout listener stays attached until the

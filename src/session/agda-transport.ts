@@ -100,6 +100,14 @@ export class AgdaTransport {
     flushMs = 250,
   ): Promise<AgdaResponse[]> {
     logger.trace("sendFireAndForgetCommand", { command: command.slice(0, 200), flushMs });
+    // If a regular `sendCommand` is in flight, interrupt it before
+    // we clobber the shared `buffer`/`responseQueue`/`collecting`
+    // state — the in-flight command's responses would otherwise be
+    // dropped on the floor and it would eventually time out.
+    // Interrupting is also the protocol-level intent of `Cmd_abort`
+    // and `Cmd_exit`: they exist precisely to cancel the active
+    // command, not to wait their turn behind it.
+    this.rejectInFlightCommand("Interrupted by Agda control command");
     this.buffer = "";
     this.responseQueue = [];
     this.collecting = true;
