@@ -131,6 +131,20 @@ test("AgdaTransport.destroy unblocks an in-flight sendCommand instead of leaving
   expect(Date.now() - startedAt).toBeLessThan(1_000);
 });
 
+test("handleStdout drops chunks that arrive while not collecting", () => {
+  // After a per-command timeout fires `finish()` sets `collecting = false`
+  // but the killed proc's stdout listener stays attached until the
+  // next `ensureProcess()` detaches it. Late chunks from the dying
+  // child must NOT accumulate in `this.buffer` — otherwise the first
+  // JSON line emitted by the replacement Agda concatenates with the
+  // stale fragment and gets misparsed by `drainBuffer`.
+  const transport = new AgdaTransport();
+
+  expect(transport.collecting).toBe(false);
+  transport.handleStdout(Buffer.from("partial-line-from-dying-proc"));
+  expect(transport.buffer).toBe("");
+});
+
 test("sendCommand timeout kills the subprocess AND rejects the Promise", async () => {
   const transport = new AgdaTransport();
   const killCalls: Array<NodeJS.Signals | number | undefined> = [];

@@ -28,6 +28,13 @@ export class AgdaTransport {
   private lastResponseKind: string | null = null;
 
   handleStdout(chunk: Buffer): void {
+    // Drop stdout that arrives while we're not collecting. After the
+    // per-command timeout fires `finish()` flips `collecting` to false
+    // but the killed proc's stdout listener stays attached until the
+    // next `ensureProcess()` detaches it. Without this early-return a
+    // late partial line from the dying child would sit in `this.buffer`
+    // and corrupt the parse of the replacement Agda's first line.
+    if (!this.collecting) return;
     this.buffer += chunk.toString();
     this.drainBuffer();
   }
