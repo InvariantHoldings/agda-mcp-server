@@ -106,6 +106,129 @@ test("AgdaSession command queue does not block after a rejected command (Bug 3)"
   session.destroy();
 });
 
+test("AgdaSession control commands (abort/exit) chain through commandQueue so their flush window cannot clobber a subsequent sendCommand's transport state", async () => {
+  // Regression for Copilot review on PR #56 (round 6 /
+  // `session.ts:364`): the previous `sendControlCommand` bypassed
+  // `commandQueue` entirely and held shared transport state
+  // (`collecting`, idle timer) for `flushMs`. When the in-flight
+  // command rejected, the next queued `sendCommand` could start
+  // immediately — and the still-pending flush timer would later flip
+  // `collecting=false` mid-flight. The fix interrupts the in-flight
+  // command synchronously, then chains the fire-and-forget through
+  // `commandQueue` so subsequent commands wait for the flush to
+  // resolve before they touch transport state.
+  const session = new AgdaSession(process.cwd());
+  session["versionDetectionAttempts"] = AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
+
+  const events: string[] = [];
+  let releaseAbortFlush!: () => void;
+  const abortFlushHeld = new Promise<void>((resolve) => { releaseAbortFlush = resolve; });
+  let firstReachedTransport!: () => void;
+  const firstAwaitingTransport = new Promise<void>((resolve) => { firstReachedTransport = resolve; });
+
+  // Fire-and-forget mock holds the flush window open until the test
+  // says "release". This lets us assert on transport-state ordering
+  // without relying on wall-clock timing.
+  session["transport"].sendFireAndForgetCommand = (async () => {
+    events.push("abort:start");
+    await abortFlushHeld;
+    events.push("abort:end");
+    return [];
+  }) as unknown as typeof session["transport"]["sendFireAndForgetCommand"];
+
+  session["transport"].sendCommand = async function (_proc, command) {
+    if (command.includes("first")) {
+      events.push("first:awaiting");
+      firstReachedTransport();
+      return await new Promise<never>((_resolve, reject) => {
+        session["transport"].emitter.once("error", (err) => reject(err));
+      });
+    }
+    events.push(`${command}:start`);
+    return [{ kind: "Status" }];
+  };
+
+  session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
+
+  try {
+    const first = session.sendCommand("IOTCM first").catch(() => { /* expected */ });
+    // Wait for `first` to actually be parked inside transport.sendCommand
+    // before firing `abort` — otherwise `rejectInFlightCommand`'s emit
+    // would land before any listener registered.
+    await firstAwaitingTransport;
+
+    const aborted = session.abort();
+    const next = session.sendCommand("IOTCM next");
+
+    // Yield enough microtasks for `abort` to acquire its queue slot
+    // and call `sendFireAndForgetCommand` (which pushes "abort:start").
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    // Decisive invariant: while abort's flush window is still open,
+    // `next` MUST NOT have started — it is chained AFTER abort in
+    // commandQueue. With the buggy queue-bypass, `next` would run
+    // immediately after `first` rejected.
+    expect(events).toContain("abort:start");
+    expect(events.some((e) => e === "IOTCM next:start")).toBe(false);
+
+    // Release the flush and let everything settle.
+    releaseAbortFlush();
+    await Promise.all([first, aborted, next]);
+
+    // Final ordering check.
+    expect(events.indexOf("abort:end")).toBeLessThan(events.indexOf("IOTCM next:start"));
+  } finally {
+    await session.destroy();
+  }
+});
+
+test("AgdaSession preflight failure that kills the proc resets file-bound state before the assertion throws", async () => {
+  // Regression for Copilot review on PR #56 (round 6 /
+  // `session.ts:206`): when the version preflight timed out and
+  // killed the subprocess, `preflightVersionDetection` swallowed the
+  // transport error; `assertProcSurvivedPreflight` then threw — but
+  // OUTSIDE the try/finally that calls `resetFileBoundStateIfProcDied`,
+  // so `currentFile`/`goalIds`/load metadata stayed pointing at the
+  // dead Agda until the eventual `close` event landed. The fix wraps
+  // the assertion in the try/finally so the reset always runs.
+  const session = new AgdaSession(process.cwd());
+
+  session.currentFile = "/tmp/StaleAfterPreflight.agda";
+  session.goalIds = [0, 1];
+  session.lastLoadedMtime = 12345;
+  session.lastClassification = "ok-with-holes";
+  session.lastLoadedAt = Date.now();
+  session.lastInvisibleGoalCount = 0;
+
+  const dyingProc = { exitCode: null, signalCode: null, killed: false } as unknown as ChildProcess;
+  session.ensureProcess = () => dyingProc;
+  // Preflight throws after marking proc killed — mimics the timeout
+  // path inside `AgdaTransport.sendCommand`.
+  session["transport"].sendCommand = (async (_proc: ChildProcess, command: string) => {
+    if (command.includes("Cmd_show_version")) {
+      (dyingProc as unknown as { killed: boolean }).killed = true;
+      throw new Error("simulated preflight timeout");
+    }
+    // The user's command must NEVER be sent against the dead proc —
+    // the preflight survival assertion is supposed to throw first.
+    throw new Error("user command must not run against a dead proc");
+  }) as any;
+
+  await expect(session.sendCommand("IOTCM user_cmd")).rejects.toThrow(
+    /Agda subprocess was replaced during version preflight/,
+  );
+
+  // The fix's contract: state was reset even though the throw came
+  // from `assertProcSurvivedPreflight`, NOT from inside the wrapped
+  // `transport.sendCommand`.
+  expect(session.getLoadedFile()).toBeNull();
+  expect(session.getGoalIds()).toEqual([]);
+  expect(session.getLastClassification()).toBeNull();
+  expect(session.getLastLoadedAt()).toBeNull();
+
+  await session.destroy();
+});
+
 test("AgdaSession destroy rejects queued and subsequent sendCommand calls", async () => {
   // Updated for the 0.6.7 leak-cleanup pass: destroy() is now
   // final. Tasks that were chained onto `commandQueue` before

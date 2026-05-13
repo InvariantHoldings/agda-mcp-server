@@ -167,6 +167,35 @@ test("sendFireAndForgetCommand interrupts an in-flight sendCommand by rejecting 
   expect(Date.now() - startedAt).toBeLessThan(500);
 });
 
+test("sendFireAndForgetCommand resolves (not rejects) when the transport emitter emits 'error' during the flush window", async () => {
+  // Regression for Copilot review on PR #56 (round 6 /
+  // `agda-transport.ts:125`): the previous fire-and-forget path
+  // installed no `error` listener on the shared emitter. If the
+  // subprocess (or a concurrent `destroy()`) emitted `error` while
+  // the flush timer was pending, Node throws on the unhandled
+  // emitter event and crashes the server. The fix attaches an
+  // `error` listener that *resolves* the Promise with the responses
+  // collected so far — fire-and-forget contract is "never reject".
+  const transport = new AgdaTransport();
+  const proc = {
+    stdin: { write() { /* discard */ } },
+  } as unknown as ChildProcess;
+
+  const pending = transport.sendFireAndForgetCommand(proc, "IOTCM control", 50);
+
+  // Yield so the listener is registered before we emit.
+  await Promise.resolve();
+
+  // Simulate a late spawn error reaching the transport during flush.
+  transport.emitter.emit("error", new Error("late proc failure"));
+
+  // Must resolve, not reject — and must do so quickly (well before
+  // the 50ms flush would have completed on its own).
+  const startedAt = Date.now();
+  await expect(pending).resolves.toEqual([]);
+  expect(Date.now() - startedAt).toBeLessThan(40);
+});
+
 test("handleStdout drops chunks that arrive while not collecting", () => {
   // After a per-command timeout fires `finish()` sets `collecting = false`
   // but the killed proc's stdout listener stays attached until the

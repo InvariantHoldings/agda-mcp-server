@@ -10,6 +10,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 
 import { findAgdaBinary } from "./binary-discovery.js";
+import { logger } from "./logger.js";
 import { createLibraryRegistration, type LibraryRegistration } from "./library-registration.js";
 import type { AgdaTransport } from "../session/agda-transport.js";
 
@@ -123,7 +124,17 @@ export function spawnAgdaProcess(args: {
     proc.stdout?.off("data", onStdout);
     proc.stderr?.off("data", onStderr);
     proc.off("close", onClose);
+    // Swap the live error handler for a quiet logger rather than
+    // detaching it outright. A late spawn error (e.g. an invalid
+    // AGDA_BIN that surfaces asynchronously, racing destroy/respawn)
+    // emitted by an abandoned child with NO `error` listener would
+    // crash the Node process. The replacement keeps a listener
+    // attached, just one that no longer touches the now-shared
+    // transport state.
     proc.off("error", onError);
+    proc.on("error", (err: Error) => {
+      logger.warn("Late error from abandoned Agda process", { error: String(err) });
+    });
   };
 
   return { proc, detachListeners };

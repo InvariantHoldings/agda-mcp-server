@@ -76,8 +76,12 @@ export class AgdaTransport {
 
   /** Emit `"error"` on the shared emitter so any active `sendCommand`
    *  Promise rejects promptly. `listenerCount` guards EventEmitter's
-   *  "unhandled error" throw when no command is in flight. */
-  private rejectInFlightCommand(reason: string): void {
+   *  "unhandled error" throw when no command is in flight.
+   *
+   *  Public so `AgdaSession.sendControlCommand` can interrupt an
+   *  in-flight transport command synchronously, *before* queueing the
+   *  fire-and-forget write through the session command queue. */
+  rejectInFlightCommand(reason: string): void {
     if (this.emitter.listenerCount("error") > 0) {
       this.emitter.emit("error", new Error(reason));
     }
@@ -116,12 +120,23 @@ export class AgdaTransport {
     this.lastResponseKind = null;
 
     return new Promise<AgdaResponse[]>((resolve) => {
-      setTimeout(() => {
+      const settle = () => {
         const responses = [...this.responseQueue];
         this.collecting = false;
         this.clearIdleCompletionTimer();
+        this.emitter.removeListener("error", onError);
+        clearTimeout(flushTimer);
         resolve(responses);
-      }, flushMs);
+      };
+      // Fire-and-forget contract: never reject. If the subprocess
+      // emits `error` (or `destroy()` rejects in-flight) during the
+      // flush window, resolve with whatever responses we've collected
+      // so far rather than letting an unhandled emitter error crash
+      // Node. The previous `sendCommand` path installed an `error`
+      // listener for the same reason.
+      const onError = () => settle();
+      const flushTimer = setTimeout(settle, flushMs);
+      this.emitter.on("error", onError);
       proc.stdin?.write(`${command}\n`);
     });
   }

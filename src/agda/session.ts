@@ -197,19 +197,26 @@ export class AgdaSession {
       const proc = this.ensureProcess();
       const fileAtStart = this.currentFile;
 
-      await preflightVersionDetection({
-        state: this,
-        transport: this.transport,
-        proc,
-        buildIotcm: (cmd) => this.iotcm(cmd),
-        userCommand: command,
-      });
-
-      assertSessionAlive(this);
-      assertProcSurvivedPreflight(this, proc, fileAtStart);
-
       let responses: AgdaResponse[];
       try {
+        // Preflight + survival assertions live inside the try/finally
+        // so that `resetFileBoundStateIfProcDied` runs even when an
+        // assertion throws — otherwise a preflight timeout that
+        // killed the proc would leave `currentFile`/`goalIds`/load
+        // metadata referring to a dead Agda until the eventual
+        // `close` event fires, and status/snapshot APIs would report
+        // a loaded file against no process.
+        await preflightVersionDetection({
+          state: this,
+          transport: this.transport,
+          proc,
+          buildIotcm: (cmd) => this.iotcm(cmd),
+          userCommand: command,
+        });
+
+        assertSessionAlive(this);
+        assertProcSurvivedPreflight(this, proc, fileAtStart);
+
         responses = await this.transport.sendCommand(proc, command, timeoutMs);
       } finally {
         resetFileBoundStateIfProcDied(this, proc);
@@ -355,13 +362,34 @@ export class AgdaSession {
     return this.sendControlCommand(topLevelCommand("Cmd_exit"));
   }
 
-  private async sendControlCommand(agdaCmd: string): Promise<AgdaResponse[]> {
-    assertSessionAlive(this);
-    const proc = this.ensureProcess();
-    return this.transport.sendFireAndForgetCommand(
-      proc,
-      iotcmEnvelope(this.currentFile ?? "", agdaCmd),
-    );
+  private sendControlCommand(agdaCmd: string): Promise<AgdaResponse[]> {
+    // Two-step interruption pattern:
+    //
+    //   1. Synchronously reject the in-flight transport sendCommand
+    //      (if any) so the IOTCM that was already written to Agda's
+    //      stdin stops waiting on its per-command timeout. This is
+    //      the protocol-level intent of `Cmd_abort`/`Cmd_exit`.
+    //
+    //   2. Chain the fire-and-forget write itself through the
+    //      session command queue. The flush window inside
+    //      `sendFireAndForgetCommand` mutates shared transport state
+    //      (`collecting`, idle timer); routing it through the queue
+    //      guarantees no subsequent `sendCommand` starts until the
+    //      flush has resolved, so a queued regular command cannot
+    //      have its `collecting=true` flipped back to false mid-flight
+    //      by a late flush timer from the control command.
+    this.transport.rejectInFlightCommand("Interrupted by Agda control command");
+
+    const task = this.commandQueue.then(async () => {
+      assertSessionAlive(this);
+      const proc = this.ensureProcess();
+      return this.transport.sendFireAndForgetCommand(
+        proc,
+        iotcmEnvelope(this.currentFile ?? "", agdaCmd),
+      );
+    });
+    this.commandQueue = task.then(() => { }, () => { });
+    return task;
   }
 
   // ── Accessors ─────────────────────────────────────────────────────
