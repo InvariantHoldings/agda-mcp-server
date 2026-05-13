@@ -106,17 +106,24 @@ test("AgdaSession command queue does not block after a rejected command (Bug 3)"
   session.destroy();
 });
 
-test("AgdaSession destroy resets the command queue", async () => {
+test("AgdaSession destroy rejects queued and subsequent sendCommand calls", async () => {
+  // Updated for the 0.6.7 leak-cleanup pass: destroy() is now
+  // final. Tasks that were chained onto `commandQueue` before
+  // destroy() ran observe `this.destroyed === true` when their
+  // turn comes and reject — without this guard a queued command
+  // could call `ensureProcess()` and spawn a fresh Agda just as
+  // shutdown is awaiting the previous proc's exit (see Copilot
+  // review comment on PR #56: `session-process-lifecycle.ts:198`).
+  // Embedders that need a fresh session after teardown must
+  // construct a new `AgdaSession`.
   const session = new AgdaSession(process.cwd());
 
   let callCount = 0;
   session["transport"].sendCommand = async function (_proc, command, _timeoutMs) {
     if (command.includes("block")) {
-      // Simulate a command that never resolves — would block the queue
       return new Promise(() => {});
     }
     if (command.includes("Cmd_show_version")) {
-      // Version detection runs inline; don't count it toward user command assertions
       return [];
     }
     callCount++;
@@ -125,16 +132,23 @@ test("AgdaSession destroy resets the command queue", async () => {
 
   session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
 
-  // Enqueue a permanently blocked command; do not await it
-  void session.sendCommand("IOTCM block");
+  // Enqueue a permanently blocked command; capture its Promise so
+  // we can assert it rejects after destroy.
+  const blocked = session.sendCommand("IOTCM block");
 
-  // destroy() should reset the internal command queue
-  session.destroy();
+  // destroy() flips the `destroyed` flag and resets commandQueue.
+  // The blocked task is still chained off the OLD queue, but its
+  // `.then` body checks `this.destroyed` and throws.
+  await session.destroy();
 
-  // After destroy, a new command should execute without being blocked
-  const result = await session.sendCommand("IOTCM after-destroy");
-  expect(result).toEqual([{ kind: "Status" }]);
-  expect(callCount).toBe(1);
+  await expect(blocked).rejects.toThrow(/destroyed/);
 
-  session.destroy();
+  // A NEW sendCommand call after destroy() must also reject — the
+  // session is gone for good. Without this contract, a queued task
+  // could sneak through after destroy and spawn a fresh Agda
+  // mid-shutdown.
+  await expect(session.sendCommand("IOTCM after-destroy")).rejects.toThrow(/destroyed/);
+
+  // The non-blocked branch of the transport mock must never have run.
+  expect(callCount).toBe(0);
 });

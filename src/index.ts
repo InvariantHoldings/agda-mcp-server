@@ -261,8 +261,19 @@ main().catch((err) => {
 // that ignores SIGTERM would survive shutdown. Awaiting the Promise
 // keeps the event loop alive through the subprocess `close` event
 // or the hard fallback inside `destroy()`.
+//
+// `shutdown` is idempotent: a second SIGINT/SIGTERM while the first
+// `destroy()` is still awaiting the child's `close` event must NOT
+// kick off a new (already-noop) destroy call and synchronously
+// `process.exit(0)` — that would truncate the first call's SIGKILL
+// escalation and could leave a wedged Agda child orphaned. The first
+// shutdown's Promise is cached so subsequent signals attach to it.
+let shutdownPromise: Promise<void> | null = null;
 function shutdown(): void {
-  void session.destroy().finally(() => process.exit(0));
+  if (shutdownPromise === null) {
+    shutdownPromise = session.destroy();
+  }
+  void shutdownPromise.finally(() => process.exit(0));
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

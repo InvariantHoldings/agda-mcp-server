@@ -33,6 +33,23 @@ import {
 } from "./agda-process-spawn.js";
 
 /**
+ * Predicate for "this proc handle is still usable". Three guards:
+ *
+ *   1. `exitCode === null` — proc has not exited normally.
+ *   2. `signalCode === null` — proc was not terminated by a signal.
+ *      Critical because Node leaves `exitCode === null` when a child
+ *      dies from a signal and instead populates `signalCode`; without
+ *      this check, a child killed externally (so `.killed` is also
+ *      false) but not yet reaped via the `close` event would be
+ *      reported as live. See Copilot review comment on PR #56.
+ *   3. `!proc.killed` — we did not just send it SIGTERM ourselves
+ *      (e.g. from the per-command timeout in `AgdaTransport`).
+ */
+export function isProcLive(proc: ChildProcess): boolean {
+  return proc.exitCode === null && proc.signalCode === null && !proc.killed;
+}
+
+/**
  * Start the Agda process if not already running, or replace the
  * current one if it has died or been killed.
  *
@@ -50,7 +67,7 @@ import {
  * emit `done`.
  */
 export function ensureProcessForSession(session: AgdaSession): ChildProcess {
-  if (session.proc && session.proc.exitCode === null && !session.proc.killed) {
+  if (session.proc && isProcLive(session.proc)) {
     return session.proc;
   }
 
@@ -177,6 +194,12 @@ export function handleSessionProcessClose(
  * child survives shutdown.
  */
 export function destroySessionProcess(session: AgdaSession): Promise<void> {
+  // Flip the destroyed flag FIRST so any task already chained onto
+  // `commandQueue` (queued before destroy ran) observes it and
+  // bails before calling `ensureProcess()`. Without this guard, a
+  // queued sendCommand could spawn a fresh Agda right as shutdown
+  // is awaiting the previous proc's exit.
+  session.destroyed = true;
   const proc = session.proc;
   if (proc) {
     session.detachProcListeners?.();

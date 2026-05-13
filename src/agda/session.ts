@@ -41,6 +41,7 @@ import { findAgdaBinary } from "./binary-discovery.js";
 import {
   destroySessionProcess,
   ensureProcessForSession,
+  isProcLive,
 } from "./session-process-lifecycle.js";
 import {
   piggybackVersionFromResponses,
@@ -91,21 +92,41 @@ export class AgdaSession {
   lastClassification: string | null = null;
   lastLoadedAt: number | null = null;
   lastInvisibleGoalCount = 0;
-  // The five fields below are intentionally non-`private`: they are
+  // The fields below are intentionally non-`private`: they are
   // mutated by free helpers in `session-process-lifecycle.ts` and
   // `session-load-impl.ts`, same module-internal convention used for
-  // `currentFile`, `goalIds`, etc. External consumers must continue
-  // to use the public class methods — these fields are not part of
-  // the embedding API.
+  // `currentFile`, `goalIds`, etc. They are tagged `@internal` so
+  // `tsc --stripInternal` strips them from the generated `.d.ts` and
+  // embedders never see them on the exported `AgdaSession` type —
+  // external consumers must continue to use the public class methods.
+  // See Copilot review comments on PR #56 (session.ts:99 + :108).
+  /** @internal */
   libraryRegistration: LibraryRegistration | null = null;
-  // Detacher for the listeners spawnAgdaProcess installed on the current
-  // `this.proc`. Held so we can quiet a dying-but-not-yet-closed process
-  // before respawning — otherwise its late stdout/close events would
-  // reach the shared transport (mid-command for the *new* process) and
-  // corrupt its state. Set in lockstep with `this.proc`.
+  /**
+   * Detacher for the listeners spawnAgdaProcess installed on the
+   * current `this.proc`. Held so we can quiet a dying-but-not-yet-
+   * closed process before respawning — otherwise its late
+   * stdout/close events would reach the shared transport
+   * (mid-command for the *new* process) and corrupt its state. Set
+   * in lockstep with `this.proc`.
+   * @internal
+   */
   detachProcListeners: (() => void) | null = null;
+  /** @internal */
   readonly transport = new AgdaTransport();
+  /** @internal */
   commandQueue: Promise<unknown> = Promise.resolve();
+  /**
+   * Flag flipped by `destroySessionProcess`. Tasks already chained
+   * onto `commandQueue` before destroy() ran reject early instead
+   * of starting a fresh `ensureProcess()` (which would spawn a new
+   * Agda just as shutdown is waiting for the old one to exit).
+   * Once true it never resets — embedders that need a session again
+   * must construct a new one. See Copilot review comment on PR #56
+   * (`session-process-lifecycle.ts:198`).
+   * @internal
+   */
+  destroyed = false;
   readonly goal;
   readonly expr;
   readonly query;
@@ -159,6 +180,14 @@ export class AgdaSession {
     timeoutMs = configuredCommandTimeoutMs(),
   ): Promise<AgdaResponse[]> {
     const task = this.commandQueue.then(async () => {
+      // Guard against tasks queued before `destroy()` flipped the
+      // flag: without this, a queued sendCommand could call
+      // `ensureProcess()` and spawn a fresh Agda just as shutdown
+      // is awaiting the previous proc's exit.
+      if (this.destroyed) {
+        throw new Error("AgdaSession is destroyed; cannot send new commands");
+      }
+
       const proc = this.ensureProcess();
 
       // Detect Agda version inline before the user command (or
@@ -183,6 +212,25 @@ export class AgdaSession {
       const liveProc = this.ensureProcess();
 
       const responses = await this.transport.sendCommand(liveProc, command, timeoutMs);
+
+      // If the timeout killed this proc, reset every field that
+      // depends on the live Agda process. Without this, a follow-up
+      // tool (e.g. `agda_goal_context`) would: pass `requireFile()`
+      // because `currentFile` is still set, build an IOTCM string
+      // against that path, hand it to `sendCommand` — which then
+      // calls `ensureProcess()`, spawns a fresh Agda with no file
+      // loaded, and sends the stale envelope into it. Resetting
+      // here ensures the next caller sees a clean "No file loaded.
+      // Call agda_load first." surface instead. See Copilot review
+      // comment on PR #56 (session.ts:184).
+      if (!isProcLive(liveProc)) {
+        this.currentFile = null;
+        this.goalIds = [];
+        this.lastLoadedMtime = null;
+        this.lastClassification = null;
+        this.lastLoadedAt = null;
+        this.lastInvisibleGoalCount = 0;
+      }
 
       piggybackVersionFromResponses({
         state: this,
@@ -368,7 +416,7 @@ export class AgdaSession {
   /** Get the current high-level session phase. */
   getPhase(): SessionPhase {
     return deriveSessionPhase({
-      hasProcess: this.proc !== null && this.proc.exitCode === null && !this.proc.killed,
+      hasProcess: this.proc !== null && isProcLive(this.proc),
       hasLoadedFile: this.currentFile !== null,
       isCollecting: this.collecting,
       isExiting: this.exiting,

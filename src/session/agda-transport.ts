@@ -144,6 +144,12 @@ export class AgdaTransport {
         // when a command times out, so we don't leave a zombie burning
         // CPU and memory until the session is explicitly destroyed.
         terminateAgdaProcess(proc);
+        // Clear any partial stdout we accumulated from the dying
+        // process. If we left it, the first line emitted by the
+        // respawned Agda would be concatenated onto stale partial
+        // output and either dropped or misparsed by `drainBuffer`.
+        // See Copilot review comment on PR #56.
+        this.buffer = "";
         finish(() => {
           resolveCmd([...this.responseQueue]);
         });

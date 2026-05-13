@@ -23,6 +23,18 @@ and this project follows [Semantic Versioning](https://semver.org/).
   `ensureProcess()` call respawns a fresh Agda, and the tool-level UX
   falls back to the existing "No file loaded. Call agda_load first."
   surface that crashes already use. No tool API changes.
+- **Programmatic-embedding API change: `AgdaSession.destroy()` is
+  now async (`Promise<void>` instead of `void`).** Synchronous state
+  cleanup still happens before the returned Promise so fire-and-forget
+  callers see fully reset state immediately. Embedders running in a
+  shutdown path (signal handlers, test fixtures that pipe Agda
+  through and then `process.exit()`) MUST `await session.destroy()`
+  before exiting — otherwise the unref'd SIGKILL escalation inside
+  `terminateAgdaProcess` is truncated and a SIGTERM-ignoring Agda
+  child can survive shutdown. The MCP server's own SIGINT/SIGTERM
+  handlers in `src/index.ts` were updated accordingly and are also
+  now idempotent (a second signal during teardown re-uses the first
+  shutdown Promise rather than racing the unref'd timer).
 - **Structured-output rollout is non-breaking but visible** — every
   text-only tool that previously emitted `data: { text }` now ships a
   richer payload (e.g. `data: { text, solutions, rawSolutions,

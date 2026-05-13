@@ -208,9 +208,7 @@ Good fixture categories:
   sub-modules (the established pattern is free functions in a sibling
   file that mutate session/state references — see
   `session-load-impl.ts` and `session-process-lifecycle.ts`) rather
-  than patching the over-budget file. This applies to test files too:
-  a 700-line test file is a sign the suite covers too many concerns
-  and should be split by feature.
+  than patching the over-budget file.
 - Keep `src/tools/` thin; move reusable logic into `src/agda/`, `src/session/`,
   `src/protocol/`, or `src/reporting/` as appropriate.
 - Prefer `zod` v4 APIs. The repo now targets Zod 4 directly.

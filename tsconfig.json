@@ -8,6 +8,7 @@
     "strict": true,
     "esModuleInterop": true,
     "declaration": true,
+    "stripInternal": true,
     "sourceMap": true,
     "skipLibCheck": true,
     "types": ["node"]
