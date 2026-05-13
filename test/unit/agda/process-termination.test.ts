@@ -8,7 +8,7 @@
 // memory from the timed-out MCP path." These tests cover the helper
 // that closes that gap. We use plain `node` subprocesses rather
 // than real Agda so the cases run anywhere `node` exists and we can
-// script SIGTERM-ignoring behaviour explicitly.
+// script SIGTERM-ignoring behavior explicitly.
 //
 // The scenarios that matter:
 //   1. SIGTERM-honouring child  → exits cleanly within the grace
@@ -17,7 +17,7 @@
 //      child after the grace window expires.
 //   3. Already-exited process   → idempotent no-op.
 //   4. Escalation timer        → `.unref()` is actually invoked,
-//      asserted via a spy (not via observed event-loop behaviour,
+//      asserted via a spy (not via observed event-loop behavior,
 //      which would silently pass if the call were dropped).
 
 import { describe, test, expect, vi } from "vitest";
@@ -110,7 +110,7 @@ describe("terminateAgdaProcess", () => {
   });
 
   test("escalation timer is unref()'d so it doesn't keep node alive", () => {
-    // We don't observe event-loop behaviour here — a regression
+    // We don't observe event-loop behavior here — a regression
     // where someone deletes `.unref()` would silently pass that
     // observational test because the awaited `close` event already
     // keeps the loop alive. Instead, wrap setTimeout so we can

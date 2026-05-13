@@ -53,19 +53,9 @@ export class AgdaTransport {
     this.emitter.emit("error", error);
   }
 
-  /**
-   * Reset transport state and unblock any in-flight `sendCommand`.
-   *
-   * Emitting `"error"` on the shared emitter is critical: when
-   * `AgdaSession.destroy()` is called while a command is in flight,
-   * the proc listeners are detached *before* termination, so the
-   * subprocess's eventual `close` event never reaches the emitter
-   * and the command's `done` listener never fires. Without this
-   * emission the caller would wait for the original per-command
-   * timeout (default 120s) before observing the shutdown. We guard
-   * with `listenerCount` because EventEmitter throws on an
-   * unhandled `"error"` emission when no listener is registered.
-   */
+  /** Reset transport state and unblock any in-flight `sendCommand`
+   *  so a caller invoking `session.destroy()` mid-command isn't
+   *  stuck waiting for the per-command timeout. */
   destroy(): void {
     this.clearIdleCompletionTimer();
     this.buffer = "";
@@ -74,11 +64,15 @@ export class AgdaTransport {
     this.sawStatusDone = false;
     this.lastResponseAt = null;
     this.lastResponseKind = null;
+    this.rejectInFlightCommand("AgdaTransport destroyed while command was in flight");
+  }
+
+  /** Emit `"error"` on the shared emitter so any active `sendCommand`
+   *  Promise rejects promptly. `listenerCount` guards EventEmitter's
+   *  "unhandled error" throw when no command is in flight. */
+  private rejectInFlightCommand(reason: string): void {
     if (this.emitter.listenerCount("error") > 0) {
-      this.emitter.emit(
-        "error",
-        new Error("AgdaTransport destroyed while command was in flight"),
-      );
+      this.emitter.emit("error", new Error(reason));
     }
   }
 
@@ -90,6 +84,10 @@ export class AgdaTransport {
     logger.trace("sendCommand", { command: command.slice(0, 200), timeoutMs });
     const startTime = Date.now();
 
+    // Clear the buffer at command start so any late stdout from a
+    // killed-but-not-yet-detached predecessor process cannot be
+    // concatenated with the first JSON line from a replacement Agda.
+    this.buffer = "";
     this.responseQueue = [];
     this.collecting = true;
     this.sawStatusDone = false;
@@ -127,31 +125,28 @@ export class AgdaTransport {
       };
 
       const timeout = setTimeout(() => {
+        const responseCount = this.responseQueue.length;
+        const responseKinds = summarizeResponseKinds(this.responseQueue);
         logger.warn("sendCommand timed out", {
           command: command.slice(0, 100),
           timeoutMs,
-          responseCount: this.responseQueue.length,
+          responseCount,
           sawStatusDone: this.sawStatusDone,
           elapsedMs: Date.now() - startTime,
           msSinceLastResponse: this.lastResponseAt === null
             ? null
             : Date.now() - this.lastResponseAt,
           lastResponseKind: this.lastResponseKind,
-          responseKinds: summarizeResponseKinds(this.responseQueue),
+          responseKinds,
           responseTail: tailResponsePreview(this.responseQueue),
         });
-        // Resource leak fix (0.6.7): ensure the subprocess is killed
-        // when a command times out, so we don't leave a zombie burning
-        // CPU and memory until the session is explicitly destroyed.
         terminateAgdaProcess(proc);
-        // Clear any partial stdout we accumulated from the dying
-        // process. If we left it, the first line emitted by the
-        // respawned Agda would be concatenated onto stale partial
-        // output and either dropped or misparsed by `drainBuffer`.
-        // See Copilot review comment on PR #56.
         this.buffer = "";
         finish(() => {
-          resolveCmd([...this.responseQueue]);
+          rejectCmd(new Error(
+            `sendCommand timed out after ${timeoutMs}ms ` +
+            `(received ${responseCount} responses: ${JSON.stringify(responseKinds)})`,
+          ));
         });
       }, timeoutMs);
 

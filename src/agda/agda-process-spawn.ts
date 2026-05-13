@@ -39,64 +39,37 @@ export interface SpawnedAgdaProcess {
   detachListeners(): void;
 }
 
-/**
- * Default grace period between SIGTERM and the SIGKILL fallback in
- * `terminateAgdaProcess`. Agda usually exits within a few hundred
- * ms after SIGTERM; 3 seconds is conservative enough for slow CI
- * machines without being so long that a wedged process keeps
- * burning CPU.
- */
+/** Grace period (ms) between SIGTERM and the SIGKILL fallback. */
 export const DEFAULT_TERMINATE_GRACE_MS = 3_000;
 
-/**
- * Send a graceful SIGTERM to an Agda subprocess, then escalate to
- * SIGKILL if it has not exited within `graceMs`. Safe to call on a
- * process that has already exited (no-op) or that was already
- * killed (only the SIGKILL fallback runs).
- *
- * The fallback timer is `unref()`'d so a wedged child does not keep
- * the Node event loop alive past the rest of the program's work.
- *
- * Called from:
- *   - `AgdaTransport.sendCommand` on per-command timeout (was a leak
- *     before 0.6.7 — the timeout resolved the Promise without
- *     killing the child, so a hung type-check kept burning CPU and
- *     memory after the MCP tool returned).
- *   - `AgdaSession.destroy` so a SIGTERM that the process ignores
- *     still results in cleanup at server shutdown.
- *   - `AgdaSession.ensureProcess` when it detects a stale handle
- *     before respawning.
- */
+/** SIGTERM the proc, then SIGKILL after `graceMs` if it hasn't exited.
+ *  Idempotent on already-exited or already-killed handles. The
+ *  escalation timer is `unref()`'d so it doesn't keep Node alive. */
 export function terminateAgdaProcess(
   proc: ChildProcess,
   options: { graceMs?: number } = {},
 ): void {
-  if (proc.exitCode !== null || proc.signalCode !== null) {
-    return;
-  }
+  if (procAlreadyExited(proc)) return;
 
   if (!proc.killed) {
     try {
       proc.kill("SIGTERM");
     } catch {
-      // ESRCH: process already gone between our exitCode check and
-      // the kill syscall. Nothing left to do.
-      return;
+      return; // ESRCH: process gone between the check and the syscall
     }
   }
 
-  const graceMs = options.graceMs ?? DEFAULT_TERMINATE_GRACE_MS;
   const escalation = setTimeout(() => {
-    if (proc.exitCode === null && proc.signalCode === null) {
-      try {
-        proc.kill("SIGKILL");
-      } catch {
-        // already gone — fine.
-      }
+    if (!procAlreadyExited(proc)) {
+      try { proc.kill("SIGKILL"); } catch { /* already gone */ }
     }
-  }, graceMs);
+  }, options.graceMs ?? DEFAULT_TERMINATE_GRACE_MS);
   escalation.unref();
   proc.once("close", () => clearTimeout(escalation));
+}
+
+function procAlreadyExited(proc: ChildProcess): boolean {
+  return proc.exitCode !== null || proc.signalCode !== null;
 }
 
 /**

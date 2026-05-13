@@ -69,8 +69,10 @@ and this project follows [Semantic Versioning](https://semver.org/).
   in `ARCHITECTURE.md`) so each concern stays cohesive. The pattern
   mirrors the existing `session-load-impl.ts`: free functions that
   take an `AgdaSession` reference and mutate its module-internal
-  state. No public-API change — `AgdaSession.ensureProcess` and
-  `AgdaSession.destroy` still exist as methods and delegate inward.
+  state. Method names on `AgdaSession` are unchanged — `ensureProcess`
+  and `destroy` still exist and delegate inward — but
+  **`destroy()`'s contract did change**: it now returns
+  `Promise<void>` instead of `void` (see "Notes for upgraders").
   The 500-line ceiling is now also documented in `AGENTS.md`.
 - **Resource-cleanup regression tests** in
   `test/unit/agda/process-termination.test.ts` (SIGKILL escalation

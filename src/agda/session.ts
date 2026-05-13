@@ -39,9 +39,12 @@ import type {
 import { type AgdaVersion } from "./agda-version.js";
 import { findAgdaBinary } from "./binary-discovery.js";
 import {
+  assertProcSurvivedPreflight,
+  assertSessionAlive,
   destroySessionProcess,
   ensureProcessForSession,
   isProcLive,
+  resetFileBoundStateIfProcDied,
 } from "./session-process-lifecycle.js";
 import {
   piggybackVersionFromResponses,
@@ -127,6 +130,15 @@ export class AgdaSession {
    * @internal
    */
   destroyed = false;
+  /**
+   * Cached Promise from the first `destroy()` call. Concurrent
+   * destroys (a second signal mid-shutdown, or a programmatic
+   * embedder racing the SIGINT handler) attach to this Promise
+   * instead of synchronously resolving after `proc` was nulled but
+   * before the child actually exited.
+   * @internal
+   */
+  teardownPromise: Promise<void> | null = null;
   readonly goal;
   readonly expr;
   readonly query;
@@ -180,20 +192,11 @@ export class AgdaSession {
     timeoutMs = configuredCommandTimeoutMs(),
   ): Promise<AgdaResponse[]> {
     const task = this.commandQueue.then(async () => {
-      // Guard against tasks queued before `destroy()` flipped the
-      // flag: without this, a queued sendCommand could call
-      // `ensureProcess()` and spawn a fresh Agda just as shutdown
-      // is awaiting the previous proc's exit.
-      if (this.destroyed) {
-        throw new Error("AgdaSession is destroyed; cannot send new commands");
-      }
+      assertSessionAlive(this);
 
       const proc = this.ensureProcess();
+      const fileAtStart = this.currentFile;
 
-      // Detect Agda version inline before the user command (or
-      // piggyback off it when the command itself queries the
-      // version). Both helpers are best-effort: a failed attempt
-      // consumes a slot but never blocks the user command.
       await preflightVersionDetection({
         state: this,
         transport: this.transport,
@@ -202,34 +205,14 @@ export class AgdaSession {
         userCommand: command,
       });
 
-      // Re-acquire a healthy proc handle after preflight: a timeout
-      // inside `preflightVersionDetection` calls `terminateAgdaProcess`
-      // on the shared child but resolves normally, so the `proc`
-      // captured above can be dying. `ensureProcess()` will detect
-      // the `.killed` state and respawn before we send the user's
-      // command — otherwise the user's first command would write
-      // into the dead process and hit another timeout.
-      const liveProc = this.ensureProcess();
+      assertSessionAlive(this);
+      assertProcSurvivedPreflight(this, proc, fileAtStart);
 
-      const responses = await this.transport.sendCommand(liveProc, command, timeoutMs);
-
-      // If the timeout killed this proc, reset every field that
-      // depends on the live Agda process. Without this, a follow-up
-      // tool (e.g. `agda_goal_context`) would: pass `requireFile()`
-      // because `currentFile` is still set, build an IOTCM string
-      // against that path, hand it to `sendCommand` — which then
-      // calls `ensureProcess()`, spawns a fresh Agda with no file
-      // loaded, and sends the stale envelope into it. Resetting
-      // here ensures the next caller sees a clean "No file loaded.
-      // Call agda_load first." surface instead. See Copilot review
-      // comment on PR #56 (session.ts:184).
-      if (!isProcLive(liveProc)) {
-        this.currentFile = null;
-        this.goalIds = [];
-        this.lastLoadedMtime = null;
-        this.lastClassification = null;
-        this.lastLoadedAt = null;
-        this.lastInvisibleGoalCount = 0;
+      let responses: AgdaResponse[];
+      try {
+        responses = await this.transport.sendCommand(proc, command, timeoutMs);
+      } finally {
+        resetFileBoundStateIfProcDied(this, proc);
       }
 
       piggybackVersionFromResponses({

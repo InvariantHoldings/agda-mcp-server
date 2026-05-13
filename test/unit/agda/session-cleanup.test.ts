@@ -190,6 +190,72 @@ describe("AgdaSession: process-close cleanup", () => {
     }
   });
 
+  test("concurrent destroy() calls share the in-flight teardown Promise", async () => {
+    // A second SIGTERM during the first destroy()'s await must NOT
+    // resolve immediately just because session.proc was already
+    // nulled — both shutdown paths must observe the same termination.
+    const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-session-test-"));
+    try {
+      const session = new AgdaSession(repoRoot);
+
+      let resolveClose: (() => void) | null = null;
+      const closeListeners: Array<() => void> = [];
+      const fakeProc = {
+        exitCode: null as number | null,
+        signalCode: null as NodeJS.Signals | null,
+        killed: false,
+        kill() { this.killed = true; this.exitCode = 143; return true; },
+        once(event: string, listener: () => void) {
+          if (event === "close") closeListeners.push(listener);
+          return this as unknown as ChildProcess;
+        },
+        off(_event: string, _listener: () => void) {
+          return this as unknown as ChildProcess;
+        },
+      };
+      session.proc = fakeProc as unknown as ChildProcess;
+      session.detachProcListeners = () => { /* noop */ };
+      resolveClose = () => closeListeners.splice(0).forEach((fn) => fn());
+
+      const first = session.destroy();
+      const second = session.destroy();
+
+      // Both calls must return the same Promise — neither resolves
+      // before the child actually closes.
+      expect(second).toBe(first);
+
+      let firstSettled = false;
+      let secondSettled = false;
+      void first.then(() => { firstSettled = true; });
+      void second.then(() => { secondSettled = true; });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(firstSettled).toBe(false);
+      expect(secondSettled).toBe(false);
+
+      resolveClose();
+      await first;
+      expect(firstSettled).toBe(true);
+      expect(secondSettled).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("ensureProcess refuses to spawn after destroy()", async () => {
+    // Without this guard, an external caller could call ensureProcess()
+    // after destroy() and spawn a fresh Agda that sendCommand would
+    // never use (since it now rejects on `destroyed`) — reintroducing
+    // the leak via a side door.
+    const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-session-test-"));
+    try {
+      const session = new AgdaSession(repoRoot);
+      await session.destroy();
+      expect(() => session.ensureProcess()).toThrow(/AgdaSession is destroyed/);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   test("destroy releases libraryRegistration when no prior close fired", async () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-session-test-"));
     try {

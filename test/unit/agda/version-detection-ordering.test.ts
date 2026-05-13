@@ -226,69 +226,28 @@ test("no pre-flight when user command is Cmd_show_version — version piggybacke
   session.destroy();
 });
 
-// ── Preflight respawn guard (0.6.7 Copilot review fix) ────────────────────
+// ── Preflight respawn guard (PR #56 Copilot review) ───────────────────────
 
-test("sendCommand respawns the proc when the preflight version probe killed it", async () => {
-  // Regression for Copilot review comments on PR #56: `sendCommand`
-  // is also used internally by `preflightVersionDetection`. When the
-  // preflight times out, `terminateAgdaProcess` kills the shared
-  // child but `preflightVersionDetection` resolves normally and
-  // `AgdaSession.sendCommand` used to pass the (now dying) `proc`
-  // straight to the user-command call. The fix calls `ensureProcess()`
-  // a SECOND time between the preflight and the user command so the
-  // killed-but-not-yet-closed proc is detected via `.killed` and
-  // respawned.
-  //
-  // The first version of this test just counted `ensureProcess`
-  // calls and passed for any implementation that called it twice,
-  // even one that did nothing meaningful with the result. This
-  // version actually exercises the killed-proc path:
-  //   - First `ensureProcess` returns `dyingProc`.
-  //   - Preflight transport call sets `dyingProc.killed = true`
-  //     (simulating `terminateAgdaProcess` from a timeout).
-  //   - Second `ensureProcess` must return a DIFFERENT proc
-  //     (`freshProc`), and the user command must be sent to that
-  //     fresh proc, not the dying one.
+test("sendCommand rejects the user command when the preflight version probe killed the proc", async () => {
+  // The user's IOTCM envelope was built BEFORE preflight ran (e.g.
+  // `goalTypeContext` builds it inline with `ctx.sendCommand(...)`),
+  // so its file path and goal IDs reference the previous process.
+  // Sending it to a respawned Agda would either trip "No file loaded"
+  // or target stale interaction IDs in the new process. Reject instead.
   const session = new AgdaSession(process.cwd());
-  const dyingProc = { exitCode: null, signalCode: null, killed: false } as unknown as ChildProcess & {
-    killed: boolean;
-  };
-  const freshProc = { exitCode: null, signalCode: null, killed: false } as unknown as ChildProcess;
-
-  let ensureCalls = 0;
-  session.ensureProcess = () => {
-    ensureCalls += 1;
-    // First call (start of sendCommand) → dyingProc. Subsequent
-    // calls (re-acquire after preflight) → freshProc.
-    return ensureCalls === 1 ? dyingProc : freshProc;
-  };
-
-  const sendCommandCalls: Array<{ proc: ChildProcess; command: string }> = [];
-  session["transport"].sendCommand = (async (proc: ChildProcess, command: string) => {
-    sendCommandCalls.push({ proc, command });
+  const dyingProc = { exitCode: null, signalCode: null, killed: false } as unknown as ChildProcess;
+  session.ensureProcess = () => dyingProc;
+  session["transport"].sendCommand = (async (_proc: ChildProcess, command: string) => {
     if (command.includes("Cmd_show_version")) {
-      // Simulate a preflight timeout: terminate the proc (set
-      // .killed) and resolve with empty responses, mirroring the
-      // observable behaviour of `AgdaTransport.sendCommand`'s
-      // timeout branch after the v0.6.7 leak fix.
-      (dyingProc as { killed: boolean }).killed = true;
-      return [];
+      (dyingProc as unknown as { killed: boolean }).killed = true;
+      throw new Error("simulated preflight timeout");
     }
     return [{ kind: "Status" }];
   }) as any;
 
-  await session.sendCommand("IOTCM cmd1");
-
-  // ensureProcess called twice: initial + re-acquire after preflight.
-  expect(ensureCalls).toBe(2);
-
-  // The user command must be sent to `freshProc`, NOT `dyingProc`.
-  const userCall = sendCommandCalls.find((c) => !c.command.includes("Cmd_show_version"));
-  expect(userCall).toBeDefined();
-  expect(userCall!.proc).toBe(freshProc);
-  // And the preflight call WAS the one sent to the dying proc.
-  const preflightCall = sendCommandCalls.find((c) => c.command.includes("Cmd_show_version"));
-  expect(preflightCall!.proc).toBe(dyingProc);
+  await expect(session.sendCommand("IOTCM cmd1")).rejects.toThrow(
+    /Agda subprocess was replaced during version preflight/,
+  );
 
   session.destroy();
 });
@@ -321,20 +280,8 @@ test("subsequent non-version commands don't re-run detection after successful pi
 // ── Stale-currentFile guard after a per-command timeout (PR #56) ──────────
 
 test("a timeout that kills the proc resets currentFile so the next caller sees 'No file loaded'", async () => {
-  // Regression for Copilot review comment on PR #56: when a
-  // per-command timeout in `AgdaTransport.sendCommand` kills the
-  // subprocess, the session previously kept its `currentFile` and
-  // related goal state. A follow-up command (e.g. `goalTypeContext`,
-  // which calls `requireFile()` then builds the IOTCM string from
-  // `currentFile` BEFORE handing it to `sendCommand`) would pass the
-  // file-loaded check, build a stale envelope against the dead file,
-  // and `sendCommand` would respawn a fresh Agda inside
-  // `ensureProcess()` and forward the stale envelope into it.
-  // The fix: reset every file-bound field when we detect that the
-  // proc died during the command.
   const session = new AgdaSession(process.cwd());
 
-  // Seed loaded-file state the way a successful `load()` would.
   session.currentFile = "/tmp/Stale.agda";
   session.goalIds = [0, 1];
   session.lastLoadedMtime = 12345;
@@ -344,14 +291,19 @@ test("a timeout that kills the proc resets currentFile so the next caller sees '
 
   const dyingProc = { exitCode: null, signalCode: null, killed: false } as unknown as ChildProcess;
   session.ensureProcess = () => dyingProc;
-  // Mimic the post-fix `AgdaTransport.sendCommand` timeout branch:
-  // flip `proc.killed` and resolve with the partial responses bag.
-  session["transport"].sendCommand = (async () => {
+  // Preflight succeeds; the USER command times out (matches the new
+  // contract that timeouts reject the Promise) and marks the proc killed.
+  session["transport"].sendCommand = (async (_proc: ChildProcess, command: string) => {
+    if (command.includes("Cmd_show_version")) {
+      return [{ kind: "DisplayInfo", info: { kind: "Version", version: "Agda version 2.9.0" } }];
+    }
     (dyingProc as unknown as { killed: boolean }).killed = true;
-    return [];
+    throw new Error("sendCommand timed out after 25ms (received 0 responses: {})");
   }) as any;
 
-  await session.sendCommand("IOTCM cmd_that_times_out");
+  await expect(session.sendCommand("IOTCM cmd_that_times_out")).rejects.toThrow(
+    /sendCommand timed out/,
+  );
 
   expect(session.getLoadedFile()).toBeNull();
   expect(session.getGoalIds()).toEqual([]);
