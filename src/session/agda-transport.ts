@@ -33,11 +33,32 @@ export class ControlCommandInterruption extends Error {
   }
 }
 
+/** Response kinds that belong exclusively to the control-command
+ *  protocol path (`Cmd_abort` / `Cmd_exit`). Used to filter late
+ *  echoes that arrive AFTER the fire-and-forget flush window closed
+ *  but BEFORE the next regular `sendCommand` has settled — without
+ *  this filter, a delayed `DoneAborting` would otherwise land in the
+ *  next regular command's response queue (or trip its idle-completion
+ *  timer) and corrupt it. */
+const CONTROL_RESPONSE_KINDS: ReadonlySet<string> = new Set([
+  "DoneAborting",
+  "DoneExiting",
+]);
+
+/** Default budget after which `sendFireAndForgetCommand` terminates a
+ *  proc that hasn't acknowledged the control command. Catches wedged
+ *  Agda processes that can't service `Cmd_abort` / `Cmd_exit` — the
+ *  original `sendCommand`'s per-command timeout was cancelled by the
+ *  `rejectInFlightCommand` interrupt, so without this fallback nothing
+ *  would reap the child. Overridable per-call. */
+const DEFAULT_CONTROL_ESCALATION_MS = 5_000;
+
 export class AgdaTransport {
   buffer = "";
   responseQueue: AgdaResponse[] = [];
   emitter = new EventEmitter();
   collecting = false;
+  private currentCommandKind: "regular" | "control" | null = null;
   private sawStatusDone = false;
   private idleDoneTimer: NodeJS.Timeout | null = null;
   private lastResponseAt: number | null = null;
@@ -84,6 +105,7 @@ export class AgdaTransport {
     this.buffer = "";
     this.responseQueue = [];
     this.collecting = false;
+    this.currentCommandKind = null;
     this.sawStatusDone = false;
     this.lastResponseAt = null;
     this.lastResponseKind = null;
@@ -125,9 +147,15 @@ export class AgdaTransport {
   sendFireAndForgetCommand(
     proc: ChildProcess,
     command: string,
-    flushMs = 250,
+    options: { flushMs?: number; escalationMs?: number } = {},
   ): Promise<AgdaResponse[]> {
-    logger.trace("sendFireAndForgetCommand", { command: command.slice(0, 200), flushMs });
+    const flushMs = options.flushMs ?? 250;
+    const escalationMs = options.escalationMs ?? DEFAULT_CONTROL_ESCALATION_MS;
+    logger.trace("sendFireAndForgetCommand", {
+      command: command.slice(0, 200),
+      flushMs,
+      escalationMs,
+    });
     // If a regular `sendCommand` is in flight, interrupt it before
     // we clobber the shared `buffer`/`responseQueue`/`collecting`
     // state — the in-flight command's responses would otherwise be
@@ -139,9 +167,39 @@ export class AgdaTransport {
     this.buffer = "";
     this.responseQueue = [];
     this.collecting = true;
+    this.currentCommandKind = "control";
     this.sawStatusDone = false;
     this.lastResponseAt = null;
     this.lastResponseKind = null;
+
+    // Kill-escalation fallback for a wedged Agda that fails to
+    // service the control command. The original sendCommand's
+    // per-command timeout was just cancelled by `rejectInFlightCommand`
+    // above; without this timer nothing reaps the child if the abort
+    // also gets ignored (the original report behind this PR was
+    // *exactly* a wedged proc burning CPU after a timed-out call).
+    // The timer is `unref()`'d so it never blocks Node exit, and is
+    // cleared on `close` so a healthy abort/exit doesn't kick a
+    // proc that has already terminated normally.
+    const escalation = escalationMs > 0
+      ? setTimeout(() => {
+          if (proc.exitCode === null && proc.signalCode === null) {
+            logger.warn("Control command not acknowledged; terminating proc", {
+              command: command.slice(0, 120),
+              escalationMs,
+            });
+            terminateAgdaProcess(proc);
+          }
+        }, escalationMs)
+      : null;
+    escalation?.unref();
+    // Optional chaining: production `ChildProcess` always exposes
+    // `once`, but the transport unit tests pass minimal mock procs
+    // that don't, and we'd rather not crash the production code
+    // path defensively from a fake-proc shape.
+    proc.once?.("close", () => {
+      if (escalation) clearTimeout(escalation);
+    });
 
     return new Promise<AgdaResponse[]>((resolve) => {
       const settle = () => {
@@ -179,6 +237,7 @@ export class AgdaTransport {
     this.buffer = "";
     this.responseQueue = [];
     this.collecting = true;
+    this.currentCommandKind = "regular";
     this.sawStatusDone = false;
     this.lastResponseAt = null;
     this.lastResponseKind = null;
@@ -308,6 +367,25 @@ export class AgdaTransport {
 
   private recordCollectedResponse(response: AgdaResponse): void {
     if (!this.collecting) {
+      return;
+    }
+
+    // Drop late control-command echoes that arrive after our flush
+    // window closed but before the next regular command settled.
+    // `DoneAborting` / `DoneExiting` belong exclusively to the
+    // `Cmd_abort` / `Cmd_exit` path; collecting them into a regular
+    // command's queue corrupts the response set (and would trip the
+    // idle-completion timer's heuristics). The kind check is
+    // necessary because Agda gives us no per-command tag on
+    // responses — once they're on stdout, only the kind tells us
+    // which command they belong to.
+    if (
+      this.currentCommandKind === "regular" &&
+      CONTROL_RESPONSE_KINDS.has(response.kind)
+    ) {
+      logger.trace("Dropped late control-command echo during regular command", {
+        kind: response.kind,
+      });
       return;
     }
 

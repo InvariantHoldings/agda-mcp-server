@@ -189,24 +189,47 @@ export function destroySessionProcess(session: AgdaSession): Promise<void> {
   session.destroyed = true;
 
   const proc = session.proc;
+  // Attach the teardown-time close watcher BEFORE detaching the
+  // spawn-time listener, so the close event can never fall into the
+  // gap between detach and attach. EventEmitter accepts multiple
+  // listeners on the same event; while both are attached the
+  // spawn-time handler's identity guard noops if session.proc is
+  // already null. `armProcExitWaiter` also handles the case where
+  // the proc has ALREADY exited at this point — it resolves
+  // immediately rather than waiting for a close event that will
+  // never fire.
+  const teardownPromise = proc
+    ? armProcExitWaiter(proc, DEFAULT_TERMINATE_GRACE_MS + 1_000)
+    : Promise.resolve();
   if (proc) {
     session.detachProcListeners?.();
     session.detachProcListeners = null;
     session.proc = null;
+    terminateAgdaProcess(proc);
   }
   freeLibraryRegistration(session);
   resetProcBoundState(session);
   session.transport.destroy();
   session.commandQueue = Promise.resolve();
 
-  session.teardownPromise = proc
-    ? waitForProcExit(proc, DEFAULT_TERMINATE_GRACE_MS + 1_000)
-    : Promise.resolve();
-  return session.teardownPromise;
+  session.teardownPromise = teardownPromise;
+  return teardownPromise;
 }
 
-function waitForProcExit(proc: ChildProcess, hardTimeoutMs: number): Promise<void> {
+/** Resolve when `proc` closes, or after `hardTimeoutMs` ms.
+ *
+ *  MUST attach the close listener synchronously on entry so it is
+ *  in place before the caller detaches the spawn-time listeners
+ *  (otherwise the close event lands in the gap between detach and
+ *  attach, the `once` listener never fires, and we wait the full
+ *  hard-timeout budget). If `proc` has already exited at entry,
+ *  resolves on the next tick — no listener to attach. */
+function armProcExitWaiter(proc: ChildProcess, hardTimeoutMs: number): Promise<void> {
   return new Promise<void>((resolve) => {
+    if (proc.exitCode !== null || proc.signalCode !== null) {
+      resolve();
+      return;
+    }
     const onClose = (): void => {
       clearTimeout(hardTimeout);
       resolve();
@@ -216,7 +239,6 @@ function waitForProcExit(proc: ChildProcess, hardTimeoutMs: number): Promise<voi
       proc.off("close", onClose);
       resolve();
     }, hardTimeoutMs);
-    terminateAgdaProcess(proc);
   });
 }
 

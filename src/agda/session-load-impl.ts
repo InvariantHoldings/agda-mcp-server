@@ -268,9 +268,15 @@ export async function runLoad(
     // `currentFile` and friends, but the suppressed `catch` above let
     // execution continue. Returning a success envelope at that point
     // would mis-report the session as loaded against a dead process.
-    // Surface the failure so the agent re-issues `agda_load`.
+    // Surface the failure so the agent re-issues `agda_load`, AND
+    // record the classification on the session — the public contract
+    // for `getLastClassification()` is "set on every load attempt,"
+    // and this early return must not be an exception.
     if (session.currentFile !== absPath) {
-      return loadFailedAfterReconciliation(absPath, parsed.warnings, parsed.profiling);
+      const result = loadFailedAfterReconciliation(absPath, parsed.warnings, parsed.profiling);
+      session.lastClassification = result.classification;
+      session.lastLoadedAt = Date.now();
+      return result;
     }
   }
 

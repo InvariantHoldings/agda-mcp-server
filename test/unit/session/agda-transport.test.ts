@@ -159,7 +159,7 @@ test("sendFireAndForgetCommand interrupts an in-flight sendCommand by rejecting 
   const fireResult = transport.sendFireAndForgetCommand(
     proc,
     "IOTCM \"x\" NonInteractive Direct (Cmd_abort)",
-    50,
+    { flushMs: 50, escalationMs: 0 },
   );
 
   await expect(pending).rejects.toThrow(/Interrupted by Agda control command/);
@@ -181,7 +181,7 @@ test("sendFireAndForgetCommand resolves (not rejects) when the transport emitter
     stdin: { write() { /* discard */ } },
   } as unknown as ChildProcess;
 
-  const pending = transport.sendFireAndForgetCommand(proc, "IOTCM control", 50);
+  const pending = transport.sendFireAndForgetCommand(proc, "IOTCM control", { flushMs: 50, escalationMs: 0 });
 
   // Yield so the listener is registered before we emit.
   await Promise.resolve();
@@ -194,6 +194,137 @@ test("sendFireAndForgetCommand resolves (not rejects) when the transport emitter
   const startedAt = Date.now();
   await expect(pending).resolves.toEqual([]);
   expect(Date.now() - startedAt).toBeLessThan(40);
+});
+
+test("sendFireAndForgetCommand terminates a wedged proc that never acknowledges the control command", async () => {
+  // Regression for Copilot review on PR #56 (round 9 J1 —
+  // `session-command-dispatch.ts:109`): rejecting the in-flight
+  // sendCommand cancelled its per-command kill-on-timeout, but the
+  // follow-up fire-and-forget control command only waited a short
+  // flush window. A wedged Agda that fails to service Cmd_abort /
+  // Cmd_exit would then have nothing reap it, leaving the same
+  // CPU-burning subprocess alive — exactly the leak this PR is
+  // meant to close. The fix arms a kill-escalation timer that
+  // calls terminateAgdaProcess after `escalationMs` if the proc
+  // hasn't exited.
+  const transport = new AgdaTransport();
+  const killSignals: Array<NodeJS.Signals | number | undefined> = [];
+
+  const proc: Partial<ChildProcess> & {
+    stdin: { write(): void };
+    once(event: string, listener: (...args: unknown[]) => void): unknown;
+    kill(signal?: NodeJS.Signals | number): boolean;
+  } = {
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    stdin: { write() { /* never delivers a response — proc is wedged */ } },
+    once(_event: string, _listener: (...args: unknown[]) => void) {
+      return proc as unknown as ChildProcess;
+    },
+    kill(signal?: NodeJS.Signals | number) {
+      killSignals.push(signal);
+      (proc as { killed: boolean }).killed = true;
+      return true;
+    },
+  };
+
+  await transport.sendFireAndForgetCommand(
+    proc as unknown as ChildProcess,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_abort)",
+    { flushMs: 30, escalationMs: 60 },
+  );
+
+  // The Promise itself resolves promptly (after flushMs) — the
+  // tool layer must not wait on the wedged proc. But the
+  // escalation timer keeps running in the background.
+  expect(killSignals).toEqual([]);
+
+  // Wait long enough for the escalation to fire (escalationMs +
+  // a small buffer; the timer is unref'd but still runs).
+  await new Promise((resolve) => setTimeout(resolve, 120));
+
+  // SIGTERM should have been delivered to the wedged proc.
+  expect(killSignals).toContain("SIGTERM");
+});
+
+test("sendFireAndForgetCommand does NOT terminate a proc that exits cleanly during the escalation budget", async () => {
+  const transport = new AgdaTransport();
+  const killSignals: Array<NodeJS.Signals | number | undefined> = [];
+
+  let closeListener: (() => void) | null = null;
+  const proc: Partial<ChildProcess> & {
+    stdin: { write(): void };
+    once(event: string, listener: () => void): unknown;
+    kill(signal?: NodeJS.Signals | number): boolean;
+  } = {
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    stdin: { write() { /* discard */ } },
+    once(event: string, listener: () => void) {
+      if (event === "close") closeListener = listener;
+      return proc as unknown as ChildProcess;
+    },
+    kill(signal?: NodeJS.Signals | number) {
+      killSignals.push(signal);
+      return true;
+    },
+  };
+
+  await transport.sendFireAndForgetCommand(
+    proc as unknown as ChildProcess,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_exit)",
+    { flushMs: 20, escalationMs: 80 },
+  );
+
+  // Proc exits cleanly before the escalation budget.
+  (proc as { exitCode: number | null }).exitCode = 0;
+  closeListener?.();
+
+  await new Promise((resolve) => setTimeout(resolve, 120));
+
+  expect(killSignals).toEqual([]);
+});
+
+test("late DoneAborting echo arriving during a subsequent regular sendCommand does not corrupt its responseQueue", async () => {
+  // Regression for Copilot review on PR #56 (round 9 J2 —
+  // `agda-transport.ts:164`): after the fire-and-forget flush
+  // window closes a delayed DoneAborting / DoneExiting can still
+  // hit the stdout pipe. Without `currentCommandKind` filtering it
+  // would land in the NEXT regular command's responseQueue and
+  // either appear as a spurious response or trip idle completion
+  // for it. The fix drops control-only kinds (DoneAborting,
+  // DoneExiting) when the current command kind is "regular".
+  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
+    const transport = new AgdaTransport();
+    const proc = {
+      stdin: { write() {
+        // Inject a late DoneAborting before the legitimate response —
+        // simulates an echo that beat the regular command's first
+        // protocol message.
+        setTimeout(() => {
+          transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DoneAborting\"}\n"));
+        }, 0);
+        setTimeout(() => {
+          transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DisplayInfo\",\"info\":{\"kind\":\"CurrentGoal\",\"goal\":\"Nat\"}}\n"));
+        }, 5);
+        setTimeout(() => {
+          transport.handleStdout(Buffer.from("JSON> {\"kind\":\"Status\",\"status\":{\"checked\":false}}\n"));
+        }, 10);
+      } },
+    };
+
+    const responses = await transport.sendCommand(
+      proc as unknown as ChildProcess,
+      "IOTCM \"x\" NonInteractive Direct (Cmd_goal_type)",
+      200,
+    );
+
+    // DoneAborting must be filtered out — only the real responses
+    // should reach the caller.
+    expect(responses.map((r) => r.kind)).toEqual(["DisplayInfo", "Status"]);
+  });
 });
 
 test("handleStdout drops chunks that arrive while not collecting", () => {

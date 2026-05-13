@@ -241,6 +241,48 @@ describe("AgdaSession: process-close cleanup", () => {
     }
   });
 
+  test("destroy() resolves promptly when the proc already exited before destroy was called", async () => {
+    // Regression for Copilot review on PR #56 (round 9 J3 —
+    // `session-process-lifecycle.ts:203`): destroySessionProcess
+    // detached the spawn-time close listener BEFORE waitForProcExit
+    // attached its own replacement. If the child exited in that gap
+    // the close event was lost, and waitForProcExit then waited the
+    // full `DEFAULT_TERMINATE_GRACE_MS + 1_000` hard-timeout budget
+    // before resolving. The fix: armProcExitWaiter is called before
+    // the detach, AND it checks for an already-exited proc on entry
+    // so destroy resolves on the next tick when there is no close
+    // event coming.
+    const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-session-test-"));
+    try {
+      const session = new AgdaSession(repoRoot);
+
+      // Fake proc that has ALREADY exited at the moment destroy()
+      // runs — no close event will fire.
+      const fakeProc = {
+        exitCode: 0,
+        signalCode: null as NodeJS.Signals | null,
+        killed: true,
+        kill() { return true; },
+        once(_event: string, _listener: () => void) {
+          return this as unknown as ChildProcess;
+        },
+        off(_event: string, _listener: () => void) {
+          return this as unknown as ChildProcess;
+        },
+      };
+      session.proc = fakeProc as unknown as ChildProcess;
+      session.detachProcListeners = () => { /* noop */ };
+
+      const startedAt = Date.now();
+      await session.destroy();
+      // Without the fix this would wait the full grace+1000ms
+      // (~4000ms). With the fix it resolves on the next tick.
+      expect(Date.now() - startedAt).toBeLessThan(200);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   test("ensureProcess refuses to spawn after destroy()", async () => {
     // Without this guard, an external caller could call ensureProcess()
     // after destroy() and spawn a fresh Agda that sendCommand would

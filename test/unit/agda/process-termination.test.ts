@@ -22,7 +22,6 @@
 
 import { describe, test, expect, vi } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
-import { EventEmitter } from "node:events";
 
 import {
   DEFAULT_TERMINATE_GRACE_MS,

@@ -96,6 +96,58 @@ test("runLoad classifies explicit hole as ok-with-holes despite empty protocol g
   }
 });
 
+test("runLoad records lastClassification on the process-died-during-reconciliation early-return path", async () => {
+  // Regression for Copilot review on PR #56 (round 9 J6 —
+  // `session-load-impl.ts:273`): the early return when the metas
+  // reconciliation killed the proc bypassed the normal load-state
+  // update below. After `session.load()` returned
+  // `classification: "process-died-during-reconciliation"`,
+  // `session.getLastClassification()` was still whatever the
+  // proc-died reset left behind (null) — contradicting AgdaSession's
+  // documented contract that the most recent load classification is
+  // recorded for every load attempt. Session-status and
+  // recommendation tools would lose this failure reason. The fix
+  // sets `lastClassification`/`lastLoadedAt` before returning.
+  const root = makeTempRepo();
+  const file = "Reconcile.agda";
+  writeFileSync(resolve(root, file), "module Reconcile where\n", "utf8");
+
+  const session = {
+    repoRoot: root,
+    currentFile: null as string | null,
+    goalIds: [],
+    lastLoadedMtime: 0,
+    lastClassification: null as string | null,
+    lastLoadedAt: null as number | null,
+    lastInvisibleGoalCount: 0,
+    goal: {
+      metas: async () => {
+        // Mimic AgdaSession.sendCommand's behavior on a timeout
+        // that killed the proc: the `finally` block clears state.
+        (session as { currentFile: string | null }).currentFile = null;
+        (session as { lastClassification: string | null }).lastClassification = null;
+        (session as { lastLoadedAt: number | null }).lastLoadedAt = null;
+        throw new Error("sendCommand timed out after 60000ms (received 0 responses: {})");
+      },
+    },
+    sendCommand: async () => cleanLoadResponses(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, file);
+    expect(result.success).toBe(false);
+    expect(result.classification).toBe("process-died-during-reconciliation");
+
+    // The contract: lastClassification MUST mirror the returned result
+    // even on this early-return path. Without the fix it would be null.
+    expect(session.lastClassification).toBe("process-died-during-reconciliation");
+    expect(session.lastLoadedAt).not.toBeNull();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("runLoad reports failure when post-load metas reconciliation killed the proc", async () => {
   // Cmd_load succeeds, but the best-effort `metas()` reconciliation
   // times out and kills the Agda subprocess. `AgdaSession.sendCommand`
