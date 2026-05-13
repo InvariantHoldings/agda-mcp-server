@@ -15,9 +15,10 @@ import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 
 import { AgdaSession } from "../../../src/agda/session.js";
+import { handleSessionProcessClose } from "../../../src/agda/session-process-lifecycle.js";
 
 describe("AgdaSession: process-close cleanup", () => {
-  test("handleProcessClose releases libraryRegistration so a crash doesn't leak the temp AGDA_DIR", () => {
+  test("handleProcessClose releases libraryRegistration so a crash doesn't leak the temp AGDA_DIR", async () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-session-test-"));
     try {
       const session = new AgdaSession(repoRoot);
@@ -38,28 +39,28 @@ describe("AgdaSession: process-close cleanup", () => {
         },
       };
 
-      // Reach into the private field to install the stub. This is
-      // the same shape the real `ensureLibraryRegistration` returns
-      // and is the field `handleProcessClose` is responsible for.
-      (session as unknown as { libraryRegistration: typeof stubRegistration | null }).libraryRegistration =
-        stubRegistration;
+      // Reach into the (now module-internal) field to install the
+      // stub. This is the same shape the real `ensureLibraryRegistration`
+      // returns and is the field `handleSessionProcessClose` is
+      // responsible for.
+      session.libraryRegistration = stubRegistration;
 
       // Drive the close handler — same path the real spawn callback
-      // takes when Agda exits abnormally.
-      (session as unknown as { handleProcessClose(): void }).handleProcessClose();
+      // takes when Agda exits abnormally. Pass a sentinel proc;
+      // `session.proc` is null in this synthetic setup so the
+      // identity guard treats this as a primary-close event.
+      handleSessionProcessClose(session, { pid: 12345 } as unknown as ChildProcess);
 
       expect(cleanupCalls).toBe(1);
       expect(existsSync(sentinel)).toBe(false);
       // After cleanup, the field is nulled so a re-spawn picks up
       // a fresh registration via `ensureLibraryRegistration`.
-      expect(
-        (session as unknown as { libraryRegistration: unknown }).libraryRegistration,
-      ).toBeNull();
+      expect(session.libraryRegistration).toBeNull();
 
       // destroy() must remain idempotent on a session whose
       // libraryRegistration was already released by the close
       // handler.
-      session.destroy();
+      await session.destroy();
       expect(cleanupCalls).toBe(1);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
@@ -93,39 +94,33 @@ describe("AgdaSession: process-close cleanup", () => {
       const currentProc = { pid: 1000 } as unknown as ChildProcess;
       const olderProc = { pid: 999 } as unknown as ChildProcess;
 
-      const sessionAny = session as unknown as {
-        proc: ChildProcess | null;
-        libraryRegistration: typeof stubRegistration | null;
-        currentFile: string | null;
-        handleProcessClose(proc: ChildProcess): void;
-      };
-      sessionAny.proc = currentProc;
-      sessionAny.libraryRegistration = stubRegistration;
-      sessionAny.currentFile = "/tmp/Live.agda";
+      session.proc = currentProc;
+      session.libraryRegistration = stubRegistration;
+      session.currentFile = "/tmp/Live.agda";
 
-      // The stale close event arrives. handleProcessClose must
-      // recognise it as belonging to a replaced process and bail
+      // The stale close event arrives. handleSessionProcessClose
+      // must recognise it as belonging to a replaced process and bail
       // before touching live state.
-      sessionAny.handleProcessClose(olderProc);
+      handleSessionProcessClose(session, olderProc);
 
       expect(cleanupCalls).toBe(0);
-      expect(sessionAny.proc).toBe(currentProc);
-      expect(sessionAny.libraryRegistration).toBe(stubRegistration);
-      expect(sessionAny.currentFile).toBe("/tmp/Live.agda");
+      expect(session.proc).toBe(currentProc);
+      expect(session.libraryRegistration).toBe(stubRegistration);
+      expect(session.currentFile).toBe("/tmp/Live.agda");
       expect(existsSync(liveSentinel)).toBe(true);
 
       // Now the *current* process closes — state should reset.
-      sessionAny.handleProcessClose(currentProc);
+      handleSessionProcessClose(session, currentProc);
       expect(cleanupCalls).toBe(1);
-      expect(sessionAny.proc).toBeNull();
-      expect(sessionAny.libraryRegistration).toBeNull();
-      expect(sessionAny.currentFile).toBeNull();
+      expect(session.proc).toBeNull();
+      expect(session.libraryRegistration).toBeNull();
+      expect(session.currentFile).toBeNull();
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
 
-  test("destroy detaches listeners and uses SIGTERM→SIGKILL termination on a wedged proc", () => {
+  test("destroy detaches listeners and uses SIGTERM→SIGKILL termination on a wedged proc", async () => {
     // Regression for the 0.6.7 fix: pre-fix, `destroy()` did
     // `proc.kill()` with no SIGKILL fallback and no listener
     // detach. A wedged Agda subprocess that ignored SIGTERM would
@@ -138,6 +133,11 @@ describe("AgdaSession: process-close cleanup", () => {
 
       const killSignals: Array<NodeJS.Signals | number | undefined> = [];
       let detachCalls = 0;
+      // Synthesise a proc that emits `close` immediately when killed
+      // so destroy()'s awaited Promise resolves promptly. Without
+      // this we'd hit the destroy() hard-fallback timeout and the
+      // test would take ~4s.
+      const closeListeners: Array<() => void> = [];
       const fakeProc = {
         exitCode: null as number | null,
         signalCode: null as NodeJS.Signals | null,
@@ -145,9 +145,17 @@ describe("AgdaSession: process-close cleanup", () => {
         kill(signal?: NodeJS.Signals | number) {
           killSignals.push(signal);
           this.killed = true;
+          this.exitCode = 143;
+          // Synchronously fire close listeners — destroy() waits on
+          // `proc.once("close", ...)` so this unblocks the await.
+          for (const fn of closeListeners.splice(0)) fn();
           return true;
         },
-        once(_event: string, _listener: (...args: unknown[]) => void) {
+        once(event: string, listener: () => void) {
+          if (event === "close") closeListeners.push(listener);
+          return this as unknown as ChildProcess;
+        },
+        off(_event: string, _listener: () => void) {
           return this as unknown as ChildProcess;
         },
       };
@@ -161,16 +169,11 @@ describe("AgdaSession: process-close cleanup", () => {
         },
       };
 
-      const sessionAny = session as unknown as {
-        proc: ChildProcess | null;
-        libraryRegistration: typeof stubRegistration | null;
-        detachProcListeners: (() => void) | null;
-      };
-      sessionAny.proc = fakeProc as unknown as ChildProcess;
-      sessionAny.libraryRegistration = stubRegistration;
-      sessionAny.detachProcListeners = () => { detachCalls += 1; };
+      session.proc = fakeProc as unknown as ChildProcess;
+      session.libraryRegistration = stubRegistration;
+      session.detachProcListeners = () => { detachCalls += 1; };
 
-      session.destroy();
+      await session.destroy();
 
       // SIGTERM must have been delivered, the listener detacher must
       // have run, and both fields must be nulled to prevent the
@@ -178,16 +181,16 @@ describe("AgdaSession: process-close cleanup", () => {
       // scheduled with unref()) from touching them later.
       expect(killSignals[0]).toBe("SIGTERM");
       expect(detachCalls).toBe(1);
-      expect(sessionAny.proc).toBeNull();
-      expect(sessionAny.detachProcListeners).toBeNull();
-      expect(sessionAny.libraryRegistration).toBeNull();
+      expect(session.proc).toBeNull();
+      expect(session.detachProcListeners).toBeNull();
+      expect(session.libraryRegistration).toBeNull();
       expect(existsSync(sentinel)).toBe(false);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
   });
 
-  test("destroy releases libraryRegistration when no prior close fired", () => {
+  test("destroy releases libraryRegistration when no prior close fired", async () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-session-test-"));
     try {
       const session = new AgdaSession(repoRoot);
@@ -201,10 +204,9 @@ describe("AgdaSession: process-close cleanup", () => {
           rmSync(sentinel, { recursive: true, force: true });
         },
       };
-      (session as unknown as { libraryRegistration: typeof stubRegistration | null }).libraryRegistration =
-        stubRegistration;
+      session.libraryRegistration = stubRegistration;
 
-      session.destroy();
+      await session.destroy();
 
       expect(cleanupCalls).toBe(1);
       expect(existsSync(sentinel)).toBe(false);

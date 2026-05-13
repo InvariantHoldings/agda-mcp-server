@@ -99,6 +99,38 @@ test("AgdaTransport resolves status-only commands without timing out", async () 
   });
 });
 
+test("AgdaTransport.destroy unblocks an in-flight sendCommand instead of leaving it waiting on its timeout", async () => {
+  // Regression for Copilot review comment on PR #56 (0.6.7 cleanup):
+  // when `session.destroy()` ran while a command was in flight, the
+  // proc listeners were detached before termination so the
+  // subprocess's eventual `close` never reached the emitter; the
+  // command's done listener never fired and the caller would wait
+  // for the full per-command timeout (default 120 s) before observing
+  // the shutdown. Fix: `transport.destroy()` now emits `"error"` on
+  // the shared emitter so the in-flight sendCommand rejects promptly.
+  const transport = new AgdaTransport();
+  const proc = {
+    stdin: { write() { /* no traffic — would otherwise time out at 60s */ } },
+  };
+
+  const pending = transport.sendCommand(
+    proc as unknown as ChildProcess,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_load)",
+    60_000,
+  );
+
+  // Give Node a microtask tick so sendCommand has registered its
+  // listeners on the emitter before destroy() emits "error".
+  await Promise.resolve();
+
+  const startedAt = Date.now();
+  transport.destroy();
+
+  await expect(pending).rejects.toThrow(/destroyed while command was in flight/);
+  // Must reject promptly (well under the per-command timeout).
+  expect(Date.now() - startedAt).toBeLessThan(1_000);
+});
+
 test("AgdaTransport kills the subprocess when sendCommand times out", async () => {
   // Regression for the resource leak fixed in 0.6.7: the timeout handler
   // resolved the Promise without killing the underlying Agda

@@ -39,11 +39,9 @@ import type {
 import { type AgdaVersion } from "./agda-version.js";
 import { findAgdaBinary } from "./binary-discovery.js";
 import {
-  ensureLibraryRegistration,
-  spawnAgdaProcess,
-  terminateAgdaProcess,
-  type SpawnedAgdaProcess,
-} from "./agda-process-spawn.js";
+  destroySessionProcess,
+  ensureProcessForSession,
+} from "./session-process-lifecycle.js";
 import {
   piggybackVersionFromResponses,
   preflightVersionDetection,
@@ -93,15 +91,21 @@ export class AgdaSession {
   lastClassification: string | null = null;
   lastLoadedAt: number | null = null;
   lastInvisibleGoalCount = 0;
-  private libraryRegistration: LibraryRegistration | null = null;
+  // The five fields below are intentionally non-`private`: they are
+  // mutated by free helpers in `session-process-lifecycle.ts` and
+  // `session-load-impl.ts`, same module-internal convention used for
+  // `currentFile`, `goalIds`, etc. External consumers must continue
+  // to use the public class methods — these fields are not part of
+  // the embedding API.
+  libraryRegistration: LibraryRegistration | null = null;
   // Detacher for the listeners spawnAgdaProcess installed on the current
   // `this.proc`. Held so we can quiet a dying-but-not-yet-closed process
   // before respawning — otherwise its late stdout/close events would
   // reach the shared transport (mid-command for the *new* process) and
   // corrupt its state. Set in lockstep with `this.proc`.
-  private detachProcListeners: (() => void) | null = null;
-  private readonly transport = new AgdaTransport();
-  private commandQueue: Promise<unknown> = Promise.resolve();
+  detachProcListeners: (() => void) | null = null;
+  readonly transport = new AgdaTransport();
+  commandQueue: Promise<unknown> = Promise.resolve();
   readonly goal;
   readonly expr;
   readonly query;
@@ -130,119 +134,13 @@ export class AgdaSession {
   }
 
   /**
-   * Start the Agda process if not already running.
-   *
-   * `proc.killed` is checked alongside `exitCode` because a process
-   * we just sent SIGTERM to (e.g. from `AgdaTransport.sendCommand`'s
-   * timeout handler) has `exitCode === null` until the kernel
-   * actually reaps it. Without the `.killed` guard we'd hand back a
-   * dying handle and pile the next command onto a zombie — the
-   * exact leak that 0.6.7 fixes.
+   * Start the Agda process if not already running, or respawn if
+   * the current one is dead/killed. Implementation lives in
+   * `session-process-lifecycle.ts`; see that module's docstring for
+   * the `.killed` / listener-detach contract.
    */
   ensureProcess(): ChildProcess {
-    if (this.proc && this.proc.exitCode === null && !this.proc.killed) {
-      return this.proc;
-    }
-
-    if (this.proc) {
-      // Detach our listeners *first* so any late stdout/stderr/close
-      // from the dying process cannot reach the shared transport — by
-      // the time it fires we'll be mid-command on the replacement
-      // process and a stray `done` emission would falsely terminate
-      // it. Then force the previous process down (SIGKILL fallback
-      // covers the case where SIGTERM was ignored).
-      this.detachProcListeners?.();
-      this.detachProcListeners = null;
-      terminateAgdaProcess(this.proc);
-      this.proc = null;
-    }
-
-    // The close handler that would normally release the old AGDA_DIR
-    // registration is now detached, so free it explicitly before
-    // allocating a fresh one. Without this, the old registration's
-    // mkdtemp'd directory leaks every time we respawn.
-    if (this.libraryRegistration) {
-      this.libraryRegistration.cleanup();
-      this.libraryRegistration = null;
-    }
-
-    // Process died, was killed, or never started — reset every
-    // field that depends on the live Agda process. This mirrors
-    // handleProcessClose() but runs synchronously so the freshly
-    // spawned process below starts from a clean slate.
-    this.currentFile = null;
-    this.goalIds = [];
-    this.lastLoadedMtime = null;
-    this.lastClassification = null;
-    this.lastLoadedAt = null;
-    this.lastInvisibleGoalCount = 0;
-    this.detectedVersion = null;
-    this.versionDetectionAttempts = 0;
-    this.exiting = false;
-
-    this.libraryRegistration = ensureLibraryRegistration({
-      current: null,
-      repoRoot: this.repoRoot,
-    });
-
-    const spawned = this.adoptSpawnedProcess(spawnAgdaProcess({
-      repoRoot: this.repoRoot,
-      registration: this.libraryRegistration,
-      transport: this.transport,
-      onClose: () => this.handleProcessClose(spawned.proc),
-      onError: () => { /* transport already logged */ },
-    }));
-
-    return spawned.proc;
-  }
-
-  /** Take ownership of a freshly-spawned process handle plus its
-   *  listener detacher. Keeping the two in sync is critical: every
-   *  assignment of `this.proc` MUST go through here so that
-   *  `detachProcListeners` always refers to *that* process's wiring,
-   *  never an older one's. */
-  private adoptSpawnedProcess(spawned: SpawnedAgdaProcess): SpawnedAgdaProcess {
-    this.proc = spawned.proc;
-    this.detachProcListeners = spawned.detachListeners;
-    return spawned;
-  }
-
-  /** Reset every field that depends on the live Agda process. Called
-   *  from the spawn helper's `close` callback. Accepts the closing
-   *  process so we can ignore late-firing `close` events from a
-   *  process we already replaced — without this guard a slow SIGTERM
-   *  on the *previous* process could nuke the *current* process's
-   *  registration and currentFile mid-command. */
-  private handleProcessClose(closingProc: ChildProcess): void {
-    if (this.proc !== null && this.proc !== closingProc) {
-      // The session already moved on to a new process (likely via
-      // ensureProcess() after a timeout-driven kill). Treat this
-      // event as belonging to the abandoned process and ignore it —
-      // ensureProcess already detached the listeners, but a buffered
-      // event scheduled before detach can still arrive on this turn.
-      return;
-    }
-    this.proc = null;
-    this.detachProcListeners = null;
-    // Release the per-session AGDA_DIR temp directory eagerly. If
-    // Agda crashed (process exit without an explicit destroy() from
-    // the host), the registration would otherwise leak its
-    // `mkdtempSync` directory until the OS cleans `os.tmpdir()` —
-    // which on long-running servers is "never". A re-spawn via
-    // `ensureProcess` will create a fresh registration for the new
-    // process; the old one is no longer reachable.
-    this.libraryRegistration?.cleanup();
-    this.libraryRegistration = null;
-    this.currentFile = null;
-    this.goalIds = [];
-    this.lastLoadedMtime = null;
-    this.lastClassification = null;
-    this.lastLoadedAt = null;
-    this.lastInvisibleGoalCount = 0;
-    this.exiting = false;
-    // Reset version detection so the next process start re-detects cleanly.
-    this.detectedVersion = null;
-    this.versionDetectionAttempts = 0;
+    return ensureProcessForSession(this);
   }
 
   /**
@@ -275,7 +173,16 @@ export class AgdaSession {
         userCommand: command,
       });
 
-      const responses = await this.transport.sendCommand(proc, command, timeoutMs);
+      // Re-acquire a healthy proc handle after preflight: a timeout
+      // inside `preflightVersionDetection` calls `terminateAgdaProcess`
+      // on the shared child but resolves normally, so the `proc`
+      // captured above can be dying. `ensureProcess()` will detect
+      // the `.killed` state and respawn before we send the user's
+      // command — otherwise the user's first command would write
+      // into the dead process and hit another timeout.
+      const liveProc = this.ensureProcess();
+
+      const responses = await this.transport.sendCommand(liveProc, command, timeoutMs);
 
       piggybackVersionFromResponses({
         state: this,
@@ -468,36 +375,23 @@ export class AgdaSession {
     });
   }
 
-  /** Kill the Agda process and reset state.
+  /**
+   * Tear down the session: stop the Agda subprocess, free its
+   * AGDA_DIR registration, and reset all proc-bound state.
+   * Implementation lives in `session-process-lifecycle.ts` (see
+   * `destroySessionProcess`).
    *
-   *  Uses `terminateAgdaProcess` so a child that ignores SIGTERM
-   *  still gets SIGKILL'd after the grace window — otherwise the
-   *  MCP server can exit while leaving a wedged `agda
-   *  --interaction-json` behind, burning CPU. We also detach our
-   *  listeners up front so the eventual close event, which fires
-   *  asynchronously after the kill, cannot race with state
-   *  reinitialisation if the host immediately reconstructs a
-   *  session on the same `repoRoot`. */
-  destroy(): void {
-    if (this.proc) {
-      this.detachProcListeners?.();
-      this.detachProcListeners = null;
-      terminateAgdaProcess(this.proc);
-      this.proc = null;
-    }
-    this.libraryRegistration?.cleanup();
-    this.libraryRegistration = null;
-    this.currentFile = null;
-    this.goalIds = [];
-    this.lastLoadedMtime = null;
-    this.lastClassification = null;
-    this.lastLoadedAt = null;
-    this.lastInvisibleGoalCount = 0;
-    this.detectedVersion = null;
-    this.versionDetectionAttempts = 0;
-    this.transport.destroy();
-    this.commandQueue = Promise.resolve();
-    this.exiting = false;
+   * Returns `Promise<void>` resolving when the subprocess has
+   * actually exited (or after a hard fallback timeout). Callers in
+   * shutdown paths MUST await this before `process.exit()`, or the
+   * unref'd SIGKILL escalation inside `terminateAgdaProcess` is
+   * truncated and a SIGTERM-ignoring child survives shutdown.
+   * Synchronous state cleanup happens before the await so callers
+   * that fire-and-forget still see fully reset state — they just
+   * won't observe the SIGKILL escalation.
+   */
+  destroy(): Promise<void> {
+    return destroySessionProcess(this);
   }
 
   get buffer(): string {

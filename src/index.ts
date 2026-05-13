@@ -254,9 +254,18 @@ main().catch((err) => {
   process.exit(1);
 });
 
-// Clean up on exit
-process.on("SIGINT", () => { session.destroy(); process.exit(0); });
-process.on("SIGTERM", () => { session.destroy(); process.exit(0); });
+// Clean up on exit. We MUST await `session.destroy()` before calling
+// `process.exit()`: the SIGKILL escalation inside `terminateAgdaProcess`
+// runs from an `unref()`'d timer, so a synchronous `process.exit(0)`
+// would tear down Node before the fallback can fire and a child
+// that ignores SIGTERM would survive shutdown. Awaiting the Promise
+// keeps the event loop alive through the subprocess `close` event
+// or the hard fallback inside `destroy()`.
+function shutdown(): void {
+  void session.destroy().finally(() => process.exit(0));
+}
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 // ── Public API (for programmatic embedding) ────────────────────────
 export { AgdaSession } from "./agda-process.js";

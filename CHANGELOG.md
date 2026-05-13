@@ -51,6 +51,15 @@ and this project follows [Semantic Versioning](https://semver.org/).
   `AgdaTransport`, `AgdaSession.destroy`, and
   `AgdaSession.ensureProcess` all need the same SIGTERM→SIGKILL
   semantics.
+- **`src/agda/session-process-lifecycle.ts`** — extracted the
+  process spawn / respawn / close / destroy helpers from
+  `session.ts` (which had grown past the 500-line ceiling declared
+  in `ARCHITECTURE.md`) so each concern stays cohesive. The pattern
+  mirrors the existing `session-load-impl.ts`: free functions that
+  take an `AgdaSession` reference and mutate its module-internal
+  state. No public-API change — `AgdaSession.ensureProcess` and
+  `AgdaSession.destroy` still exist as methods and delegate inward.
+  The 500-line ceiling is now also documented in `AGENTS.md`.
 - **Resource-cleanup regression tests** in
   `test/unit/agda/process-termination.test.ts` (SIGKILL escalation
   against a real subprocess that ignores SIGTERM; idempotency on an
@@ -271,8 +280,23 @@ and this project follows [Semantic Versioning](https://semver.org/).
   registration before allocating a fresh one — the old close handler
   is detached at that point and would no longer release it.
 - **`destroy()` now uses the same SIGTERM→SIGKILL escalation as the
-  timeout path.** Previously a wedged Agda subprocess could survive
-  the MCP server's own shutdown.
+  timeout path AND awaits the subprocess's actual exit.** Returns
+  `Promise<void>`; the `SIGINT` / `SIGTERM` signal handlers in
+  `src/index.ts` await it before calling `process.exit(0)`. Previously
+  the unref'd SIGKILL escalation was truncated by the synchronous
+  `process.exit`, so a SIGTERM-ignoring child could survive the MCP
+  server's own shutdown.
+- **`AgdaTransport.destroy()` unblocks any in-flight `sendCommand`.**
+  Pre-fix, calling `session.destroy()` mid-command detached the proc
+  listeners before termination, so the eventual `close` event never
+  reached the emitter and the pending command would wait for its full
+  per-command timeout (default 120 s) before observing the shutdown.
+  The transport now emits an `"error"` on its shared emitter so the
+  command rejects promptly.
+- **`AgdaSession.sendCommand` re-acquires the process handle after
+  the inline version preflight.** A preflight timeout silently kills
+  the shared child; without the re-acquire, the user's command would
+  write into a dying process and trip another full timeout.
 - **`getPhase()` no longer reports a killed process as
   `hasProcess: true`.**
 - **`projectConfigDiagnostics()` mis-labelled `system`-source warnings

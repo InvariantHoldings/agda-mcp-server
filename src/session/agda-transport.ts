@@ -53,6 +53,19 @@ export class AgdaTransport {
     this.emitter.emit("error", error);
   }
 
+  /**
+   * Reset transport state and unblock any in-flight `sendCommand`.
+   *
+   * Emitting `"error"` on the shared emitter is critical: when
+   * `AgdaSession.destroy()` is called while a command is in flight,
+   * the proc listeners are detached *before* termination, so the
+   * subprocess's eventual `close` event never reaches the emitter
+   * and the command's `done` listener never fires. Without this
+   * emission the caller would wait for the original per-command
+   * timeout (default 120s) before observing the shutdown. We guard
+   * with `listenerCount` because EventEmitter throws on an
+   * unhandled `"error"` emission when no listener is registered.
+   */
   destroy(): void {
     this.clearIdleCompletionTimer();
     this.buffer = "";
@@ -61,6 +74,12 @@ export class AgdaTransport {
     this.sawStatusDone = false;
     this.lastResponseAt = null;
     this.lastResponseKind = null;
+    if (this.emitter.listenerCount("error") > 0) {
+      this.emitter.emit(
+        "error",
+        new Error("AgdaTransport destroyed while command was in flight"),
+      );
+    }
   }
 
   sendCommand(

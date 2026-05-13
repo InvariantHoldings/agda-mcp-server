@@ -226,6 +226,36 @@ test("no pre-flight when user command is Cmd_show_version — version piggybacke
   session.destroy();
 });
 
+// ── Preflight respawn guard (0.6.7 Copilot review fix) ────────────────────
+
+test("sendCommand re-acquires the process handle after preflight version detection", async () => {
+  // Regression for Copilot review comment on PR #56: `sendCommand`
+  // is also used internally by `preflightVersionDetection`. When the
+  // preflight times out, `terminateAgdaProcess` kills the shared
+  // child but `preflightVersionDetection` resolves normally and
+  // `AgdaSession.sendCommand` used to pass the (now dying) `proc`
+  // straight to the user-command call. The fix calls `ensureProcess()`
+  // a SECOND time between the preflight and the user command so the
+  // killed-but-not-yet-closed proc is detected via `.killed` and
+  // respawned. This test asserts that the re-acquire happens by
+  // counting `ensureProcess` invocations per `session.sendCommand` —
+  // it must be at least 2 (initial + re-acquire), not 1.
+  const session = new AgdaSession(process.cwd());
+  let ensureCalls = 0;
+  session.ensureProcess = () => {
+    ensureCalls += 1;
+    return fakeProc;
+  };
+  session["transport"].sendCommand = makeVersionMock("Agda version 2.9.0") as any;
+
+  await session.sendCommand("IOTCM cmd1");
+
+  // Initial ensureProcess at start + re-acquire after preflight.
+  expect(ensureCalls).toBeGreaterThanOrEqual(2);
+
+  session.destroy();
+});
+
 test("subsequent non-version commands don't re-run detection after successful piggyback", async () => {
   const session = new AgdaSession(process.cwd());
   let cmdCount = 0;
