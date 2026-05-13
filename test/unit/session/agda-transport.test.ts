@@ -99,6 +99,50 @@ test("AgdaTransport resolves status-only commands without timing out", async () 
   });
 });
 
+test("AgdaTransport kills the subprocess when sendCommand times out", async () => {
+  // Regression for the resource leak fixed in 0.6.7: the timeout handler
+  // resolved the Promise without killing the underlying Agda
+  // process, leaving a zombie burning CPU until the session was
+  // explicitly destroyed. The fix calls `terminateAgdaProcess`
+  // from inside the timeout handler so the kernel always reaps
+  // the wedged child.
+  const transport = new AgdaTransport();
+  const killCalls: Array<NodeJS.Signals | number | undefined> = [];
+
+  // Mock proc: no stdout traffic ever arrives, so sendCommand is
+  // forced into its timeout branch. We capture .kill() calls and
+  // simulate the kernel acknowledging the SIGTERM by flipping the
+  // exit fields — that prevents the SIGKILL escalation timer in
+  // `terminateAgdaProcess` from firing during the test.
+  const proc: Partial<ChildProcess> & {
+    stdin: { write(): void };
+    once(event: string, listener: (...args: unknown[]) => void): unknown;
+  } = {
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    stdin: { write() { /* discard */ } },
+    kill(signal?: NodeJS.Signals | number) {
+      killCalls.push(signal);
+      (proc as { killed: boolean }).killed = true;
+      (proc as { exitCode: number | null }).exitCode = 143;
+      return true;
+    },
+    once(_event: string, _listener: (...args: unknown[]) => void) {
+      return proc as unknown as ChildProcess;
+    },
+  };
+
+  const responses = await transport.sendCommand(
+    proc as unknown as ChildProcess,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_load)",
+    25,
+  );
+
+  expect(responses).toEqual([]);
+  expect(killCalls).toEqual(["SIGTERM"]);
+});
+
 test("AgdaTransport captures prompt notices as stderr output while collecting", async () => {
   await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
     const transport = new AgdaTransport();

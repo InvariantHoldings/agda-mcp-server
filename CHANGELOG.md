@@ -7,10 +7,22 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.6.7] - 2026-05-04
+## [0.6.7] - 2026-05-13
 
 ### Notes for upgraders
 
+- **Per-command timeouts now terminate the underlying Agda subprocess.**
+  Pre-fix, when `AgdaSession.sendCommand` timed out it resolved its
+  Promise with whatever partial responses had arrived but left the
+  `agda --interaction-json` child running. A wedged type-check would
+  keep burning CPU and memory — an external agent observed "one Agda
+  interaction process is still burning a full CPU and 38% memory from
+  the timed-out MCP path" — and the next tool call on the same
+  session would queue onto the zombie, doubling the leak. A timeout
+  now sends SIGTERM (with a 3-second SIGKILL fallback), the next
+  `ensureProcess()` call respawns a fresh Agda, and the tool-level UX
+  falls back to the existing "No file loaded. Call agda_load first."
+  surface that crashes already use. No tool API changes.
 - **Structured-output rollout is non-breaking but visible** — every
   text-only tool that previously emitted `data: { text }` now ships a
   richer payload (e.g. `data: { text, solutions, rawSolutions,
@@ -33,6 +45,21 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`terminateAgdaProcess(proc, { graceMs })` helper** in
+  `src/agda/agda-process-spawn.ts`. Safe to call on already-exited
+  or already-killed processes (idempotent). Exported because
+  `AgdaTransport`, `AgdaSession.destroy`, and
+  `AgdaSession.ensureProcess` all need the same SIGTERM→SIGKILL
+  semantics.
+- **Resource-cleanup regression tests** in
+  `test/unit/agda/process-termination.test.ts` (SIGKILL escalation
+  against a real subprocess that ignores SIGTERM; idempotency on an
+  exited process), `test/unit/session/agda-transport.test.ts`
+  (sendCommand's timeout-driven kill — the primary leak fence), and
+  additions to `test/unit/agda/session-cleanup.test.ts`
+  (`handleProcessClose` identity guard against late callbacks from
+  a replaced process; `destroy()` SIGTERM delivery and
+  listener-detach).
 - **Typed IOTCM command builder — issue #10 closed.** The IOTCM
   transport envelope (`IOTCM "<file>" NonInteractive Direct (...)`)
   is now built through a single `iotcmEnvelope` helper in
@@ -221,6 +248,33 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Resource leak: timed-out commands no longer leave a zombie Agda
+  process running.** `AgdaTransport.sendCommand` now calls
+  `terminateAgdaProcess(proc)` from its timeout handler so the
+  subprocess is reaped instead of abandoned. The new helper sends
+  SIGTERM and escalates to SIGKILL after a 3 s grace window if the
+  child ignored the first signal; the escalation timer is `unref()`'d
+  so a wedged child never blocks Node shutdown.
+- **Listener leak across respawn: stale `close`/`data` callbacks no
+  longer reach the freshly spawned process's shared transport.**
+  `spawnAgdaProcess` now returns a `detachListeners()` function held
+  by the session and called from both the timeout-driven respawn
+  path inside `ensureProcess` and from `destroy()`. `handleProcessClose`
+  also takes the identity of the closing process and ignores
+  late-arriving callbacks from a process that has already been
+  replaced — a race that previously could null out the *current*
+  process's `libraryRegistration` and `currentFile` mid-command.
+- **`ensureProcess` no longer reuses a killed-but-not-yet-closed
+  process.** It now checks `proc.killed` alongside `exitCode === null`
+  (which can briefly be `null` after `proc.kill()` before the kernel
+  reaps the child) and proactively frees the old AGDA_DIR
+  registration before allocating a fresh one — the old close handler
+  is detached at that point and would no longer release it.
+- **`destroy()` now uses the same SIGTERM→SIGKILL escalation as the
+  timeout path.** Previously a wedged Agda subprocess could survive
+  the MCP server's own shutdown.
+- **`getPhase()` no longer reports a killed process as
+  `hasProcess: true`.**
 - **`projectConfigDiagnostics()` mis-labelled `system`-source warnings
   as `config:`** — the binary `env` / `config` ternary swallowed the
   `system` source even though the diagnostic kind was correctly

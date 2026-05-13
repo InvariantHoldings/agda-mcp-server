@@ -4,6 +4,7 @@ import type { ChildProcess } from "node:child_process";
 import type { AgdaResponse } from "../agda/types.js";
 import { normalizeAgdaResponse } from "../agda/normalize-response.js";
 import { logger } from "../agda/logger.js";
+import { terminateAgdaProcess } from "../agda/agda-process-spawn.js";
 import {
   type CommandCompletionOrigin,
   configuredCommandTimeoutMs,
@@ -120,6 +121,10 @@ export class AgdaTransport {
           responseKinds: summarizeResponseKinds(this.responseQueue),
           responseTail: tailResponsePreview(this.responseQueue),
         });
+        // Resource leak fix (0.6.7): ensure the subprocess is killed
+        // when a command times out, so we don't leave a zombie burning
+        // CPU and memory until the session is explicitly destroyed.
+        terminateAgdaProcess(proc);
         finish(() => {
           resolveCmd([...this.responseQueue]);
         });

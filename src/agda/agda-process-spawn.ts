@@ -28,13 +28,89 @@ export function ensureLibraryRegistration(args: {
 }
 
 /**
+ * Handle returned by `spawnAgdaProcess`. `detachListeners` removes
+ * the transport/error wiring we installed at spawn time so that a
+ * dying-but-not-yet-closed process can be abandoned without its
+ * late stdout/stderr/close events firing into the (shared) transport
+ * and corrupting the next command's state.
+ */
+export interface SpawnedAgdaProcess {
+  proc: ChildProcess;
+  detachListeners(): void;
+}
+
+/**
+ * Default grace period between SIGTERM and the SIGKILL fallback in
+ * `terminateAgdaProcess`. Agda usually exits within a few hundred
+ * ms after SIGTERM; 3 seconds is conservative enough for slow CI
+ * machines without being so long that a wedged process keeps
+ * burning CPU.
+ */
+export const DEFAULT_TERMINATE_GRACE_MS = 3_000;
+
+/**
+ * Send a graceful SIGTERM to an Agda subprocess, then escalate to
+ * SIGKILL if it has not exited within `graceMs`. Safe to call on a
+ * process that has already exited (no-op) or that was already
+ * killed (only the SIGKILL fallback runs).
+ *
+ * The fallback timer is `unref()`'d so a wedged child does not keep
+ * the Node event loop alive past the rest of the program's work.
+ *
+ * Called from:
+ *   - `AgdaTransport.sendCommand` on per-command timeout (was a leak
+ *     before 0.6.7 — the timeout resolved the Promise without
+ *     killing the child, so a hung type-check kept burning CPU and
+ *     memory after the MCP tool returned).
+ *   - `AgdaSession.destroy` so a SIGTERM that the process ignores
+ *     still results in cleanup at server shutdown.
+ *   - `AgdaSession.ensureProcess` when it detects a stale handle
+ *     before respawning.
+ */
+export function terminateAgdaProcess(
+  proc: ChildProcess,
+  options: { graceMs?: number } = {},
+): void {
+  if (proc.exitCode !== null || proc.signalCode !== null) {
+    return;
+  }
+
+  if (!proc.killed) {
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      // ESRCH: process already gone between our exitCode check and
+      // the kill syscall. Nothing left to do.
+      return;
+    }
+  }
+
+  const graceMs = options.graceMs ?? DEFAULT_TERMINATE_GRACE_MS;
+  const escalation = setTimeout(() => {
+    if (proc.exitCode === null && proc.signalCode === null) {
+      try {
+        proc.kill("SIGKILL");
+      } catch {
+        // already gone — fine.
+      }
+    }
+  }, graceMs);
+  escalation.unref();
+  proc.once("close", () => clearTimeout(escalation));
+}
+
+/**
  * Spawn a fresh `agda --interaction-json` subprocess for `repoRoot`
  * and wire its stdout/stderr to `transport`. Calls `onClose` and
  * `onError` so the session can reset its own state without exposing
  * internal fields to this module.
  *
- * Returns the spawned `ChildProcess`. Caller is responsible for
- * remembering the handle and calling `kill()` at destroy time.
+ * Returns the spawned process together with a `detachListeners`
+ * function. The caller MUST call `detachListeners` before
+ * abandoning the process (e.g. when respawning after a timeout)
+ * so that late events from the dying process cannot reach the
+ * shared transport, which by then is mid-command for the new
+ * process.
  */
 export function spawnAgdaProcess(args: {
   repoRoot: string;
@@ -42,7 +118,7 @@ export function spawnAgdaProcess(args: {
   transport: AgdaTransport;
   onClose: () => void;
   onError: (err: Error) => void;
-}): ChildProcess {
+}): SpawnedAgdaProcess {
   const agdaBin = findAgdaBinary(args.repoRoot);
   const proc = spawn(agdaBin, ["--interaction-json", ...args.registration.agdaArgs], {
     cwd: args.repoRoot,
@@ -50,23 +126,32 @@ export function spawnAgdaProcess(args: {
     stdio: ["pipe", "pipe", "pipe"],
   });
 
-  proc.stdout?.on("data", (chunk: Buffer) => {
+  const onStdout = (chunk: Buffer): void => {
     args.transport.handleStdout(chunk);
-  });
-
-  proc.stderr?.on("data", (chunk: Buffer) => {
+  };
+  const onStderr = (chunk: Buffer): void => {
     args.transport.handleStderr(chunk);
-  });
-
-  proc.on("close", () => {
+  };
+  const onClose = (): void => {
     args.transport.handleProcessClose();
     args.onClose();
-  });
-
-  proc.on("error", (err) => {
+  };
+  const onError = (err: Error): void => {
     args.transport.handleProcessError(err);
     args.onError(err);
-  });
+  };
 
-  return proc;
+  proc.stdout?.on("data", onStdout);
+  proc.stderr?.on("data", onStderr);
+  proc.on("close", onClose);
+  proc.on("error", onError);
+
+  const detachListeners = (): void => {
+    proc.stdout?.off("data", onStdout);
+    proc.stderr?.off("data", onStderr);
+    proc.off("close", onClose);
+    proc.off("error", onError);
+  };
+
+  return { proc, detachListeners };
 }
