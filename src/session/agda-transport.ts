@@ -61,6 +61,7 @@ export class AgdaTransport {
   private currentCommandKind: "regular" | "control" | null = null;
   private sawStatusDone = false;
   private idleDoneTimer: NodeJS.Timeout | null = null;
+  private controlEscalationTimer: NodeJS.Timeout | null = null;
   private lastResponseAt: number | null = null;
   private lastResponseKind: string | null = null;
 
@@ -102,6 +103,7 @@ export class AgdaTransport {
    *  stuck waiting for the per-command timeout. */
   destroy(): void {
     this.clearIdleCompletionTimer();
+    this.clearControlEscalationTimer();
     this.buffer = "";
     this.responseQueue = [];
     this.collecting = false;
@@ -125,12 +127,13 @@ export class AgdaTransport {
    *  catchers (e.g. `preflightVersionDetection`) re-throw that class
    *  rather than swallow it, ensuring the queued abort/exit cancels
    *  the user command instead of waiting behind it. */
-  rejectInFlightCommand(reason: string, options: { controlCommand?: boolean } = {}): void {
-    if (this.emitter.listenerCount("error") === 0) return;
+  rejectInFlightCommand(reason: string, options: { controlCommand?: boolean } = {}): boolean {
+    if (this.emitter.listenerCount("error") === 0) return false;
     const err = options.controlCommand
       ? new ControlCommandInterruption(reason)
       : new Error(reason);
     this.emitter.emit("error", err);
+    return true;
   }
 
   /** Write a fire-and-forget IOTCM control command (e.g. `Cmd_abort`,
@@ -163,7 +166,15 @@ export class AgdaTransport {
     // Interrupting is also the protocol-level intent of `Cmd_abort`
     // and `Cmd_exit`: they exist precisely to cancel the active
     // command, not to wait their turn behind it.
-    this.rejectInFlightCommand("Interrupted by Agda control command");
+    //
+    // The boolean return tells us whether there was actually
+    // something to interrupt — used below to gate the
+    // kill-escalation timer so we don't SIGTERM a healthy idle
+    // session for issuing `Cmd_abort` as a no-op.
+    const wasInterruptingInFlight = this.rejectInFlightCommand(
+      "Interrupted by Agda control command",
+      { controlCommand: true },
+    );
     this.buffer = "";
     this.responseQueue = [];
     this.collecting = true;
@@ -173,33 +184,35 @@ export class AgdaTransport {
     this.lastResponseKind = null;
 
     // Kill-escalation fallback for a wedged Agda that fails to
-    // service the control command. The original sendCommand's
-    // per-command timeout was just cancelled by `rejectInFlightCommand`
-    // above; without this timer nothing reaps the child if the abort
-    // also gets ignored (the original report behind this PR was
-    // *exactly* a wedged proc burning CPU after a timed-out call).
-    // The timer is `unref()`'d so it never blocks Node exit, and is
-    // cleared on `close` so a healthy abort/exit doesn't kick a
-    // proc that has already terminated normally.
-    const escalation = escalationMs > 0
-      ? setTimeout(() => {
-          if (proc.exitCode === null && proc.signalCode === null) {
-            logger.warn("Control command not acknowledged; terminating proc", {
-              command: command.slice(0, 120),
-              escalationMs,
-            });
-            terminateAgdaProcess(proc);
-          }
-        }, escalationMs)
-      : null;
-    escalation?.unref();
-    // Optional chaining: production `ChildProcess` always exposes
-    // `once`, but the transport unit tests pass minimal mock procs
-    // that don't, and we'd rather not crash the production code
-    // path defensively from a fake-proc shape.
-    proc.once?.("close", () => {
-      if (escalation) clearTimeout(escalation);
-    });
+    // service the control command. Only armed when we ACTUALLY
+    // interrupted an in-flight command — if the session was idle
+    // (no in-flight to abort) `Cmd_abort` is a legitimate no-op
+    // and SIGTERMing the proc 5s later would kill a perfectly
+    // healthy session. The timer is also cleared when we observe
+    // `DoneAborting` / `DoneExiting` on the wire (see
+    // `recordCollectedResponse` — proof the proc serviced the
+    // control command and is therefore not wedged), so a healthy
+    // proc that acknowledges and stays alive isn't reaped either.
+    // `unref()`'d so it never keeps Node alive past shutdown.
+    this.clearControlEscalationTimer();
+    if (wasInterruptingInFlight && escalationMs > 0) {
+      this.controlEscalationTimer = setTimeout(() => {
+        this.controlEscalationTimer = null;
+        if (proc.exitCode === null && proc.signalCode === null) {
+          logger.warn("Control command not acknowledged; terminating proc", {
+            command: command.slice(0, 120),
+            escalationMs,
+          });
+          terminateAgdaProcess(proc);
+        }
+      }, escalationMs);
+      this.controlEscalationTimer.unref();
+      // Optional chaining: production `ChildProcess` always exposes
+      // `once`, but the transport unit tests pass minimal mock procs
+      // that don't, and we'd rather not crash the production code
+      // path defensively from a fake-proc shape.
+      proc.once?.("close", () => this.clearControlEscalationTimer());
+    }
 
     return new Promise<AgdaResponse[]>((resolve) => {
       const settle = () => {
@@ -389,6 +402,17 @@ export class AgdaTransport {
       return;
     }
 
+    // Inside a control command, a `DoneAborting` / `DoneExiting`
+    // payload proves the proc serviced our request and is therefore
+    // not wedged — clear the kill-escalation timer so we don't
+    // SIGTERM a healthy session a few seconds later.
+    if (
+      this.currentCommandKind === "control" &&
+      CONTROL_RESPONSE_KINDS.has(response.kind)
+    ) {
+      this.clearControlEscalationTimer();
+    }
+
     this.responseQueue.push(response);
     this.lastResponseAt = Date.now();
     this.lastResponseKind = response.kind;
@@ -404,6 +428,13 @@ export class AgdaTransport {
     if (this.idleDoneTimer) {
       clearTimeout(this.idleDoneTimer);
       this.idleDoneTimer = null;
+    }
+  }
+
+  private clearControlEscalationTimer(): void {
+    if (this.controlEscalationTimer) {
+      clearTimeout(this.controlEscalationTimer);
+      this.controlEscalationTimer = null;
     }
   }
 

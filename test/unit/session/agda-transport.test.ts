@@ -207,6 +207,11 @@ test("sendFireAndForgetCommand terminates a wedged proc that never acknowledges 
   // meant to close. The fix arms a kill-escalation timer that
   // calls terminateAgdaProcess after `escalationMs` if the proc
   // hasn't exited.
+  //
+  // Round 10 K1 tightened the gate: escalation arms only when
+  // there's an in-flight sendCommand to interrupt, so this test
+  // parks one first (the realistic shape — abort is meaningful
+  // because something was running).
   const transport = new AgdaTransport();
   const killSignals: Array<NodeJS.Signals | number | undefined> = [];
 
@@ -229,11 +234,24 @@ test("sendFireAndForgetCommand terminates a wedged proc that never acknowledges 
     },
   };
 
+  // Park a regular sendCommand so the abort actually has something
+  // to interrupt. Attach the rejection expectation BEFORE yielding
+  // so the unhandled-rejection tracker is satisfied even if the
+  // microtask scheduling raced us.
+  const inFlight = transport.sendCommand(
+    proc as unknown as ChildProcess,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_load)",
+    60_000,
+  );
+  const inFlightRejection = expect(inFlight).rejects.toThrow(/Interrupted by Agda control command/);
+  await Promise.resolve();
+
   await transport.sendFireAndForgetCommand(
     proc as unknown as ChildProcess,
     "IOTCM \"x\" NonInteractive Direct (Cmd_abort)",
     { flushMs: 30, escalationMs: 60 },
   );
+  await inFlightRejection;
 
   // The Promise itself resolves promptly (after flushMs) — the
   // tool layer must not wait on the wedged proc. But the
@@ -246,6 +264,116 @@ test("sendFireAndForgetCommand terminates a wedged proc that never acknowledges 
 
   // SIGTERM should have been delivered to the wedged proc.
   expect(killSignals).toContain("SIGTERM");
+});
+
+test("sendFireAndForgetCommand does NOT arm the escalation when no command was in flight (idle-session abort is a no-op)", async () => {
+  // Regression for Copilot review on PR #56 (round 10 K1 —
+  // `agda-transport.ts:188`): the previous implementation armed the
+  // 5s escalation timer unconditionally. `Cmd_abort` on an idle
+  // session is a legitimate no-op (no in-flight command to cancel,
+  // no `DoneAborting` echo); the escalation would still fire after
+  // 5s and SIGTERM a perfectly healthy session. The fix: arm only
+  // when `rejectInFlightCommand` reports there was actually an
+  // active sendCommand to interrupt.
+  const transport = new AgdaTransport();
+  const killSignals: Array<NodeJS.Signals | number | undefined> = [];
+
+  const proc: Partial<ChildProcess> & {
+    stdin: { write(): void };
+    once(event: string, listener: () => void): unknown;
+    kill(signal?: NodeJS.Signals | number): boolean;
+  } = {
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    stdin: { write() { /* idle session — no response, no in-flight */ } },
+    once(_event: string, _listener: () => void) {
+      return proc as unknown as ChildProcess;
+    },
+    kill(signal?: NodeJS.Signals | number) {
+      killSignals.push(signal);
+      return true;
+    },
+  };
+
+  // No prior `sendCommand` ran, so the emitter has no `error`
+  // listener — `rejectInFlightCommand` returns false and the
+  // escalation timer must NOT be armed.
+  await transport.sendFireAndForgetCommand(
+    proc as unknown as ChildProcess,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_abort)",
+    { flushMs: 20, escalationMs: 60 },
+  );
+
+  // Wait past the escalation budget to prove the timer never fired.
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  expect(killSignals).toEqual([]);
+});
+
+test("sendFireAndForgetCommand clears the escalation timer once Agda emits DoneAborting (healthy-but-stays-alive abort)", async () => {
+  // Companion regression for round 10 K1: when abort interrupts an
+  // in-flight command AND Agda actually services it (emitting
+  // DoneAborting) and continues running — the proc never closes —
+  // the previous implementation would still fire the escalation
+  // timer 5s later and kill the healthy session. The fix observes
+  // DoneAborting/DoneExiting in `recordCollectedResponse` while
+  // `currentCommandKind === "control"` and clears the timer there.
+  const transport = new AgdaTransport();
+  const killSignals: Array<NodeJS.Signals | number | undefined> = [];
+
+  let closeListener: (() => void) | null = null;
+  const proc: Partial<ChildProcess> & {
+    stdin: { write(): void };
+    once(event: string, listener: () => void): unknown;
+    kill(signal?: NodeJS.Signals | number): boolean;
+  } = {
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    stdin: { write() {
+      // Agda services the abort and emits DoneAborting promptly,
+      // then stays alive serving subsequent commands.
+      setTimeout(() => {
+        transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DoneAborting\"}\n"));
+      }, 0);
+    } },
+    once(event: string, listener: () => void) {
+      if (event === "close") closeListener = listener;
+      return proc as unknown as ChildProcess;
+    },
+    kill(signal?: NodeJS.Signals | number) {
+      killSignals.push(signal);
+      return true;
+    },
+  };
+
+  // Park a regular sendCommand so rejectInFlightCommand has
+  // something to actually interrupt — that's what arms the
+  // escalation timer in the first place. Attach the rejection
+  // expectation BEFORE yielding so Node's unhandled-rejection
+  // tracker is satisfied no matter how microtasks schedule.
+  const inFlight = transport.sendCommand(
+    proc as unknown as ChildProcess,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_load)",
+    60_000,
+  );
+  const inFlightRejection = expect(inFlight).rejects.toThrow(/Interrupted by Agda control command/);
+  await Promise.resolve();
+
+  await transport.sendFireAndForgetCommand(
+    proc as unknown as ChildProcess,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_abort)",
+    { flushMs: 30, escalationMs: 80 },
+  );
+  await inFlightRejection;
+
+  // Wait past the escalation budget. The proc NEVER closed — only
+  // the DoneAborting echo arrived. The escalation must have been
+  // cleared by the echo, so no SIGTERM should be sent.
+  await new Promise((resolve) => setTimeout(resolve, 140));
+  expect(closeListener).not.toBeNull();
+  expect(killSignals).toEqual([]);
 });
 
 test("sendFireAndForgetCommand does NOT terminate a proc that exits cleanly during the escalation budget", async () => {
