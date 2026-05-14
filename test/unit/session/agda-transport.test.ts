@@ -249,7 +249,7 @@ test("sendFireAndForgetCommand terminates a wedged proc that never acknowledges 
   await transport.sendFireAndForgetCommand(
     proc as unknown as ChildProcess,
     "IOTCM \"x\" NonInteractive Direct (Cmd_abort)",
-    { flushMs: 30, escalationMs: 60 },
+    { flushMs: 30, escalationMs: 60, armEscalation: true },
   );
   await inFlightRejection;
 
@@ -266,15 +266,16 @@ test("sendFireAndForgetCommand terminates a wedged proc that never acknowledges 
   expect(killSignals).toContain("SIGTERM");
 });
 
-test("sendFireAndForgetCommand does NOT arm the escalation when no command was in flight (idle-session abort is a no-op)", async () => {
-  // Regression for Copilot review on PR #56 (round 10 K1 —
-  // `agda-transport.ts:188`): the previous implementation armed the
-  // 5s escalation timer unconditionally. `Cmd_abort` on an idle
-  // session is a legitimate no-op (no in-flight command to cancel,
-  // no `DoneAborting` echo); the escalation would still fire after
-  // 5s and SIGTERM a perfectly healthy session. The fix: arm only
-  // when `rejectInFlightCommand` reports there was actually an
-  // active sendCommand to interrupt.
+test("sendFireAndForgetCommand does NOT arm the escalation when armEscalation is false (idle-abort default)", async () => {
+  // Regression for Copilot review on PR #56 (round 10 K1 +
+  // round 11 L1-L2): escalation gating moved from the transport
+  // (a transport-side `wasInterrupting` recheck) to the session
+  // (`dispatchSessionControlCommand` captures the boolean
+  // synchronously and passes `armEscalation` explicitly). At the
+  // transport level the contract is now: arm iff `armEscalation:
+  // true` is passed. This case exercises the default (omitted →
+  // false) so an idle-abort that bypasses the session path also
+  // doesn't SIGTERM a healthy proc.
   const transport = new AgdaTransport();
   const killSignals: Array<NodeJS.Signals | number | undefined> = [];
 
@@ -296,9 +297,8 @@ test("sendFireAndForgetCommand does NOT arm the escalation when no command was i
     },
   };
 
-  // No prior `sendCommand` ran, so the emitter has no `error`
-  // listener — `rejectInFlightCommand` returns false and the
-  // escalation timer must NOT be armed.
+  // Default options: no `armEscalation`. The transport must not
+  // arm the timer.
   await transport.sendFireAndForgetCommand(
     proc as unknown as ChildProcess,
     "IOTCM \"x\" NonInteractive Direct (Cmd_abort)",
@@ -364,7 +364,7 @@ test("sendFireAndForgetCommand clears the escalation timer once Agda emits DoneA
   await transport.sendFireAndForgetCommand(
     proc as unknown as ChildProcess,
     "IOTCM \"x\" NonInteractive Direct (Cmd_abort)",
-    { flushMs: 30, escalationMs: 80 },
+    { flushMs: 30, escalationMs: 80, armEscalation: true },
   );
   await inFlightRejection;
 
@@ -400,18 +400,83 @@ test("sendFireAndForgetCommand does NOT terminate a proc that exits cleanly duri
     },
   };
 
+  // Pass `armEscalation: true` so the timer is actually armed —
+  // otherwise the test would pass vacuously (no timer to clear).
   await transport.sendFireAndForgetCommand(
     proc as unknown as ChildProcess,
     "IOTCM \"x\" NonInteractive Direct (Cmd_exit)",
-    { flushMs: 20, escalationMs: 80 },
+    { flushMs: 20, escalationMs: 80, armEscalation: true },
   );
 
-  // Proc exits cleanly before the escalation budget.
+  // Proc exits cleanly before the escalation budget. The close
+  // listener clears the escalation timer.
   (proc as { exitCode: number | null }).exitCode = 0;
   closeListener?.();
 
   await new Promise((resolve) => setTimeout(resolve, 120));
 
+  expect(killSignals).toEqual([]);
+});
+
+test("late DoneAborting that arrives AFTER the flush window closes still clears the escalation timer (L5 round-11 echo-after-flush window)", async () => {
+  // Round 11 L5: handleStdout used to drop chunks once `collecting`
+  // was false, so a delayed DoneAborting that landed AFTER the
+  // 250ms flush window but BEFORE the 5s escalation budget elapsed
+  // never reached `recordCollectedResponse`, the timer kept
+  // running, and a healthy proc that legitimately ack'd a slow
+  // abort would be SIGTERM'd a few seconds later. The fix: keep
+  // parsing stdout while `controlEscalationTimer` is armed; the
+  // echo-clear branch runs ahead of the collecting gate.
+  const transport = new AgdaTransport();
+  const killSignals: Array<NodeJS.Signals | number | undefined> = [];
+
+  const proc: Partial<ChildProcess> & {
+    stdin: { write(): void };
+    once(event: string, listener: () => void): unknown;
+    kill(signal?: NodeJS.Signals | number): boolean;
+  } = {
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    stdin: { write() { /* discard — DoneAborting arrives below */ } },
+    once(_event: string, _listener: () => void) {
+      return proc as unknown as ChildProcess;
+    },
+    kill(signal?: NodeJS.Signals | number) {
+      killSignals.push(signal);
+      return true;
+    },
+  };
+
+  // Park a regular sendCommand so armEscalation makes sense.
+  const inFlight = transport.sendCommand(
+    proc as unknown as ChildProcess,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_load)",
+    60_000,
+  );
+  const inFlightRejection = expect(inFlight).rejects.toThrow(/Interrupted by Agda control command/);
+  await Promise.resolve();
+
+  // Flush window = 20ms, escalation budget = 100ms. DoneAborting
+  // arrives at ~50ms — AFTER flush but BEFORE escalation. Without
+  // L5 it would be dropped.
+  await transport.sendFireAndForgetCommand(
+    proc as unknown as ChildProcess,
+    "IOTCM \"x\" NonInteractive Direct (Cmd_abort)",
+    { flushMs: 20, escalationMs: 100, armEscalation: true },
+  );
+  await inFlightRejection;
+
+  // `collecting` should be false at this point (flush window closed).
+  expect(transport.collecting).toBe(false);
+
+  // Inject the late echo — past the flush window.
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DoneAborting\"}\n"));
+
+  // Wait past the escalation budget. The echo should have cleared
+  // the timer, so no SIGTERM.
+  await new Promise((resolve) => setTimeout(resolve, 120));
   expect(killSignals).toEqual([]);
 });
 

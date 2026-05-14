@@ -42,8 +42,20 @@ export function dispatchSessionCommand(
   command: string,
   timeoutMs: number,
 ): Promise<AgdaResponse[]> {
+  // Capture our serial number synchronously at enqueue time. When
+  // our task body runs, `dispatchSessionControlCommand` may have
+  // bumped `cancelledThrough` past this value — meaning a control
+  // command (abort/exit) was issued AFTER we were queued but
+  // BEFORE we got our turn at the queue. In that case we reject
+  // without ever writing to stdin, so the control command isn't
+  // starved behind backlog. See PR #56 review round 11 (L6).
+  const mySerial = ++session.commandSerial;
+
   const task = session.commandQueue.then(async () => {
     assertSessionAlive(session);
+    if (mySerial <= session.cancelledThrough) {
+      throw new Error("Cancelled by Agda control command (Cmd_abort/Cmd_exit)");
+    }
 
     const proc = session.ensureProcess();
     const fileAtStart = session.currentFile;
@@ -82,31 +94,57 @@ export function dispatchSessionCommand(
 
 /**
  * Dispatch an Agda control command (`Cmd_abort` / `Cmd_exit`) using
- * the two-step interruption pattern:
+ * the three-step interruption pattern:
  *
  *   1. Synchronously reject the in-flight transport `sendCommand`
  *      (if any) with a `ControlCommandInterruption` so the IOTCM
  *      that was already written to Agda's stdin stops waiting on
  *      its per-command timeout. This is the protocol-level intent
- *      of `Cmd_abort` / `Cmd_exit`.
+ *      of `Cmd_abort` / `Cmd_exit`. The boolean return is captured
+ *      *here* (not inside the transport) because by the time the
+ *      queued fire-and-forget task runs, the listener has long
+ *      since been removed and the check would always come back
+ *      false — defeating the escalation gating.
  *
- *   2. Chain the fire-and-forget write itself through
- *      `commandQueue`. The flush window inside
- *      `sendFireAndForgetCommand` mutates shared transport state
- *      (`collecting`, idle timer); routing it through the queue
- *      guarantees no subsequent `sendCommand` starts until the
- *      flush has resolved, so a queued regular command cannot have
- *      its `collecting=true` flipped back to false mid-flight by a
- *      late flush timer from the control command.
+ *   2. Sweep already-queued regular work via `cancelledThrough`.
+ *      Any `dispatchSessionCommand` task whose captured serial is
+ *      `<=` the value we set will reject at task-body entry instead
+ *      of running. Without this, a wedged Agda would let regular
+ *      commands sit on the queue forever, starving the abort/exit
+ *      behind them.
+ *
+ *   3. Chain the fire-and-forget write itself through `commandQueue`
+ *      with `armEscalation` decided by `kind` + `wasInterrupting`:
+ *
+ *        * `"exit"` always arms — `Cmd_exit` is supposed to bring
+ *          the proc down whether or not anything was in flight, and
+ *          a wedged Agda that ignores it must still be reaped.
+ *
+ *        * `"abort"` arms only when we actually interrupted an
+ *          in-flight command. An idle `Cmd_abort` is a protocol
+ *          no-op; SIGTERMing the proc would kill a healthy session.
  */
 export function dispatchSessionControlCommand(
   session: AgdaSession,
   agdaCmd: string,
+  kind: "abort" | "exit",
 ): Promise<AgdaResponse[]> {
-  session.transport.rejectInFlightCommand(
+  // Step 1: synchronous interrupt of in-flight regular command.
+  // The boolean return must be observed BEFORE we yield to
+  // microtasks; once the in-flight's onError fires, the listener
+  // is gone and a transport-side recheck always reports false.
+  const wasInterrupting = session.transport.rejectInFlightCommand(
     "Interrupted by Agda control command",
     { controlCommand: true },
   );
+
+  // Step 2: sweep already-queued regular work so the control
+  // command isn't starved behind a backlog.
+  session.cancelledThrough = session.commandSerial;
+
+  // Step 3: escalation gating decided here, not inside the
+  // transport — see the function docstring for the rationale.
+  const armEscalation = kind === "exit" || wasInterrupting;
 
   const task = session.commandQueue.then(async () => {
     assertSessionAlive(session);
@@ -114,6 +152,7 @@ export function dispatchSessionControlCommand(
     return session.transport.sendFireAndForgetCommand(
       proc,
       iotcmEnvelope(session.currentFile ?? "", agdaCmd),
+      { armEscalation },
     );
   });
   session.commandQueue = task.then(() => { }, () => { });

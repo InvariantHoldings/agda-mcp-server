@@ -285,6 +285,167 @@ test("AgdaSession preflight failure that kills the proc resets file-bound state 
   await session.destroy();
 });
 
+test("session.abort() while a regular command is in flight forwards armEscalation:true to the transport (round-11 L1)", async () => {
+  // Round 11 L1: round 10's K1 gate observed the listener count
+  // AT WRITE TIME, but by the time the queued fire-and-forget
+  // ran the in-flight's onError listener was long gone, so the
+  // gate always reported false and the timer never armed. Fix:
+  // `dispatchSessionControlCommand` captures `wasInterrupting`
+  // synchronously at session entry and forwards `armEscalation`
+  // into the transport. This test verifies the wiring — it stubs
+  // `transport.sendFireAndForgetCommand` and asserts the
+  // delivered options.
+  const session = new AgdaSession(process.cwd());
+  session["versionDetectionAttempts"] = AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
+
+  let capturedOptions: { armEscalation?: boolean } | undefined;
+  session["transport"].sendFireAndForgetCommand = (async (_proc, _cmd, options) => {
+    capturedOptions = options;
+    return [];
+  }) as unknown as typeof session["transport"]["sendFireAndForgetCommand"];
+
+  session["transport"].sendCommand = async function (_proc, _command) {
+    // Park until the abort's `rejectInFlightCommand` interrupts us.
+    return await new Promise<never>((_resolve, reject) => {
+      session["transport"].emitter.once("error", (err) => reject(err));
+    });
+  };
+
+  session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
+
+  try {
+    const inFlight = session.sendCommand("IOTCM in_flight").catch(() => { /* expected */ });
+    // Yield enough microtasks for the queued task body to reach
+    // `await transport.sendCommand` and register its onError
+    // listener on the emitter.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    await session.abort();
+    await inFlight;
+
+    expect(capturedOptions?.armEscalation).toBe(true);
+  } finally {
+    await session.destroy();
+  }
+});
+
+test("session.abort() on an idle session forwards armEscalation:false (round-11 L1 companion: no false-positive SIGTERM on idle abort)", async () => {
+  const session = new AgdaSession(process.cwd());
+  session["versionDetectionAttempts"] = AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
+
+  let capturedOptions: { armEscalation?: boolean } | undefined;
+  session["transport"].sendFireAndForgetCommand = (async (_proc, _cmd, options) => {
+    capturedOptions = options;
+    return [];
+  }) as unknown as typeof session["transport"]["sendFireAndForgetCommand"];
+
+  session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
+
+  try {
+    // No in-flight command — `rejectInFlightCommand` finds no
+    // emitter listeners and returns false, so the dispatcher
+    // forwards `armEscalation: false`.
+    await session.abort();
+    expect(capturedOptions?.armEscalation).toBe(false);
+  } finally {
+    await session.destroy();
+  }
+});
+
+test("session.exit() forwards armEscalation:true even on an idle session (round-11 L2)", async () => {
+  // Round 11 L2: round 10 K1's gate said "arm only when something
+  // was interrupted." That's correct for `Cmd_abort` (idle abort
+  // is a no-op) but wrong for `Cmd_exit` — exit MUST bring the
+  // proc down whether or not anything was running. Fix:
+  // `dispatchSessionControlCommand` forces `armEscalation: true`
+  // whenever `kind === "exit"`.
+  const session = new AgdaSession(process.cwd());
+  session["versionDetectionAttempts"] = AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
+
+  let capturedOptions: { armEscalation?: boolean } | undefined;
+  session["transport"].sendFireAndForgetCommand = (async (_proc, _cmd, options) => {
+    capturedOptions = options;
+    return [];
+  }) as unknown as typeof session["transport"]["sendFireAndForgetCommand"];
+
+  session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
+
+  try {
+    await session.exit();
+    expect(capturedOptions?.armEscalation).toBe(true);
+  } finally {
+    // Force-clear the `exiting` flag so destroy doesn't double-fire.
+    (session as { exiting: boolean }).exiting = false;
+    await session.destroy();
+  }
+});
+
+test("session.abort() rejects regular commands queued before it instead of letting them run first (round-11 L6)", async () => {
+  // Round 11 L6: the previous implementation queued the abort task
+  // at the tail of `commandQueue`. If regular commands B and C
+  // were queued behind an in-flight A and the user fired
+  // session.abort(), A would be interrupted but B and C would run
+  // first; abort would land on stdin LAST against an idle session,
+  // becoming a no-op. On a wedged Agda this starves the abort
+  // forever. The fix: dispatchSessionControlCommand sets
+  // `cancelledThrough = commandSerial` so every regular task
+  // already queued rejects at task-body entry.
+  const session = new AgdaSession(process.cwd());
+  session["versionDetectionAttempts"] = AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
+
+  const events: string[] = [];
+
+  session["transport"].sendCommand = async function (_proc, command) {
+    if (command.includes("a_inflight")) {
+      events.push("A:start");
+      return await new Promise<never>((_resolve, reject) => {
+        session["transport"].emitter.once("error", (err) => reject(err));
+      });
+    }
+    events.push(`${command}:RAN`);
+    return [{ kind: "Status" }];
+  };
+  session["transport"].sendFireAndForgetCommand = (async () => {
+    events.push("abort:wrote");
+    return [];
+  }) as unknown as typeof session["transport"]["sendFireAndForgetCommand"];
+
+  session.ensureProcess = () => ({ exitCode: null } as unknown as ChildProcess);
+
+  try {
+    const a = session.sendCommand("IOTCM a_inflight").catch(() => { /* expected */ });
+    // Yield enough microtasks for the queued task body to reach
+    // its `await transport.sendCommand` call. One Promise.resolve()
+    // tick is not enough — the chain goes through commandQueue.then,
+    // assertSessionAlive, ensureProcess, preflightVersionDetection
+    // (skipped but still an await), the survival asserts, then
+    // finally transport.sendCommand.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(events).toContain("A:start");
+
+    // Queue B and C BEFORE firing abort.
+    const b = session.sendCommand("IOTCM b_queued");
+    const c = session.sendCommand("IOTCM c_queued");
+
+    // Fire abort. Synchronously interrupts A and sweeps B+C via
+    // `cancelledThrough`.
+    const aborted = session.abort();
+
+    await Promise.all([a, aborted]);
+    await expect(b).rejects.toThrow(/Cancelled by Agda control command/);
+    await expect(c).rejects.toThrow(/Cancelled by Agda control command/);
+
+    // The decisive invariant: B and C must NOT have run on the
+    // transport. Their task bodies rejected before any sendCommand
+    // call. Without L6, both would show up in `events` with `:RAN`.
+    expect(events.some((e) => e.includes("b_queued:RAN"))).toBe(false);
+    expect(events.some((e) => e.includes("c_queued:RAN"))).toBe(false);
+    expect(events).toContain("abort:wrote");
+  } finally {
+    await session.destroy();
+  }
+});
+
 test("AgdaSession destroy rejects queued and subsequent sendCommand calls", async () => {
   // Updated for the 0.6.7 leak-cleanup pass: destroy() is now
   // final. Tasks that were chained onto `commandQueue` before
@@ -295,12 +456,25 @@ test("AgdaSession destroy rejects queued and subsequent sendCommand calls", asyn
   // review comment on PR #56: `session-process-lifecycle.ts:198`).
   // Embedders that need a fresh session after teardown must
   // construct a new `AgdaSession`.
+  //
+  // Round 11 L3 fix: the blocked mock now subscribes to the
+  // transport's emitter so it actually rejects when
+  // `transport.destroy()` emits "error". The previous shape
+  // (`new Promise(() => {})`) hung forever because the mock
+  // ignored the destroy signal — the test would time out instead
+  // of proving rejection. Attach the rejection expectation BEFORE
+  // yielding so the unhandled-rejection tracker is happy.
   const session = new AgdaSession(process.cwd());
 
   let callCount = 0;
   session["transport"].sendCommand = async function (_proc, command, _timeoutMs) {
     if (command.includes("block")) {
-      return new Promise(() => {});
+      // Observe the transport emitter so destroy()'s rejection
+      // signal lands here. The real transport `sendCommand`
+      // attaches an onError listener too — this mirrors it.
+      return await new Promise<never>((_resolve, reject) => {
+        session["transport"].emitter.once("error", (err) => reject(err));
+      });
     }
     if (command.includes("Cmd_show_version")) {
       return [];
@@ -314,13 +488,13 @@ test("AgdaSession destroy rejects queued and subsequent sendCommand calls", asyn
   // Enqueue a permanently blocked command; capture its Promise so
   // we can assert it rejects after destroy.
   const blocked = session.sendCommand("IOTCM block");
+  const blockedRejection = expect(blocked).rejects.toThrow(/destroyed/);
 
-  // destroy() flips the `destroyed` flag and resets commandQueue.
-  // The blocked task is still chained off the OLD queue, but its
-  // `.then` body checks `this.destroyed` and throws.
+  // destroy() flips the `destroyed` flag, calls transport.destroy()
+  // which emits "error" on the emitter, and resets commandQueue.
   await session.destroy();
 
-  await expect(blocked).rejects.toThrow(/destroyed/);
+  await blockedRejection;
 
   // A NEW sendCommand call after destroy() must also reject — the
   // session is gone for good. Without this contract, a queued task

@@ -117,6 +117,26 @@ export class AgdaSession {
   /** @internal */
   commandQueue: Promise<unknown> = Promise.resolve();
   /**
+   * Monotonic counter of regular `sendCommand` enqueues. Each task
+   * captures its value at construction time; if `cancelledThrough`
+   * later exceeds that captured serial, the task body rejects
+   * instead of running. Used by `dispatchSessionControlCommand` to
+   * cancel regular work that was queued before an abort/exit fired
+   * — otherwise a wedged Agda could starve the control command
+   * behind a backlog of queued regular commands that will never
+   * complete. See PR #56 review round 11 (L6).
+   * @internal
+   */
+  commandSerial = 0;
+  /**
+   * Highest `commandSerial` cancelled by a control command. Tasks
+   * with serial `<=` this value reject at task-body entry. Each
+   * `dispatchSessionControlCommand` sets this to the current
+   * `commandSerial`, sweeping every regular task already queued.
+   * @internal
+   */
+  cancelledThrough = -1;
+  /**
    * Flag flipped by `destroySessionProcess`. Tasks already chained
    * onto `commandQueue` before destroy() ran reject early instead
    * of starting a fresh `ensureProcess()` (which would spawn a new
@@ -310,19 +330,19 @@ export class AgdaSession {
    *  window cannot race with a subsequent `sendCommand`. See
    *  `sendControlCommand` below. */
   async abort(): Promise<AgdaResponse[]> {
-    return this.sendControlCommand(topLevelCommand("Cmd_abort"));
+    return this.sendControlCommand(topLevelCommand("Cmd_abort"), "abort");
   }
 
   /** Send Cmd_exit to the running Agda process and let it shut down
-   *  cleanly. Same two-step interruption as `abort` — see that
+   *  cleanly. Same interruption pattern as `abort` — see that
    *  method's docstring. */
   async exit(): Promise<AgdaResponse[]> {
     this.exiting = true;
-    return this.sendControlCommand(topLevelCommand("Cmd_exit"));
+    return this.sendControlCommand(topLevelCommand("Cmd_exit"), "exit");
   }
 
-  private sendControlCommand(agdaCmd: string): Promise<AgdaResponse[]> {
-    return dispatchSessionControlCommand(this, agdaCmd);
+  private sendControlCommand(agdaCmd: string, kind: "abort" | "exit"): Promise<AgdaResponse[]> {
+    return dispatchSessionControlCommand(this, agdaCmd, kind);
   }
 
   // ── Accessors ─────────────────────────────────────────────────────

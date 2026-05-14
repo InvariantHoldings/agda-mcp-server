@@ -33,24 +33,17 @@ export class ControlCommandInterruption extends Error {
   }
 }
 
-/** Response kinds that belong exclusively to the control-command
- *  protocol path (`Cmd_abort` / `Cmd_exit`). Used to filter late
- *  echoes that arrive AFTER the fire-and-forget flush window closed
- *  but BEFORE the next regular `sendCommand` has settled — without
- *  this filter, a delayed `DoneAborting` would otherwise land in the
- *  next regular command's response queue (or trip its idle-completion
- *  timer) and corrupt it. */
+/** Response kinds emitted only by `Cmd_abort`/`Cmd_exit`. Used both
+ *  to filter late echoes out of regular-command response queues and
+ *  to detect proc responsiveness so the kill-escalation timer can
+ *  be cleared. */
 const CONTROL_RESPONSE_KINDS: ReadonlySet<string> = new Set([
   "DoneAborting",
   "DoneExiting",
 ]);
 
-/** Default budget after which `sendFireAndForgetCommand` terminates a
- *  proc that hasn't acknowledged the control command. Catches wedged
- *  Agda processes that can't service `Cmd_abort` / `Cmd_exit` — the
- *  original `sendCommand`'s per-command timeout was cancelled by the
- *  `rejectInFlightCommand` interrupt, so without this fallback nothing
- *  would reap the child. Overridable per-call. */
+/** Default budget for the wedged-proc kill escalation. Overridable
+ *  per-call via `sendFireAndForgetCommand`'s options. */
 const DEFAULT_CONTROL_ESCALATION_MS = 5_000;
 
 export class AgdaTransport {
@@ -66,18 +59,30 @@ export class AgdaTransport {
   private lastResponseKind: string | null = null;
 
   handleStdout(chunk: Buffer): void {
-    // Drop stdout that arrives while we're not collecting. After the
-    // per-command timeout fires `finish()` flips `collecting` to false
-    // but the killed proc's stdout listener stays attached until the
-    // next `ensureProcess()` detaches it. Without this early-return a
-    // late partial line from the dying child would sit in `this.buffer`
-    // and corrupt the parse of the replacement Agda's first line.
-    if (!this.collecting) return;
+    // Drop stdout while idle UNLESS a control-command escalation
+    // timer is still armed — a delayed `DoneAborting`/`DoneExiting`
+    // arriving AFTER our flush window closed but BEFORE the
+    // escalation budget elapses is proof the proc is responsive,
+    // and `recordCollectedResponse` uses it to clear the timer.
+    // Without this carve-out the late echo would be dropped here
+    // and the timer would later SIGTERM a healthy proc that did
+    // service the control command.
+    //
+    // The default `!collecting` drop is still important: after the
+    // per-command timeout fires `finish()` flips `collecting` to
+    // false but the killed proc's stdout listener stays attached
+    // until the next `ensureProcess()` detaches it, and a stale
+    // partial line sitting in `this.buffer` would corrupt the parse
+    // of the replacement Agda's first JSON line.
+    if (!this.collecting && !this.controlEscalationTimer) return;
     this.buffer += chunk.toString();
     this.drainBuffer();
   }
 
   handleStderr(chunk: Buffer): void {
+    // Stderr while idle is never a control-echo so the more
+    // permissive `controlEscalationTimer` carve-out from
+    // `handleStdout` doesn't apply here.
     if (!this.collecting) {
       return;
     }
@@ -136,21 +141,23 @@ export class AgdaTransport {
     return true;
   }
 
-  /** Write a fire-and-forget IOTCM control command (e.g. `Cmd_abort`,
-   *  `Cmd_exit`) and resolve after a short flush window. Unlike
-   *  `sendCommand`, this MUST NOT reject on the budget elapsing and
-   *  MUST NOT terminate the subprocess: Agda legitimately emits no
-   *  response when there is no in-progress operation to abort (or
-   *  emits a delayed `DoneAborting`/`DoneExiting` that we capture if
-   *  it arrives within the flush window). Resolving the Promise after
-   *  `flushMs` gives the protocol time to land a closing response
-   *  without forcing the tool layer to wait the full per-command
-   *  timeout — and without falsely turning a healthy proc into a
-   *  zombie via the timeout-driven kill path. */
+  /** Write a fire-and-forget IOTCM control command (`Cmd_abort` /
+   *  `Cmd_exit`) and resolve after a short flush window. The Promise
+   *  itself never rejects — Agda may legitimately emit no response,
+   *  or emit a delayed `DoneAborting`/`DoneExiting` we capture if
+   *  it arrives in time.
+   *
+   *  Background safety net: if `armEscalation` is true and
+   *  `escalationMs > 0`, an `unref()`'d timer terminates the proc
+   *  after `escalationMs` unless it closes or emits a control-echo
+   *  (cleared in `recordCollectedResponse`). The caller decides
+   *  whether to arm: `Cmd_exit` always arms; `Cmd_abort` arms only
+   *  if a regular command was actually interrupted (an idle abort
+   *  is a protocol no-op and must NOT kill a healthy proc). */
   sendFireAndForgetCommand(
     proc: ChildProcess,
     command: string,
-    options: { flushMs?: number; escalationMs?: number } = {},
+    options: { flushMs?: number; escalationMs?: number; armEscalation?: boolean } = {},
   ): Promise<AgdaResponse[]> {
     const flushMs = options.flushMs ?? 250;
     const escalationMs = options.escalationMs ?? DEFAULT_CONTROL_ESCALATION_MS;
@@ -158,20 +165,26 @@ export class AgdaTransport {
       command: command.slice(0, 200),
       flushMs,
       escalationMs,
+      armEscalation: options.armEscalation,
     });
-    // If a regular `sendCommand` is in flight, interrupt it before
-    // we clobber the shared `buffer`/`responseQueue`/`collecting`
-    // state — the in-flight command's responses would otherwise be
-    // dropped on the floor and it would eventually time out.
-    // Interrupting is also the protocol-level intent of `Cmd_abort`
-    // and `Cmd_exit`: they exist precisely to cancel the active
-    // command, not to wait their turn behind it.
+    // Interrupt any in-flight `sendCommand` before we clobber the
+    // shared `buffer`/`responseQueue`/`collecting` state. The
+    // session path has usually already done this synchronously
+    // before queueing us, so by the time we run there is no
+    // emitter listener left and this is a no-op; the redundant
+    // call is defense for direct-transport callers (and unit
+    // tests) that bypass the session.
     //
-    // The boolean return tells us whether there was actually
-    // something to interrupt — used below to gate the
-    // kill-escalation timer so we don't SIGTERM a healthy idle
-    // session for issuing `Cmd_abort` as a no-op.
-    const wasInterruptingInFlight = this.rejectInFlightCommand(
+    // We do NOT trust the boolean return to gate the escalation
+    // timer here — by the time this fire-and-forget task runs
+    // through the session command queue, the in-flight that
+    // motivated the abort is long gone, and the listener-count
+    // check would always be false. The caller passes
+    // `armEscalation` explicitly based on what it observed at the
+    // moment the control command was *requested*. See
+    // `dispatchSessionControlCommand` in
+    // `session-command-dispatch.ts`.
+    this.rejectInFlightCommand(
       "Interrupted by Agda control command",
       { controlCommand: true },
     );
@@ -184,18 +197,21 @@ export class AgdaTransport {
     this.lastResponseKind = null;
 
     // Kill-escalation fallback for a wedged Agda that fails to
-    // service the control command. Only armed when we ACTUALLY
-    // interrupted an in-flight command — if the session was idle
-    // (no in-flight to abort) `Cmd_abort` is a legitimate no-op
-    // and SIGTERMing the proc 5s later would kill a perfectly
-    // healthy session. The timer is also cleared when we observe
-    // `DoneAborting` / `DoneExiting` on the wire (see
-    // `recordCollectedResponse` — proof the proc serviced the
-    // control command and is therefore not wedged), so a healthy
-    // proc that acknowledges and stays alive isn't reaped either.
-    // `unref()`'d so it never keeps Node alive past shutdown.
+    // service the control command. Caller decides when to arm:
+    //
+    //   - `Cmd_abort` arms only when it actually interrupted an
+    //     in-flight command. An idle abort is a protocol no-op
+    //     and SIGTERMing the proc would kill a healthy session.
+    //
+    //   - `Cmd_exit` ALWAYS arms — exit is supposed to bring the
+    //     proc down whether or not anything was in flight. A
+    //     wedged proc that ignores Cmd_exit needs to be reaped.
+    //
+    // The timer is cleared on `DoneAborting`/`DoneExiting` (proof
+    // the proc serviced the request — see `recordCollectedResponse`)
+    // and on proc close. `unref()`'d so it never blocks Node exit.
     this.clearControlEscalationTimer();
-    if (wasInterruptingInFlight && escalationMs > 0) {
+    if (options.armEscalation === true && escalationMs > 0) {
       this.controlEscalationTimer = setTimeout(() => {
         this.controlEscalationTimer = null;
         if (proc.exitCode === null && proc.signalCode === null) {
@@ -379,6 +395,18 @@ export class AgdaTransport {
   }
 
   private recordCollectedResponse(response: AgdaResponse): void {
+    // Control-echo clearing runs FIRST, before any collecting / kind
+    // gating. A `DoneAborting`/`DoneExiting` on the wire is proof
+    // the proc serviced the control command; we want to clear the
+    // kill-escalation timer regardless of whether `collecting` is
+    // still true (it isn't if the flush window already closed) or
+    // what the current command kind is (the echo can arrive AFTER
+    // the next regular command has reset `currentCommandKind`).
+    // Without this ordering the late-echo path L5 reopens.
+    if (CONTROL_RESPONSE_KINDS.has(response.kind)) {
+      this.clearControlEscalationTimer();
+    }
+
     if (!this.collecting) {
       return;
     }
@@ -400,17 +428,6 @@ export class AgdaTransport {
         kind: response.kind,
       });
       return;
-    }
-
-    // Inside a control command, a `DoneAborting` / `DoneExiting`
-    // payload proves the proc serviced our request and is therefore
-    // not wedged — clear the kill-escalation timer so we don't
-    // SIGTERM a healthy session a few seconds later.
-    if (
-      this.currentCommandKind === "control" &&
-      CONTROL_RESPONSE_KINDS.has(response.kind)
-    ) {
-      this.clearControlEscalationTimer();
     }
 
     this.responseQueue.push(response);
