@@ -5,27 +5,51 @@ import { tmpdir } from "node:os";
 
 import { AgdaSession, findAgdaBinary } from "../../../src/agda-process.js";
 
-test("findAgdaBinary returns pinned script when present", () => {
-  const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-server-"));
-
+/** `findAgdaBinary`'s priority order is AGDA_BIN → pinned script →
+ *  "agda" on PATH. The two tests below exercise the pinned-script
+ *  and fallback branches and so must run with AGDA_BIN unset —
+ *  otherwise an explicit override (set by integration runs or a
+ *  developer shell) would short-circuit the function before the
+ *  branches under test are reached. */
+function withoutAgdaBinEnv<T>(fn: () => T): T {
+  const previous = process.env.AGDA_BIN;
+  delete process.env.AGDA_BIN;
   try {
-    mkdirSync(join(repoRoot, "tooling", "scripts"), { recursive: true });
-    const pinned = join(repoRoot, "tooling", "scripts", "run-pinned-agda.sh");
-    writeFileSync(pinned, "#!/bin/sh\nexit 0\n", "utf8");
-    expect(findAgdaBinary(repoRoot)).toBe(pinned);
+    return fn();
   } finally {
-    rmSync(repoRoot, { recursive: true, force: true });
+    if (previous === undefined) {
+      delete process.env.AGDA_BIN;
+    } else {
+      process.env.AGDA_BIN = previous;
+    }
   }
+}
+
+test("findAgdaBinary returns pinned script when present", () => {
+  withoutAgdaBinEnv(() => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-server-"));
+
+    try {
+      mkdirSync(join(repoRoot, "tooling", "scripts"), { recursive: true });
+      const pinned = join(repoRoot, "tooling", "scripts", "run-pinned-agda.sh");
+      writeFileSync(pinned, "#!/bin/sh\nexit 0\n", "utf8");
+      expect(findAgdaBinary(repoRoot)).toBe(pinned);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 test("findAgdaBinary falls back to agda when no pinned script exists", () => {
-  const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-server-"));
+  withoutAgdaBinEnv(() => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "agda-mcp-server-"));
 
-  try {
-    expect(findAgdaBinary(repoRoot)).toBe("agda");
-  } finally {
-    rmSync(repoRoot, { recursive: true, force: true });
-  }
+    try {
+      expect(findAgdaBinary(repoRoot)).toBe("agda");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 test("AgdaSession destroy resets mutable session state", async () => {
