@@ -5,21 +5,21 @@ import { tmpdir } from "node:os";
 
 import { AgdaSession } from "../../../src/agda-process.js";
 
-test("isFileStale returns false when no file loaded", () => {
+test("isFileStale returns false when no file loaded", async () => {
   const session = new AgdaSession(process.cwd());
   expect(session.isFileStale()).toBe(false);
-  session.destroy();
+  await session.destroy();
 });
 
-test("isFileStale returns false after destroy", () => {
+test("isFileStale returns false after destroy", async () => {
   const session = new AgdaSession(process.cwd());
   // Simulate loaded state
   session.currentFile = "/tmp/Example.agda";
-  session.destroy();
+  await session.destroy();
   expect(session.isFileStale()).toBe(false);
 });
 
-test("isFileStale returns true when file deleted", () => {
+test("isFileStale returns true when file deleted", async () => {
   const dir = mkdtempSync(join(tmpdir(), "agda-stale-"));
   const filePath = join(dir, "Test.agda");
   writeFileSync(filePath, "module Test where\n");
@@ -41,7 +41,7 @@ test("isFileStale returns true when file deleted", () => {
     // Now isFileStale should return true (stat will throw)
     expect(session.isFileStale()).toBe(true);
   } finally {
-    session.destroy();
+    await session.destroy();
     rmSync(dir, { recursive: true, force: true });
   }
 });

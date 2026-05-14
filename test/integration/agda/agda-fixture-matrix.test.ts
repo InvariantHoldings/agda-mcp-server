@@ -55,7 +55,7 @@ async function withSession(run: (session: AgdaSession) => Promise<void>) {
   try {
     return await run(session);
   } finally {
-    session.destroy();
+    await session.destroy();
   }
 }
 

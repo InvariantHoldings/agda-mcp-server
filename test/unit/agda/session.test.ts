@@ -28,7 +28,7 @@ test("findAgdaBinary falls back to agda when no pinned script exists", () => {
   }
 });
 
-test("AgdaSession destroy resets mutable session state", () => {
+test("AgdaSession destroy resets mutable session state", async () => {
   const session = new AgdaSession(process.cwd());
 
   session.currentFile = "/tmp/Example.agda";
@@ -36,7 +36,7 @@ test("AgdaSession destroy resets mutable session state", () => {
   session.buffer = "pending";
   session.responseQueue = [{ kind: "Status" }];
 
-  session.destroy();
+  await session.destroy();
 
   expect(session.getLoadedFile()).toBe(null);
   expect(session.getGoalIds()).toEqual([]);

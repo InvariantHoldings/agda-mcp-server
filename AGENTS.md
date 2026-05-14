@@ -201,6 +201,14 @@ Good fixture categories:
 - Prefer `rg` for file and text search.
 - Use `apply_patch` for manual edits.
 - Do not introduce new monolithic handlers.
+- **Source files under `src/` must stay ≤ 500 lines** — see
+  `ARCHITECTURE.md` ("Module-size convention"). Files that exceed
+  this ceiling are grab bags of mixed concerns and lose cohesion; if
+  a change would push a file past the limit, split it into focused
+  sub-modules (the established pattern is free functions in a sibling
+  file that mutate session/state references — see
+  `session-load-impl.ts` and `session-process-lifecycle.ts`) rather
+  than patching the over-budget file.
 - Keep `src/tools/` thin; move reusable logic into `src/agda/`, `src/session/`,
   `src/protocol/`, or `src/reporting/` as appropriate.
 - Prefer `zod` v4 APIs. The repo now targets Zod 4 directly.

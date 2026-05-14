@@ -7,10 +7,34 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.6.7] - 2026-05-04
+## [0.6.7] - 2026-05-13
 
 ### Notes for upgraders
 
+- **Per-command timeouts now terminate the underlying Agda subprocess.**
+  Pre-fix, when `AgdaSession.sendCommand` timed out it resolved its
+  Promise with whatever partial responses had arrived but left the
+  `agda --interaction-json` child running. A wedged type-check would
+  keep burning CPU and memory — an external agent observed "one Agda
+  interaction process is still burning a full CPU and 38% memory from
+  the timed-out MCP path" — and the next tool call on the same
+  session would queue onto the zombie, doubling the leak. A timeout
+  now sends SIGTERM (with a 3-second SIGKILL fallback), the next
+  `ensureProcess()` call respawns a fresh Agda, and the tool-level UX
+  falls back to the existing "No file loaded. Call agda_load first."
+  surface that crashes already use. No tool API changes.
+- **Programmatic-embedding API change: `AgdaSession.destroy()` is
+  now async (`Promise<void>` instead of `void`).** Synchronous state
+  cleanup still happens before the returned Promise so fire-and-forget
+  callers see fully reset state immediately. Embedders running in a
+  shutdown path (signal handlers, test fixtures that pipe Agda
+  through and then `process.exit()`) MUST `await session.destroy()`
+  before exiting — otherwise the unref'd SIGKILL escalation inside
+  `terminateAgdaProcess` is truncated and a SIGTERM-ignoring Agda
+  child can survive shutdown. The MCP server's own SIGINT/SIGTERM
+  handlers in `src/index.ts` were updated accordingly and are also
+  now idempotent (a second signal during teardown re-uses the first
+  shutdown Promise rather than racing the unref'd timer).
 - **Structured-output rollout is non-breaking but visible** — every
   text-only tool that previously emitted `data: { text }` now ships a
   richer payload (e.g. `data: { text, solutions, rawSolutions,
@@ -20,6 +44,15 @@ and this project follows [Semantic Versioning](https://semver.org/).
   counts, or pin `outputSchema` snapshots will see the new fields.
   See the "Structured output rollout" entry below for the per-tool
   schemas.
+- **`Cmd_abort` / `Cmd_exit` now cancel the in-flight command (not
+  wait behind it).** The control-command path interrupts the active
+  `transport.sendCommand` synchronously, then queues its
+  fire-and-forget write through `commandQueue` so its flush window
+  cannot race with a subsequent `sendCommand`. The interruption
+  surfaces as `ControlCommandInterruption` and survives the
+  best-effort error catch inside `preflightVersionDetection`, so an
+  abort fired while the session is still doing its version probe
+  cancels the user command instead of waiting its turn behind it.
 - **Declared supported-Agda range was locally verified, not yet CI-gated**
   — the new `agdaMcpServer` block (`minAgdaVersion: 2.6.4.3`,
   `maxTestedAgdaVersion: 2.9.0`) was confirmed against locally
@@ -33,6 +66,33 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`terminateAgdaProcess(proc, { graceMs })` helper** in
+  `src/agda/agda-process-spawn.ts`. Safe to call on already-exited
+  or already-killed processes (idempotent). Exported because
+  `AgdaTransport`, `AgdaSession.destroy`, and
+  `AgdaSession.ensureProcess` all need the same SIGTERM→SIGKILL
+  semantics.
+- **`src/agda/session-process-lifecycle.ts`** — extracted the
+  process spawn / respawn / close / destroy helpers from
+  `session.ts` (which had grown past the 500-line ceiling declared
+  in `ARCHITECTURE.md`) so each concern stays cohesive. The pattern
+  mirrors the existing `session-load-impl.ts`: free functions that
+  take an `AgdaSession` reference and mutate its module-internal
+  state. The extraction itself is non-behavioral — both
+  `AgdaSession.ensureProcess` and `AgdaSession.destroy` still exist
+  as methods and delegate to the new module. **The behavioural
+  change in this release is `destroy()`'s signature**, which is
+  covered separately in "Notes for upgraders" above.
+  The 500-line ceiling is now also documented in `AGENTS.md`.
+- **Resource-cleanup regression tests** in
+  `test/unit/agda/process-termination.test.ts` (SIGKILL escalation
+  against a real subprocess that ignores SIGTERM; idempotency on an
+  exited process), `test/unit/session/agda-transport.test.ts`
+  (sendCommand's timeout-driven kill — the primary leak fence), and
+  additions to `test/unit/agda/session-cleanup.test.ts`
+  (`handleProcessClose` identity guard against late callbacks from
+  a replaced process; `destroy()` SIGTERM delivery and
+  listener-detach).
 - **Typed IOTCM command builder — issue #10 closed.** The IOTCM
   transport envelope (`IOTCM "<file>" NonInteractive Direct (...)`)
   is now built through a single `iotcmEnvelope` helper in
@@ -221,6 +281,53 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Resource leak: timed-out commands no longer leave a zombie Agda
+  process running.** `AgdaTransport.sendCommand` now calls
+  `terminateAgdaProcess(proc)` from its timeout handler so the
+  subprocess is reaped instead of abandoned. The new helper sends
+  SIGTERM and escalates to SIGKILL after a 3 s grace window if the
+  child ignored the first signal; the escalation timer is `unref()`'d
+  so a wedged child never blocks Node shutdown.
+- **Listener leak across respawn: stale `close`/`data` callbacks no
+  longer reach the freshly spawned process's shared transport.**
+  `spawnAgdaProcess` now returns a `detachListeners()` function held
+  by the session and called from both the timeout-driven respawn
+  path inside `ensureProcess` and from `destroy()`. `handleProcessClose`
+  also takes the identity of the closing process and ignores
+  late-arriving callbacks from a process that has already been
+  replaced — a race that previously could null out the *current*
+  process's `libraryRegistration` and `currentFile` mid-command.
+- **`ensureProcess` no longer reuses a killed-but-not-yet-closed
+  process.** It now checks `proc.killed` alongside `exitCode === null`
+  (which can briefly be `null` after `proc.kill()` before the kernel
+  reaps the child) and proactively frees the old AGDA_DIR
+  registration before allocating a fresh one — the old close handler
+  is detached at that point and would no longer release it.
+- **`destroy()` now uses the same SIGTERM→SIGKILL escalation as the
+  timeout path AND awaits the subprocess's actual exit.** Returns
+  `Promise<void>`; the `SIGINT` / `SIGTERM` signal handlers in
+  `src/index.ts` await it before calling `process.exit(0)`. Previously
+  the unref'd SIGKILL escalation was truncated by the synchronous
+  `process.exit`, so a SIGTERM-ignoring child could survive the MCP
+  server's own shutdown.
+- **`AgdaTransport.destroy()` unblocks any in-flight `sendCommand`.**
+  Pre-fix, calling `session.destroy()` mid-command detached the proc
+  listeners before termination, so the eventual `close` event never
+  reached the emitter and the pending command would wait for its full
+  per-command timeout (default 120 s) before observing the shutdown.
+  The transport now emits an `"error"` on its shared emitter so the
+  command rejects promptly.
+- **`AgdaSession.sendCommand` rejects when the inline version
+  preflight killed the subprocess.** The user's IOTCM envelope was
+  built BEFORE this task ran (e.g. goal-operations bake `currentFile`
+  and goal IDs in at call site), so forwarding it into a respawned
+  Agda would either trip "No file loaded" on a fresh process or
+  target stale interaction IDs. The command rejects up front with
+  "Agda subprocess was replaced during version preflight; call
+  agda_load before retrying." instead of writing the stale envelope
+  into a dying or fresh process.
+- **`getPhase()` no longer reports a killed process as
+  `hasProcess: true`.**
 - **`projectConfigDiagnostics()` mis-labelled `system`-source warnings
   as `config:`** — the binary `env` / `config` ternary swallowed the
   `system` source even though the diagnostic kind was correctly

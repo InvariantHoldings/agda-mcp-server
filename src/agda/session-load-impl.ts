@@ -53,6 +53,35 @@ function invalidOptions(errors: string[], classification: string): LoadResult {
   };
 }
 
+/** Cmd_load itself succeeded but the post-load metas reconciliation
+ *  killed the Agda subprocess (e.g. timeout). At this point the
+ *  in-memory load state is gone — return a failure so the agent
+ *  re-issues `agda_load` rather than seeing a stale success that
+ *  the next tool call would reject with "No file loaded". */
+function loadFailedAfterReconciliation(
+  absPath: string,
+  warnings: string[],
+  profiling: LoadResult["profiling"],
+): LoadResult {
+  return {
+    success: false,
+    errors: [
+      `Agda subprocess died during post-load reconciliation for ${absPath}. ` +
+      `The Cmd_load itself succeeded, but the follow-up metas query timed out or crashed; ` +
+      `re-issue agda_load to recover.`,
+    ],
+    warnings,
+    goals: [],
+    allGoalsText: "",
+    invisibleGoalCount: 0,
+    goalCount: 0,
+    hasHoles: false,
+    isComplete: false,
+    classification: "process-died-during-reconciliation",
+    profiling,
+  };
+}
+
 export function buildLoadOptionsList(
   profileOptions: string[] | undefined,
   commandLineOptions?: string[],
@@ -233,6 +262,21 @@ export async function runLoad(
         file: absPath,
         error: err instanceof Error ? err.message : String(err),
       });
+    }
+    // If the metas reconciliation killed the Agda subprocess
+    // (timeout, crash, etc.) `sendCommand`'s finally already cleared
+    // `currentFile` and friends, but the suppressed `catch` above let
+    // execution continue. Returning a success envelope at that point
+    // would mis-report the session as loaded against a dead process.
+    // Surface the failure so the agent re-issues `agda_load`, AND
+    // record the classification on the session — the public contract
+    // for `getLastClassification()` is "set on every load attempt,"
+    // and this early return must not be an exception.
+    if (session.currentFile !== absPath) {
+      const result = loadFailedAfterReconciliation(absPath, parsed.warnings, parsed.profiling);
+      session.lastClassification = result.classification;
+      session.lastLoadedAt = Date.now();
+      return result;
     }
   }
 

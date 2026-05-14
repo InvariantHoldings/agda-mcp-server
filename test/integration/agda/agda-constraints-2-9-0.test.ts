@@ -75,7 +75,7 @@ it("agda_constraints succeeds on Agda 2.9.0 with the rewrite-mode form", async (
     // returns an empty join when the array is empty).
     expect(result.text).toBe("");
   } finally {
-    session.destroy();
+    await session.destroy();
     if (previousAgdaBin === undefined) {
       delete process.env.AGDA_BIN;
     } else {

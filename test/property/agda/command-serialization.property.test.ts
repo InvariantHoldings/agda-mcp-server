@@ -37,7 +37,7 @@ test("concurrent sendCommand calls never overlap regardless of count (Bug 3)", a
         // The key invariant: at most 1 command active at any time
         expect(maxConcurrent).toBe(1);
 
-        session.destroy();
+        await session.destroy();
       },
     ),
     { numRuns: 20 },
@@ -70,7 +70,7 @@ test("command queue preserves FIFO order under concurrent dispatch (Bug 3)", asy
         // Commands must execute in the order they were submitted
         expect(executionOrder).toEqual(commands);
 
-        session.destroy();
+        await session.destroy();
       },
     ),
     { numRuns: 20 },

@@ -10,6 +10,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 
 import { findAgdaBinary } from "./binary-discovery.js";
+import { logger } from "./logger.js";
 import { createLibraryRegistration, type LibraryRegistration } from "./library-registration.js";
 import type { AgdaTransport } from "../session/agda-transport.js";
 
@@ -28,21 +29,74 @@ export function ensureLibraryRegistration(args: {
 }
 
 /**
+ * Handle returned by `spawnAgdaProcess`. `detachListeners` removes
+ * the transport/error wiring we installed at spawn time so that a
+ * dying-but-not-yet-closed process can be abandoned without its
+ * late stdout/stderr/close events firing into the (shared) transport
+ * and corrupting the next command's state.
+ */
+export interface SpawnedAgdaProcess {
+  proc: ChildProcess;
+  detachListeners(): void;
+}
+
+/** Grace period (ms) between SIGTERM and the SIGKILL fallback. */
+export const DEFAULT_TERMINATE_GRACE_MS = 3_000;
+
+/** SIGTERM the proc, then SIGKILL after `graceMs` if it hasn't exited.
+ *  Idempotent on already-exited or already-killed handles. The
+ *  escalation timer is `unref()`'d so it doesn't keep Node alive. */
+export function terminateAgdaProcess(
+  proc: ChildProcess,
+  options: { graceMs?: number } = {},
+): void {
+  if (procAlreadyExited(proc)) return;
+
+  if (!proc.killed) {
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      return; // ESRCH: process gone between the check and the syscall
+    }
+  }
+
+  const escalation = setTimeout(() => {
+    if (!procAlreadyExited(proc)) {
+      try { proc.kill("SIGKILL"); } catch { /* already gone */ }
+    }
+  }, options.graceMs ?? DEFAULT_TERMINATE_GRACE_MS);
+  escalation.unref();
+  proc.once("close", () => clearTimeout(escalation));
+}
+
+function procAlreadyExited(proc: ChildProcess): boolean {
+  return proc.exitCode !== null || proc.signalCode !== null;
+}
+
+/**
  * Spawn a fresh `agda --interaction-json` subprocess for `repoRoot`
  * and wire its stdout/stderr to `transport`. Calls `onClose` and
  * `onError` so the session can reset its own state without exposing
- * internal fields to this module.
+ * internal fields to this module. `onClose` receives the proc
+ * handle so the caller does not have to close over its own
+ * `spawnAgdaProcess` return value (which can trip strict TypeScript
+ * use-before-initialization analysis when the closure is declared
+ * in the same statement as the spawn call).
  *
- * Returns the spawned `ChildProcess`. Caller is responsible for
- * remembering the handle and calling `kill()` at destroy time.
+ * Returns the spawned process together with a `detachListeners`
+ * function. The caller MUST call `detachListeners` before
+ * abandoning the process (e.g. when respawning after a timeout)
+ * so that late events from the dying process cannot reach the
+ * shared transport, which by then is mid-command for the new
+ * process.
  */
 export function spawnAgdaProcess(args: {
   repoRoot: string;
   registration: LibraryRegistration;
   transport: AgdaTransport;
-  onClose: () => void;
+  onClose: (proc: ChildProcess) => void;
   onError: (err: Error) => void;
-}): ChildProcess {
+}): SpawnedAgdaProcess {
   const agdaBin = findAgdaBinary(args.repoRoot);
   const proc = spawn(agdaBin, ["--interaction-json", ...args.registration.agdaArgs], {
     cwd: args.repoRoot,
@@ -50,23 +104,42 @@ export function spawnAgdaProcess(args: {
     stdio: ["pipe", "pipe", "pipe"],
   });
 
-  proc.stdout?.on("data", (chunk: Buffer) => {
+  const onStdout = (chunk: Buffer): void => {
     args.transport.handleStdout(chunk);
-  });
-
-  proc.stderr?.on("data", (chunk: Buffer) => {
+  };
+  const onStderr = (chunk: Buffer): void => {
     args.transport.handleStderr(chunk);
-  });
-
-  proc.on("close", () => {
+  };
+  const onClose = (): void => {
     args.transport.handleProcessClose();
-    args.onClose();
-  });
-
-  proc.on("error", (err) => {
+    args.onClose(proc);
+  };
+  const onError = (err: Error): void => {
     args.transport.handleProcessError(err);
     args.onError(err);
-  });
+  };
 
-  return proc;
+  proc.stdout?.on("data", onStdout);
+  proc.stderr?.on("data", onStderr);
+  proc.on("close", onClose);
+  proc.on("error", onError);
+
+  const detachListeners = (): void => {
+    proc.stdout?.off("data", onStdout);
+    proc.stderr?.off("data", onStderr);
+    proc.off("close", onClose);
+    // Swap the live error handler for a quiet logger rather than
+    // detaching it outright. A late spawn error (e.g. an invalid
+    // AGDA_BIN that surfaces asynchronously, racing destroy/respawn)
+    // emitted by an abandoned child with NO `error` listener would
+    // crash the Node process. The replacement keeps a listener
+    // attached, just one that no longer touches the now-shared
+    // transport state.
+    proc.off("error", onError);
+    proc.on("error", (err: Error) => {
+      logger.warn("Late error from abandoned Agda process", { error: String(err) });
+    });
+  };
+
+  return { proc, detachListeners };
 }

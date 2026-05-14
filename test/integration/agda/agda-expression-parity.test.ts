@@ -133,7 +133,7 @@ for (const scenario of expressionQueryMatrix) {
         }
       }
     } finally {
-      session.destroy();
+      await session.destroy();
     }
   });
 }

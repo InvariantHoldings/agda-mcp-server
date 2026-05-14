@@ -39,14 +39,15 @@ import type {
 import { type AgdaVersion } from "./agda-version.js";
 import { findAgdaBinary } from "./binary-discovery.js";
 import {
-  ensureLibraryRegistration,
-  spawnAgdaProcess,
-} from "./agda-process-spawn.js";
+  destroySessionProcess,
+  ensureProcessForSession,
+  isProcLive,
+} from "./session-process-lifecycle.js";
 import {
-  piggybackVersionFromResponses,
-  preflightVersionDetection,
-  VERSION_DETECTION_MAX_ATTEMPTS,
-} from "./agda-version-detection.js";
+  dispatchSessionCommand,
+  dispatchSessionControlCommand,
+} from "./session-command-dispatch.js";
+import { VERSION_DETECTION_MAX_ATTEMPTS } from "./agda-version-detection.js";
 import { runLoad, runLoadNoMetas } from "./session-load-impl.js";
 import {
   effectiveProjectFlags,
@@ -91,9 +92,70 @@ export class AgdaSession {
   lastClassification: string | null = null;
   lastLoadedAt: number | null = null;
   lastInvisibleGoalCount = 0;
-  private libraryRegistration: LibraryRegistration | null = null;
-  private readonly transport = new AgdaTransport();
-  private commandQueue: Promise<unknown> = Promise.resolve();
+  // The fields below are intentionally non-`private`: they are
+  // mutated by free helpers in `session-process-lifecycle.ts` and
+  // `session-load-impl.ts`, same module-internal convention used for
+  // `currentFile`, `goalIds`, etc. They are tagged `@internal` so
+  // `tsc --stripInternal` strips them from the generated `.d.ts` and
+  // embedders never see them on the exported `AgdaSession` type —
+  // external consumers must continue to use the public class methods.
+  // See Copilot review comments on PR #56 (session.ts:99 + :108).
+  /** @internal */
+  libraryRegistration: LibraryRegistration | null = null;
+  /**
+   * Detacher for the listeners spawnAgdaProcess installed on the
+   * current `this.proc`. Held so we can quiet a dying-but-not-yet-
+   * closed process before respawning — otherwise its late
+   * stdout/close events would reach the shared transport
+   * (mid-command for the *new* process) and corrupt its state. Set
+   * in lockstep with `this.proc`.
+   * @internal
+   */
+  detachProcListeners: (() => void) | null = null;
+  /** @internal */
+  readonly transport = new AgdaTransport();
+  /** @internal */
+  commandQueue: Promise<unknown> = Promise.resolve();
+  /**
+   * Monotonic counter of regular `sendCommand` enqueues. Each task
+   * captures its value at construction time; if `cancelledThrough`
+   * later exceeds that captured serial, the task body rejects
+   * instead of running. Used by `dispatchSessionControlCommand` to
+   * cancel regular work that was queued before an abort/exit fired
+   * — otherwise a wedged Agda could starve the control command
+   * behind a backlog of queued regular commands that will never
+   * complete. See PR #56 review round 11 (L6).
+   * @internal
+   */
+  commandSerial = 0;
+  /**
+   * Highest `commandSerial` cancelled by a control command. Tasks
+   * with serial `<=` this value reject at task-body entry. Each
+   * `dispatchSessionControlCommand` sets this to the current
+   * `commandSerial`, sweeping every regular task already queued.
+   * @internal
+   */
+  cancelledThrough = -1;
+  /**
+   * Flag flipped by `destroySessionProcess`. Tasks already chained
+   * onto `commandQueue` before destroy() ran reject early instead
+   * of starting a fresh `ensureProcess()` (which would spawn a new
+   * Agda just as shutdown is waiting for the old one to exit).
+   * Once true it never resets — embedders that need a session again
+   * must construct a new one. See Copilot review comment on PR #56
+   * (`session-process-lifecycle.ts:198`).
+   * @internal
+   */
+  destroyed = false;
+  /**
+   * Cached Promise from the first `destroy()` call. Concurrent
+   * destroys (a second signal mid-shutdown, or a programmatic
+   * embedder racing the SIGINT handler) attach to this Promise
+   * instead of synchronously resolving after `proc` was nulled but
+   * before the child actually exited.
+   * @internal
+   */
+  teardownPromise: Promise<void> | null = null;
   readonly goal;
   readonly expr;
   readonly query;
@@ -121,56 +183,14 @@ export class AgdaSession {
     }
   }
 
-  /** Start the Agda process if not already running. */
+  /**
+   * Start the Agda process if not already running, or respawn if
+   * the current one is dead/killed. Implementation lives in
+   * `session-process-lifecycle.ts`; see that module's docstring for
+   * the `.killed` / listener-detach contract.
+   */
   ensureProcess(): ChildProcess {
-    if (this.proc && this.proc.exitCode === null) {
-      return this.proc;
-    }
-
-    // Process died or never started — reset stale state.
-    this.currentFile = null;
-    this.goalIds = [];
-    this.lastInvisibleGoalCount = 0;
-
-    this.libraryRegistration = ensureLibraryRegistration({
-      current: this.libraryRegistration,
-      repoRoot: this.repoRoot,
-    });
-
-    this.proc = spawnAgdaProcess({
-      repoRoot: this.repoRoot,
-      registration: this.libraryRegistration,
-      transport: this.transport,
-      onClose: () => this.handleProcessClose(),
-      onError: () => { /* transport already logged */ },
-    });
-
-    return this.proc;
-  }
-
-  /** Reset every field that depends on the live Agda process. Called
-   *  from the spawn helper's `close` callback. */
-  private handleProcessClose(): void {
-    this.proc = null;
-    // Release the per-session AGDA_DIR temp directory eagerly. If
-    // Agda crashed (process exit without an explicit destroy() from
-    // the host), the registration would otherwise leak its
-    // `mkdtempSync` directory until the OS cleans `os.tmpdir()` —
-    // which on long-running servers is "never". A re-spawn via
-    // `ensureProcess` will create a fresh registration for the new
-    // process; the old one is no longer reachable.
-    this.libraryRegistration?.cleanup();
-    this.libraryRegistration = null;
-    this.currentFile = null;
-    this.goalIds = [];
-    this.lastLoadedMtime = null;
-    this.lastClassification = null;
-    this.lastLoadedAt = null;
-    this.lastInvisibleGoalCount = 0;
-    this.exiting = false;
-    // Reset version detection so the next process start re-detects cleanly.
-    this.detectedVersion = null;
-    this.versionDetectionAttempts = 0;
+    return ensureProcessForSession(this);
   }
 
   /**
@@ -188,35 +208,7 @@ export class AgdaSession {
     command: string,
     timeoutMs = configuredCommandTimeoutMs(),
   ): Promise<AgdaResponse[]> {
-    const task = this.commandQueue.then(async () => {
-      const proc = this.ensureProcess();
-
-      // Detect Agda version inline before the user command (or
-      // piggyback off it when the command itself queries the
-      // version). Both helpers are best-effort: a failed attempt
-      // consumes a slot but never blocks the user command.
-      await preflightVersionDetection({
-        state: this,
-        transport: this.transport,
-        proc,
-        buildIotcm: (cmd) => this.iotcm(cmd),
-        userCommand: command,
-      });
-
-      const responses = await this.transport.sendCommand(proc, command, timeoutMs);
-
-      piggybackVersionFromResponses({
-        state: this,
-        responses,
-        userCommand: command,
-      });
-
-      return responses;
-    });
-    // Chain onto the queue — swallow rejections so a failed command
-    // doesn't block subsequent commands from executing.
-    this.commandQueue = task.then(() => { }, () => { });
-    return task;
+    return dispatchSessionCommand(this, command, timeoutMs);
   }
 
   /**
@@ -251,13 +243,6 @@ export class AgdaSession {
    */
   iotcmFor(filePath: string, agdaCmd: string): string {
     return iotcmEnvelope(filePath, agdaCmd);
-  }
-
-  private async runIndependentCommand(
-    agdaCmd: string,
-    timeoutMs = 120_000,
-  ): Promise<AgdaResponse[]> {
-    return this.sendCommand(iotcmEnvelope(this.currentFile ?? "", agdaCmd), timeoutMs);
   }
 
   // ── Public API ────────────────────────────────────────────────────
@@ -332,15 +317,32 @@ export class AgdaSession {
     return this.backend.hole(goalId, holeContents, backendExpr, payload);
   }
 
-  /** Send Cmd_abort to the running Agda process. */
+  /** Send Cmd_abort to the running Agda process.
+   *
+   *  Fire-and-forget at the IOTCM protocol level: Agda emits no
+   *  response when there is no in-progress operation to abort (and a
+   *  brief `DoneAborting` when there is). We bypass the regular
+   *  per-command timeout — which would kill the proc on the elapsing
+   *  budget — and use a two-step interruption: an in-flight
+   *  transport command is rejected synchronously (so it stops
+   *  waiting on its per-command timeout), then the fire-and-forget
+   *  write itself is chained through `commandQueue` so its flush
+   *  window cannot race with a subsequent `sendCommand`. See
+   *  `sendControlCommand` below. */
   async abort(): Promise<AgdaResponse[]> {
-    return this.runIndependentCommand(topLevelCommand("Cmd_abort"), 10_000);
+    return this.sendControlCommand(topLevelCommand("Cmd_abort"), "abort");
   }
 
-  /** Send Cmd_exit to the running Agda process. */
+  /** Send Cmd_exit to the running Agda process and let it shut down
+   *  cleanly. Same interruption pattern as `abort` — see that
+   *  method's docstring. */
   async exit(): Promise<AgdaResponse[]> {
     this.exiting = true;
-    return this.runIndependentCommand(topLevelCommand("Cmd_exit"), 10_000);
+    return this.sendControlCommand(topLevelCommand("Cmd_exit"), "exit");
+  }
+
+  private sendControlCommand(agdaCmd: string, kind: "abort" | "exit"): Promise<AgdaResponse[]> {
+    return dispatchSessionControlCommand(this, agdaCmd, kind);
   }
 
   // ── Accessors ─────────────────────────────────────────────────────
@@ -389,32 +391,30 @@ export class AgdaSession {
   /** Get the current high-level session phase. */
   getPhase(): SessionPhase {
     return deriveSessionPhase({
-      hasProcess: this.proc !== null && this.proc.exitCode === null,
+      hasProcess: this.proc !== null && isProcLive(this.proc),
       hasLoadedFile: this.currentFile !== null,
       isCollecting: this.collecting,
       isExiting: this.exiting,
     });
   }
 
-  /** Kill the Agda process and reset state. */
-  destroy(): void {
-    if (this.proc) {
-      this.proc.kill();
-      this.proc = null;
-    }
-    this.libraryRegistration?.cleanup();
-    this.libraryRegistration = null;
-    this.currentFile = null;
-    this.goalIds = [];
-    this.lastLoadedMtime = null;
-    this.lastClassification = null;
-    this.lastLoadedAt = null;
-    this.lastInvisibleGoalCount = 0;
-    this.detectedVersion = null;
-    this.versionDetectionAttempts = 0;
-    this.transport.destroy();
-    this.commandQueue = Promise.resolve();
-    this.exiting = false;
+  /**
+   * Tear down the session: stop the Agda subprocess, free its
+   * AGDA_DIR registration, and reset all proc-bound state.
+   * Implementation lives in `session-process-lifecycle.ts` (see
+   * `destroySessionProcess`).
+   *
+   * Returns `Promise<void>` resolving when the subprocess has
+   * actually exited (or after a hard fallback timeout). Callers in
+   * shutdown paths MUST await this before `process.exit()`, or the
+   * unref'd SIGKILL escalation inside `terminateAgdaProcess` is
+   * truncated and a SIGTERM-ignoring child survives shutdown.
+   * Synchronous state cleanup happens before the await so callers
+   * that fire-and-forget still see fully reset state — they just
+   * won't observe the SIGKILL escalation.
+   */
+  destroy(): Promise<void> {
+    return destroySessionProcess(this);
   }
 
   get buffer(): string {

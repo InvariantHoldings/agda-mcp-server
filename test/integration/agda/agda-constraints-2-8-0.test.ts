@@ -96,7 +96,7 @@ it("agda_constraints succeeds on Agda 2.8.0 with the bare form", async () => {
     expect(typeof result.text).toBe("string");
     expect(result.text).toBe("");
   } finally {
-    session.destroy();
+    await session.destroy();
     if (previousAgdaBin === undefined) {
       delete process.env.AGDA_BIN;
     } else {

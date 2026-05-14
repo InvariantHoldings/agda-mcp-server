@@ -39,7 +39,7 @@ test("getAgdaVersion() is populated after the first sendCommand resolves", async
   expect(session.getAgdaVersion()).not.toBeNull();
   expect(session.getAgdaVersion()!.parts).toEqual([2, 9, 0]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 test("getAgdaVersion() is populated for subsequent commands too", async () => {
@@ -52,7 +52,7 @@ test("getAgdaVersion() is populated for subsequent commands too", async () => {
 
   expect(session.getAgdaVersion()!.parts).toEqual([2, 7, 0]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 // ── Filtering: non-Version DisplayInfo responses are not mis-parsed ─────────
@@ -81,7 +81,7 @@ test("detection ignores timing and other non-Version DisplayInfo responses", asy
   expect(session.getAgdaVersion()).not.toBeNull();
   expect(session.getAgdaVersion()!.parts).toEqual([2, 9, 0]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 test("detection stays null when Cmd_show_version returns only non-Version DisplayInfo", async () => {
@@ -104,7 +104,7 @@ test("detection stays null when Cmd_show_version returns only non-Version Displa
   // filter is working and "2.9" was not extracted from the Time response.
   expect(session.getAgdaVersion()).toBeNull();
 
-  session.destroy();
+  await session.destroy();
 });
 
 // ── Retry: transient detection failures are retried on the next command ────
@@ -131,7 +131,7 @@ test("detection retries after a transient transport failure", async () => {
   expect(session.getAgdaVersion()).not.toBeNull();
   expect(session.getAgdaVersion()!.parts).toEqual([2, 6, 4]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 test("detection stops retrying after VERSION_DETECTION_MAX_ATTEMPTS failures", async () => {
@@ -157,19 +157,19 @@ test("detection stops retrying after VERSION_DETECTION_MAX_ATTEMPTS failures", a
   await session.sendCommand("IOTCM extra");
   expect(session["versionDetectionAttempts"]).toBe(max);
 
-  session.destroy();
+  await session.destroy();
 });
 
 // ── Reset: destroy() and process restart reset detection state ─────────────
 
-test("destroy() resets versionDetectionAttempts and detectedVersion", () => {
+test("destroy() resets versionDetectionAttempts and detectedVersion", async () => {
   const session = new AgdaSession(process.cwd());
 
   // Simulate a session that already ran detection
   session["detectedVersion"] = { parts: [2, 9, 0], prerelease: false };
   session["versionDetectionAttempts"] = 2;
 
-  session.destroy();
+  await session.destroy();
 
   expect(session.getAgdaVersion()).toBeNull();
   expect(session["versionDetectionAttempts"]).toBe(0);
@@ -195,7 +195,7 @@ test("process close event resets detection state for the next process", async ()
   expect(session.getAgdaVersion()).not.toBeNull();
   expect(session.getAgdaVersion()!.parts).toEqual([2, 9, 0]);
 
-  session.destroy();
+  await session.destroy();
 });
 
 // ── Piggyback: no double round-trip when user command IS Cmd_show_version ──
@@ -223,7 +223,33 @@ test("no pre-flight when user command is Cmd_show_version — version piggybacke
   expect(session.getAgdaVersion()).not.toBeNull();
   expect(session.getAgdaVersion()!.parts).toEqual([2, 9, 0]);
 
-  session.destroy();
+  await session.destroy();
+});
+
+// ── Preflight respawn guard (PR #56 Copilot review) ───────────────────────
+
+test("sendCommand rejects the user command when the preflight version probe killed the proc", async () => {
+  // The user's IOTCM envelope was built BEFORE preflight ran (e.g.
+  // `goalTypeContext` builds it inline with `ctx.sendCommand(...)`),
+  // so its file path and goal IDs reference the previous process.
+  // Sending it to a respawned Agda would either trip "No file loaded"
+  // or target stale interaction IDs in the new process. Reject instead.
+  const session = new AgdaSession(process.cwd());
+  const dyingProc = { exitCode: null, signalCode: null, killed: false } as unknown as ChildProcess;
+  session.ensureProcess = () => dyingProc;
+  session["transport"].sendCommand = (async (_proc: ChildProcess, command: string) => {
+    if (command.includes("Cmd_show_version")) {
+      (dyingProc as unknown as { killed: boolean }).killed = true;
+      throw new Error("simulated preflight timeout");
+    }
+    return [{ kind: "Status" }];
+  }) as any;
+
+  await expect(session.sendCommand("IOTCM cmd1")).rejects.toThrow(
+    /Agda subprocess was replaced during version preflight/,
+  );
+
+  await session.destroy();
 });
 
 test("subsequent non-version commands don't re-run detection after successful piggyback", async () => {
@@ -248,5 +274,41 @@ test("subsequent non-version commands don't re-run detection after successful pi
   // Only the user command itself — no pre-flight
   expect(cmdCount).toBe(2);
 
-  session.destroy();
+  await session.destroy();
+});
+
+// ── Stale-currentFile guard after a per-command timeout (PR #56) ──────────
+
+test("a timeout that kills the proc resets currentFile so the next caller sees 'No file loaded'", async () => {
+  const session = new AgdaSession(process.cwd());
+
+  session.currentFile = "/tmp/Stale.agda";
+  session.goalIds = [0, 1];
+  session.lastLoadedMtime = 12345;
+  session.lastClassification = "ok-with-holes";
+  session.lastLoadedAt = Date.now();
+  session.lastInvisibleGoalCount = 0;
+
+  const dyingProc = { exitCode: null, signalCode: null, killed: false } as unknown as ChildProcess;
+  session.ensureProcess = () => dyingProc;
+  // Preflight succeeds; the USER command times out (matches the new
+  // contract that timeouts reject the Promise) and marks the proc killed.
+  session["transport"].sendCommand = (async (_proc: ChildProcess, command: string) => {
+    if (command.includes("Cmd_show_version")) {
+      return [{ kind: "DisplayInfo", info: { kind: "Version", version: "Agda version 2.9.0" } }];
+    }
+    (dyingProc as unknown as { killed: boolean }).killed = true;
+    throw new Error("sendCommand timed out after 25ms (received 0 responses: {})");
+  }) as any;
+
+  await expect(session.sendCommand("IOTCM cmd_that_times_out")).rejects.toThrow(
+    /sendCommand timed out/,
+  );
+
+  expect(session.getLoadedFile()).toBeNull();
+  expect(session.getGoalIds()).toEqual([]);
+  expect(session.getLastClassification()).toBeNull();
+  expect(session.getLastLoadedAt()).toBeNull();
+
+  await session.destroy();
 });
