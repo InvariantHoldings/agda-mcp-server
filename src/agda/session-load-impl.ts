@@ -59,19 +59,21 @@ export async function runLoad(
   filePath: string,
   options?: { profileOptions?: string[]; commandLineOptions?: string[] },
 ): Promise<LoadResult> {
+  // Invalidate prior success before anything else so a throwing,
+  // incomplete, missing-file, or invalid-options attempt can't leave the
+  // previous load's clean state visible, and record every early return so
+  // lastClassification reflects this attempt.
+  invalidatePriorLoadState(session);
+
   const absPath = resolve(session.repoRoot, filePath);
   if (!existsSync(absPath)) {
-    return fileNotFound(absPath);
+    return finalizeEarlyReturn(session, fileNotFound(absPath));
   }
 
   const optsBuild = buildLoadOptionsList(options?.profileOptions, options?.commandLineOptions);
   if (!optsBuild.ok) {
-    return optsBuild.result;
+    return finalizeEarlyReturn(session, optsBuild.result);
   }
-
-  // Invalidate prior success up front so a throwing/incomplete load
-  // can't leave stale clean state.
-  invalidatePriorLoadState(session);
 
   // iotcmFor uses absPath directly — don't set currentFile yet, since
   // ensureProcess() (inside sendCommand) would reset it. awaitGoalTerminus
@@ -181,12 +183,12 @@ export async function runLoadNoMetas(
   session: AgdaSession,
   filePath: string,
 ): Promise<LoadResult> {
+  invalidatePriorLoadState(session);
+
   const absPath = resolve(session.repoRoot, filePath);
   if (!existsSync(absPath)) {
-    return fileNotFound(absPath);
+    return finalizeEarlyReturn(session, fileNotFound(absPath));
   }
-
-  invalidatePriorLoadState(session);
 
   // No awaitGoalTerminus / terminus guard here: Cmd_load_no_metas
   // deliberately skips the metas display, so a clean strict load emits no

@@ -184,14 +184,13 @@ export function parseLoadResponses(
   const lastCheckedLine = extractEarliestErrorLine([...normalizedErrors, ...normalizedWarnings]);
   const profiling = extractProfilingOutput(responses, options);
 
-  // A genuine Cmd_load always emits a terminal goal-state event. Its
-  // absence means the response stream was truncated before Agda
-  // finished (see ParsedLoadResult.sawLoadTerminus). InteractionPoints
-  // and stderr are checked directly off `responses`; AllGoalsWarnings /
-  // Error come from the decoded DisplayInfo events.
+  // A genuine Cmd_load always emits one of the protocol's terminal
+  // goal-state events (see ParsedLoadResult.sawLoadTerminus). Its absence
+  // means the response stream was truncated before Agda finished. Only
+  // these explicit events count — stderr is deliberately excluded, since
+  // it can appear without the documented terminus and would otherwise
+  // mask a truncated stream as a plain type-error.
   const sawLoadTerminus =
-    interactionPointIds.length > 0 ||
-    stderrTexts.length > 0 ||
     responses.some((resp) => resp.kind === "InteractionPoints") ||
     decodeDisplayInfoEvents(responses).some(
       (event) => event.infoKind === "AllGoalsWarnings" || event.infoKind === "Error",

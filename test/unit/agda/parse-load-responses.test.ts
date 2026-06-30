@@ -200,6 +200,15 @@ test("stderr error sets success=false", () => {
   expect(result.errors.length > 0).toBeTruthy();
 });
 
+test("stderr alone is not a goal-state terminus", () => {
+  // stderr can appear on a truncated stream without any of the documented
+  // terminal events; it must not mask the truncation guard.
+  const result = parseLoadResponses([
+    { kind: "StderrOutput", text: "some non-fatal notice" },
+  ]);
+  expect(result.sawLoadTerminus).toBe(false);
+});
+
 test("goalIds returned for atomic session assignment", () => {
   const result = parseLoadResponses([
     { kind: "InteractionPoints", interactionPoints: [0, 1] },

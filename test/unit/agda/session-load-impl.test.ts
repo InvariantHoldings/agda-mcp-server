@@ -137,6 +137,65 @@ test("runLoad invalidates prior success state before a load that throws", async 
   }
 });
 
+test("runLoad invalidates prior state and records the attempt on a missing file", async () => {
+  const root = makeTempRepo();
+  let sent = false;
+  const session = {
+    repoRoot: root,
+    currentFile: "/some/previous.agda",
+    goalIds: [1, 2],
+    lastLoadedMtime: 42,
+    lastClassification: "ok-complete",
+    lastLoadedAt: 100,
+    lastInvisibleGoalCount: 1,
+    goal: { metas: async () => ({ goals: [] }) },
+    sendCommand: async () => { sent = true; return cleanLoadResponses(); },
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, "DoesNotExist.agda");
+    expect(result.success).toBe(false);
+    expect(sent).toBe(false);
+    // Prior clean state wiped; attempt recorded (no stale success).
+    expect(session.currentFile).toBeNull();
+    expect(session.goalIds).toEqual([]);
+    expect(session.lastClassification).toBe(result.classification);
+    expect(session.lastLoadedAt).not.toBeNull();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoad invalidates prior state and records the attempt on invalid options", async () => {
+  const root = makeTempRepo();
+  const file = "Opts.agda";
+  writeFileSync(resolve(root, file), "module Opts where\n", "utf8");
+  const session = {
+    repoRoot: root,
+    currentFile: "/some/previous.agda",
+    goalIds: [5],
+    lastLoadedMtime: 7,
+    lastClassification: "ok-with-holes",
+    lastLoadedAt: 100,
+    lastInvisibleGoalCount: 0,
+    goal: { metas: async () => ({ goals: [] }) },
+    sendCommand: async () => cleanLoadResponses(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, file, { commandLineOptions: ["--interaction-json"] });
+    expect(result.classification).toBe("invalid-command-line-options");
+    expect(session.currentFile).toBeNull();
+    expect(session.goalIds).toEqual([]);
+    expect(session.lastClassification).toBe("invalid-command-line-options");
+    expect(session.lastLoadedAt).not.toBeNull();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("runLoad recovers dropped visible goal IDs via a metas re-query when source has holes", async () => {
   const root = makeTempRepo();
   const file = "Recover.agda";
