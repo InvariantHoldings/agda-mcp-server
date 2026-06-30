@@ -7,6 +7,38 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`agda_load` no longer drops a visible goal or mis-reports a failed
+  load as clean (issues #65, #66).** Both stemmed from the transport
+  resolving a `Cmd_load` on its idle heuristic during the compute gap a
+  large module takes between streaming its syntax-highlighting payload
+  and emitting the trailing goal-state events. Resolving early dropped
+  the `AllGoalsWarnings` / `InteractionPoints` / `Error` that follow — so
+  a hole surfaced with no goal ID (the load even noticed the source hole
+  but exposed no interaction point), and a real type error was silently
+  read as a successful load. Fixes, layered:
+  - A metas `Cmd_load` now holds completion until it has observed the
+    documented goal-state terminus — `InteractionPoints` **and**
+    `AllGoalsWarnings`, or a `DisplayInfo` `Error` — using a much longer
+    idle window (`AGDA_MCP_LOAD_TERMINUS_IDLE_MS`, default 2000ms) until
+    then. This keys on the protocol's stable goal-state contract rather
+    than response ordering (which differs across Agda versions), so the
+    compute gap before the goals — which can fall *after* the trailing
+    `Status` on a large module — can't be mistaken for completion. The
+    window is scoped to that one command: `Cmd_load_no_metas`, give,
+    case-split, and queries keep the original fast idle path, and a small
+    load whose terminus arrives promptly adds no latency.
+  - A metas load that returns no terminal goal-state event is now reported as
+    `load-incomplete-no-terminus` (a failure) instead of a possibly-false
+    clean success, so `parsed.success` is never trusted on a truncated
+    stream.
+  - Prior load-success state (classification, goal IDs) is invalidated at
+    the start of every load, so a load that throws or returns incomplete
+    can't leave stale success visible to proof-status queries.
+  - When the source has a hole but no goal IDs were captured, a settled
+    `Cmd_metas` re-query recovers the dropped interaction points.
+
 ## [0.6.7] - 2026-05-13
 
 ### Notes for upgraders

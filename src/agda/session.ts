@@ -207,8 +207,9 @@ export class AgdaSession {
   sendCommand(
     command: string,
     timeoutMs = configuredCommandTimeoutMs(),
+    options: { awaitGoalTerminus?: boolean } = {},
   ): Promise<AgdaResponse[]> {
-    return dispatchSessionCommand(this, command, timeoutMs);
+    return dispatchSessionCommand(this, command, timeoutMs, options);
   }
 
   /**

@@ -41,6 +41,7 @@ export function dispatchSessionCommand(
   session: AgdaSession,
   command: string,
   timeoutMs: number,
+  options: { awaitGoalTerminus?: boolean } = {},
 ): Promise<AgdaResponse[]> {
   // Capture our serial number synchronously at enqueue time. When
   // our task body runs, `dispatchSessionControlCommand` may have
@@ -73,7 +74,7 @@ export function dispatchSessionCommand(
       assertSessionAlive(session);
       assertProcSurvivedPreflight(session, proc, fileAtStart);
 
-      responses = await session.transport.sendCommand(proc, command, timeoutMs);
+      responses = await session.transport.sendCommand(proc, command, timeoutMs, options);
     } finally {
       resetFileBoundStateIfProcDied(session, proc);
     }

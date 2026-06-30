@@ -23,6 +23,25 @@ import {
 export interface ParsedLoadResult extends LoadResult {
   /** Goal IDs for atomic assignment to session state. */
   goalIds: number[];
+  /**
+   * Whether the response stream contained a terminal load event.
+   *
+   * A genuine `Cmd_load` response always ends with at least one of:
+   *   - `DisplayInfo` `AllGoalsWarnings` (type-checking finished — the
+   *     goal/warning summary, even when there are zero goals),
+   *   - `DisplayInfo` `Error` (type-checking failed), or
+   *   - `InteractionPoints` (the command epilogue's interaction-point
+   *     list, possibly empty).
+   *
+   * When NONE of these is present the stream was truncated before Agda
+   * finished — e.g. the transport resolved on idle during a compute gap
+   * after a large highlighting payload. In that case `success` (which
+   * defaults to `true`) cannot be trusted: a dropped `Error` would be
+   * mis-read as a clean load and dropped goal events would surface holes
+   * with no goal IDs. Callers must treat a `false` value here as "load did
+   * not complete; re-issue".
+   */
+  sawLoadTerminus: boolean;
 }
 
 // Matches Agda's typical error-location formats:
@@ -165,6 +184,18 @@ export function parseLoadResponses(
   const lastCheckedLine = extractEarliestErrorLine([...normalizedErrors, ...normalizedWarnings]);
   const profiling = extractProfilingOutput(responses, options);
 
+  // A genuine Cmd_load always emits one of the protocol's terminal
+  // goal-state events (see ParsedLoadResult.sawLoadTerminus). Its absence
+  // means the response stream was truncated before Agda finished. Only
+  // these explicit events count — stderr is deliberately excluded, since
+  // it can appear without the documented terminus and would otherwise
+  // mask a truncated stream as a plain type-error.
+  const sawLoadTerminus =
+    responses.some((resp) => resp.kind === "InteractionPoints") ||
+    decodeDisplayInfoEvents(responses).some(
+      (event) => event.infoKind === "AllGoalsWarnings" || event.infoKind === "Error",
+    );
+
   return {
     success,
     errors: normalizedErrors,
@@ -179,6 +210,7 @@ export function parseLoadResponses(
     classification: completeness.classification,
     profiling,
     lastCheckedLine,
+    sawLoadTerminus,
   };
 }
 

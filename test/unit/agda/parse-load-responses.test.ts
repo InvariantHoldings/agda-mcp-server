@@ -29,6 +29,36 @@ test("clean load — no errors, no goals", () => {
   expect(result.invisibleGoalCount).toBe(0);
 });
 
+test("sawLoadTerminus true when AllGoalsWarnings or InteractionPoints present", () => {
+  expect(parseLoadResponses([
+    { kind: "InteractionPoints", interactionPoints: [] },
+    { kind: "Status", checked: true },
+  ]).sawLoadTerminus).toBe(true);
+
+  expect(parseLoadResponses([
+    {
+      kind: "DisplayInfo",
+      info: { kind: "AllGoalsWarnings", visibleGoals: [], invisibleGoals: [], errors: [], warnings: [] },
+    },
+  ]).sawLoadTerminus).toBe(true);
+
+  expect(parseLoadResponses([
+    { kind: "DisplayInfo", info: { kind: "Error", message: "boom" } },
+  ]).sawLoadTerminus).toBe(true);
+});
+
+test("sawLoadTerminus false when stream is truncated before goal state", () => {
+  const result = parseLoadResponses([
+    { kind: "Status", checked: false },
+    { kind: "RunningInfo", message: "Checking Foo" },
+    { kind: "HighlightingInfo", filepath: "/tmp/hl", direct: false },
+  ]);
+  expect(result.sawLoadTerminus).toBe(false);
+  // success still defaults true — which is exactly why callers must not
+  // trust it without a terminus.
+  expect(result.success).toBe(true);
+});
+
 test("load with interaction points → goals populated", () => {
   const result = parseLoadResponses([
     { kind: "InteractionPoints", interactionPoints: [0, 1] },
@@ -168,6 +198,15 @@ test("stderr error sets success=false", () => {
   ]);
   expect(result.success).toBe(false);
   expect(result.errors.length > 0).toBeTruthy();
+});
+
+test("stderr alone is not a goal-state terminus", () => {
+  // stderr can appear on a truncated stream without any of the documented
+  // terminal events; it must not mask the truncation guard.
+  const result = parseLoadResponses([
+    { kind: "StderrOutput", text: "some non-fatal notice" },
+  ]);
+  expect(result.sawLoadTerminus).toBe(false);
 });
 
 test("goalIds returned for atomic session assignment", () => {

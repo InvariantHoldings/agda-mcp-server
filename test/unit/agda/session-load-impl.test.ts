@@ -62,6 +62,219 @@ function loadResponsesWithInvisibleGoal() {
   ];
 }
 
+// Cmd_load responses with neither AllGoalsWarnings, Error, nor
+// InteractionPoints — i.e. a stream truncated before the goal state.
+function truncatedLoadResponses() {
+  return [
+    { kind: "Status", checked: false },
+    { kind: "RunningInfo", message: "Checking Foo" },
+    { kind: "HighlightingInfo", filepath: "/tmp/hl", direct: false },
+  ];
+}
+
+test("runLoad reports incomplete when the response stream has no terminal event", async () => {
+  const root = makeTempRepo();
+  const file = "Truncated.agda";
+  writeFileSync(resolve(root, file), "module Truncated where\nx : Set\nx = {!!}\n", "utf8");
+
+  let metasCalls = 0;
+  const session = {
+    repoRoot: root,
+    currentFile: "/some/previous.agda",
+    goalIds: [7, 8],
+    lastLoadedMtime: 123,
+    lastClassification: "ok-complete",
+    lastLoadedAt: 999,
+    lastInvisibleGoalCount: 2,
+    goal: { metas: async () => { metasCalls += 1; return { goals: [] }; } },
+    sendCommand: async () => truncatedLoadResponses(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, file);
+    expect(result.success).toBe(false);
+    expect(result.classification).toBe("load-incomplete-no-terminus");
+    expect(result.errors[0]).toMatch(/no terminal goal-state event/i);
+    // Never ran metas — the truncation guard fires before reconciliation.
+    expect(metasCalls).toBe(0);
+    // Prior success state was invalidated up front and not restored.
+    expect(session.lastClassification).toBe("load-incomplete-no-terminus");
+    expect(session.goalIds).toEqual([]);
+    expect(session.currentFile).toBeNull();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoad invalidates prior success state before a load that throws", async () => {
+  const root = makeTempRepo();
+  const file = "Throws.agda";
+  writeFileSync(resolve(root, file), "module Throws where\n", "utf8");
+
+  const session = {
+    repoRoot: root,
+    currentFile: "/some/previous.agda",
+    goalIds: [1, 2, 3],
+    lastLoadedMtime: 42,
+    lastClassification: "ok-complete",
+    lastLoadedAt: 100,
+    lastInvisibleGoalCount: 1,
+    goal: { metas: async () => ({ goals: [] }) },
+    sendCommand: async () => { throw new Error("sendCommand timed out"); },
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    await expect(runLoad(session, file)).rejects.toThrow(/timed out/);
+    // The previous file's clean classification and goals must be gone —
+    // no stale success can survive the failed load.
+    expect(session.lastClassification).toBeNull();
+    expect(session.goalIds).toEqual([]);
+    expect(session.currentFile).toBeNull();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoad invalidates prior state and records the attempt on a missing file", async () => {
+  const root = makeTempRepo();
+  let sent = false;
+  const session = {
+    repoRoot: root,
+    currentFile: "/some/previous.agda",
+    goalIds: [1, 2],
+    lastLoadedMtime: 42,
+    lastClassification: "ok-complete",
+    lastLoadedAt: 100,
+    lastInvisibleGoalCount: 1,
+    goal: { metas: async () => ({ goals: [] }) },
+    sendCommand: async () => { sent = true; return cleanLoadResponses(); },
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, "DoesNotExist.agda");
+    expect(result.success).toBe(false);
+    expect(sent).toBe(false);
+    // Prior clean state wiped; attempt recorded (no stale success).
+    expect(session.currentFile).toBeNull();
+    expect(session.goalIds).toEqual([]);
+    expect(session.lastClassification).toBe(result.classification);
+    expect(session.lastLoadedAt).not.toBeNull();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoad invalidates prior state and records the attempt on invalid options", async () => {
+  const root = makeTempRepo();
+  const file = "Opts.agda";
+  writeFileSync(resolve(root, file), "module Opts where\n", "utf8");
+  const session = {
+    repoRoot: root,
+    currentFile: "/some/previous.agda",
+    goalIds: [5],
+    lastLoadedMtime: 7,
+    lastClassification: "ok-with-holes",
+    lastLoadedAt: 100,
+    lastInvisibleGoalCount: 0,
+    goal: { metas: async () => ({ goals: [] }) },
+    sendCommand: async () => cleanLoadResponses(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, file, { commandLineOptions: ["--interaction-json"] });
+    expect(result.classification).toBe("invalid-command-line-options");
+    expect(session.currentFile).toBeNull();
+    expect(session.goalIds).toEqual([]);
+    expect(session.lastClassification).toBe("invalid-command-line-options");
+    expect(session.lastLoadedAt).not.toBeNull();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoad recovers dropped visible goal IDs via a metas re-query when source has holes", async () => {
+  const root = makeTempRepo();
+  const file = "Recover.agda";
+  writeFileSync(resolve(root, file), "module Recover where\nx : Set\nx = {!!}\n", "utf8");
+
+  // Simulate the dropped-tail case: the load response carried a terminus
+  // (InteractionPoints) but no goal IDs, and the FIRST metas reconcile
+  // also missed them; the recovery re-query then surfaces goal 0.
+  let metasCalls = 0;
+  const session = {
+    repoRoot: root,
+    currentFile: null,
+    goalIds: [],
+    lastLoadedMtime: 0,
+    lastClassification: null,
+    lastLoadedAt: null,
+    lastInvisibleGoalCount: 0,
+    goal: {
+      metas: async () => {
+        metasCalls += 1;
+        return metasCalls >= 2
+          ? { goals: [{ goalId: 0, type: "Set", context: [] }] }
+          : { goals: [] };
+      },
+    },
+    // Terminus present (empty InteractionPoints) but zero goal IDs.
+    sendCommand: async () => cleanLoadResponses(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, file);
+    expect(result.success).toBe(true);
+    expect(result.classification).toBe("ok-with-holes");
+    expect(result.goals.map((g) => g.goalId)).toEqual([0]);
+    expect(result.goalCount).toBe(1);
+    expect(session.goalIds).toEqual([0]);
+    expect(metasCalls).toBe(2);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoadNoMetas accepts a clean strict load with no goal-state terminus", async () => {
+  // Cmd_load_no_metas skips the metas display, so a clean strict load
+  // emits no InteractionPoints / AllGoalsWarnings — only highlighting +
+  // Status. That is normal completion, not truncation, so it must report
+  // ok-complete (NOT load-incomplete-no-terminus).
+  const root = makeTempRepo();
+  const file = "CleanStrict.agda";
+  writeFileSync(resolve(root, file), "module CleanStrict where\n", "utf8");
+
+  const session = {
+    repoRoot: root,
+    currentFile: null,
+    goalIds: [],
+    lastLoadedMtime: 0,
+    lastClassification: null,
+    lastLoadedAt: null,
+    lastInvisibleGoalCount: 0,
+    sendCommand: async () => [
+      { kind: "Status", checked: false },
+      { kind: "ClearRunningInfo" },
+      { kind: "ClearHighlighting" },
+      { kind: "HighlightingInfo", filepath: "/tmp/hl", direct: false },
+    ],
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoadNoMetas(session, file);
+    expect(result.success).toBe(true);
+    expect(result.classification).toBe("ok-complete");
+    expect(result.hasHoles).toBe(false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("runLoad classifies explicit hole as ok-with-holes despite empty protocol goals", async () => {
   const root = makeTempRepo();
   const file = "Hole.agda";

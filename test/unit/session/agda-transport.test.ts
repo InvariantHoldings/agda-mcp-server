@@ -49,6 +49,67 @@ test("AgdaTransport waits for terminal payloads after Status before resolving", 
   });
 });
 
+test("awaitGoalTerminus holds completion until the load goal-state terminus arrives", async () => {
+  // Reproduces the #65/#66 race: Status arrives, then after a gap longer
+  // than the short idle window Agda emits the goal state. Without the
+  // terminus wait the command would resolve on Status and drop the goals.
+  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
+    await withEnv("AGDA_MCP_LOAD_TERMINUS_IDLE_MS", "200", async () => {
+      const transport = new AgdaTransport();
+      const proc = {
+        stdin: {
+          write() {
+            // Status then highlighting arrive promptly...
+            setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"Status","status":{"checked":true}}\n')), 0);
+            setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"HighlightingInfo","payload":[]}\n')), 2);
+            // ...then a 40ms compute gap (>> the 5ms idle window) before
+            // the goal state. The terminus wait must bridge it.
+            setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"DisplayInfo","info":{"kind":"AllGoalsWarnings","visibleGoals":[],"invisibleGoals":[],"errors":[],"warnings":[]}}\n')), 45);
+            setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"InteractionPoints","interactionPoints":[0]}\n')), 48);
+          },
+        },
+      };
+
+      const responses = await transport.sendCommand(
+        proc as unknown as ChildProcess,
+        'IOTCM "x" NonInteractive Direct (Cmd_load)',
+        2000,
+        { awaitGoalTerminus: true },
+      );
+
+      expect(responses.some((r) => r.kind === "InteractionPoints")).toBe(true);
+      expect(responses.some((r) => r.kind === "DisplayInfo")).toBe(true);
+    });
+  });
+});
+
+test("without awaitGoalTerminus a non-load command resolves on the short idle window", async () => {
+  // Same gap, but no terminus wait → resolves on the short window after
+  // Status, leaving the late payload out. This is the fast path that
+  // Cmd_load_no_metas / give / queries keep.
+  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
+    const transport = new AgdaTransport();
+    const proc = {
+      stdin: {
+        write() {
+          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"Status","status":{"checked":true}}\n')), 0);
+          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"HighlightingInfo","payload":[]}\n')), 2);
+          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"InteractionPoints","interactionPoints":[0]}\n')), 60);
+        },
+      },
+    };
+
+    const responses = await transport.sendCommand(
+      proc as unknown as ChildProcess,
+      'IOTCM "x" NonInteractive Direct (Cmd_load_no_metas)',
+      2000,
+    );
+
+    // Resolved before the 60ms-late payload arrived.
+    expect(responses.some((r) => r.kind === "InteractionPoints")).toBe(false);
+  });
+});
+
 test("AgdaTransport resolves after trailing Status when earlier payloads already arrived", async () => {
   await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
     const transport = new AgdaTransport();
