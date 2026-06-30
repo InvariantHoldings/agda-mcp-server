@@ -18,12 +18,18 @@ and this project follows [Semantic Versioning](https://semver.org/).
   a hole surfaced with no goal ID (the load even noticed the source hole
   but exposed no interaction point), and a real type error was silently
   read as a successful load. Fixes, layered:
-  - Completion detection now treats mid-stream highlighting/progress
-    responses as non-terminal and waits a much longer idle window
-    (`AGDA_MCP_NONTERMINAL_IDLE_MS`, default 2000ms) when one is the last
-    response seen, so the trailing goal state is never dropped. A real
-    terminal event restores the short window — no common-path latency.
-  - A load that returns no terminal goal-state event is now reported as
+  - A metas `Cmd_load` now holds completion until it has observed the
+    documented goal-state terminus — `InteractionPoints` **and**
+    `AllGoalsWarnings`, or a `DisplayInfo` `Error` — using a much longer
+    idle window (`AGDA_MCP_LOAD_TERMINUS_IDLE_MS`, default 2000ms) until
+    then. This keys on the protocol's stable goal-state contract rather
+    than response ordering (which differs across Agda versions), so the
+    compute gap before the goals — which can fall *after* the trailing
+    `Status` on a large module — can't be mistaken for completion. The
+    window is scoped to that one command: `Cmd_load_no_metas`, give,
+    case-split, and queries keep the original fast idle path, and a small
+    load whose terminus arrives promptly adds no latency.
+  - A metas load that returns no terminal goal-state event is now reported as
     `load-incomplete-no-terminus` (a failure) instead of a possibly-false
     clean success, so `parsed.success` is never trusted on a truncated
     stream.

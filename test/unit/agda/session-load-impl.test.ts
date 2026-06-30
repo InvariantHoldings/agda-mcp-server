@@ -180,29 +180,37 @@ test("runLoad recovers dropped visible goal IDs via a metas re-query when source
   }
 });
 
-test("runLoadNoMetas reports incomplete when the response stream has no terminal event", async () => {
+test("runLoadNoMetas accepts a clean strict load with no goal-state terminus", async () => {
+  // Cmd_load_no_metas skips the metas display, so a clean strict load
+  // emits no InteractionPoints / AllGoalsWarnings — only highlighting +
+  // Status. That is normal completion, not truncation, so it must report
+  // ok-complete (NOT load-incomplete-no-terminus).
   const root = makeTempRepo();
-  const file = "TruncatedStrict.agda";
-  writeFileSync(resolve(root, file), "module TruncatedStrict where\n", "utf8");
+  const file = "CleanStrict.agda";
+  writeFileSync(resolve(root, file), "module CleanStrict where\n", "utf8");
 
   const session = {
     repoRoot: root,
-    currentFile: "/some/previous.agda",
-    goalIds: [3],
-    lastLoadedMtime: 5,
-    lastClassification: "ok-complete",
-    lastLoadedAt: 9,
+    currentFile: null,
+    goalIds: [],
+    lastLoadedMtime: 0,
+    lastClassification: null,
+    lastLoadedAt: null,
     lastInvisibleGoalCount: 0,
-    sendCommand: async () => truncatedLoadResponses(),
+    sendCommand: async () => [
+      { kind: "Status", checked: false },
+      { kind: "ClearRunningInfo" },
+      { kind: "ClearHighlighting" },
+      { kind: "HighlightingInfo", filepath: "/tmp/hl", direct: false },
+    ],
     iotcmFor: (_path: string, cmd: string) => cmd,
   } as any;
 
   try {
     const result = await runLoadNoMetas(session, file);
-    expect(result.success).toBe(false);
-    expect(result.classification).toBe("load-incomplete-no-terminus");
-    expect(session.goalIds).toEqual([]);
-    expect(session.currentFile).toBeNull();
+    expect(result.success).toBe(true);
+    expect(result.classification).toBe("ok-complete");
+    expect(result.hasHoles).toBe(false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

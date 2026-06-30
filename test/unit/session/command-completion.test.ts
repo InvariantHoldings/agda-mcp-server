@@ -2,11 +2,10 @@ import { test, expect } from "vitest";
 
 import {
   configuredCommandTimeoutMs,
+  configuredGoalTerminusIdleMs,
   configuredIdleCompletionMs,
-  configuredNonTerminalIdleMs,
   configuredPostStatusIdleCompletionMs,
   idleCompletionDelay,
-  isNonTerminalTrailingKind,
   configuredWaitingSentryMs,
   shouldResolveOnIdle,
   summarizeResponseKinds,
@@ -75,39 +74,46 @@ test("idleCompletionDelay waits longer after a trailing Status", () => {
   }
 });
 
-test("isNonTerminalTrailingKind flags mid-stream highlighting/progress kinds", () => {
-  expect(isNonTerminalTrailingKind("HighlightingInfo")).toBe(true);
-  expect(isNonTerminalTrailingKind("ClearHighlighting")).toBe(true);
-  expect(isNonTerminalTrailingKind("RunningInfo")).toBe(true);
-  expect(isNonTerminalTrailingKind("ClearRunningInfo")).toBe(true);
-  expect(isNonTerminalTrailingKind("InteractionPoints")).toBe(false);
-  expect(isNonTerminalTrailingKind("DisplayInfo")).toBe(false);
-  expect(isNonTerminalTrailingKind("Status")).toBe(false);
-  expect(isNonTerminalTrailingKind(null)).toBe(false);
-  expect(isNonTerminalTrailingKind(undefined)).toBe(false);
-});
-
-test("idleCompletionDelay waits far longer after a non-terminal trailing event (issues #65/#66)", () => {
+test("idleCompletionDelay waits for a metas Cmd_load's goal-state terminus", () => {
   const previousIdle = process.env.AGDA_MCP_IDLE_COMPLETION_MS;
-  const previousNonTerminal = process.env.AGDA_MCP_NONTERMINAL_IDLE_MS;
+  const previousTerminus = process.env.AGDA_MCP_LOAD_TERMINUS_IDLE_MS;
 
   process.env.AGDA_MCP_IDLE_COMPLETION_MS = "250";
-  process.env.AGDA_MCP_NONTERMINAL_IDLE_MS = "2000";
+  process.env.AGDA_MCP_LOAD_TERMINUS_IDLE_MS = "2000";
 
   try {
-    expect(configuredNonTerminalIdleMs()).toBe(2000);
-    // Highlighting last → wait the long window, so the trailing
-    // AllGoalsWarnings / InteractionPoints / Error aren't dropped.
+    expect(configuredGoalTerminusIdleMs()).toBe(2000);
+    // Awaiting the terminus, not yet seen → long window regardless of the
+    // last kind (the compute gap can fall after the trailing Status).
     expect(
-      idleCompletionDelay({ sawStatusDone: false, responseCount: 5, lastResponseKind: "HighlightingInfo" }),
+      idleCompletionDelay({
+        sawStatusDone: true,
+        responseCount: 5,
+        lastResponseKind: "Status",
+        awaitGoalTerminus: true,
+        sawGoalTerminus: false,
+      }),
     ).toBe(2000);
-    // RunningInfo (progress) is treated the same.
+    // Terminus observed → back to the short window.
     expect(
-      idleCompletionDelay({ sawStatusDone: true, responseCount: 5, lastResponseKind: "RunningInfo" }),
-    ).toBe(2000);
-    // A genuine terminal event restores the short window.
+      idleCompletionDelay({
+        sawStatusDone: true,
+        responseCount: 6,
+        lastResponseKind: "InteractionPoints",
+        awaitGoalTerminus: true,
+        sawGoalTerminus: true,
+      }),
+    ).toBe(250);
+    // Not a metas load (e.g. Cmd_load_no_metas, give, query) → never the
+    // long window even if it ends on highlighting.
     expect(
-      idleCompletionDelay({ sawStatusDone: true, responseCount: 6, lastResponseKind: "InteractionPoints" }),
+      idleCompletionDelay({
+        sawStatusDone: false,
+        responseCount: 4,
+        lastResponseKind: "HighlightingInfo",
+        awaitGoalTerminus: false,
+        sawGoalTerminus: false,
+      }),
     ).toBe(250);
   } finally {
     if (previousIdle === undefined) {
@@ -115,10 +121,10 @@ test("idleCompletionDelay waits far longer after a non-terminal trailing event (
     } else {
       process.env.AGDA_MCP_IDLE_COMPLETION_MS = previousIdle;
     }
-    if (previousNonTerminal === undefined) {
-      delete process.env.AGDA_MCP_NONTERMINAL_IDLE_MS;
+    if (previousTerminus === undefined) {
+      delete process.env.AGDA_MCP_LOAD_TERMINUS_IDLE_MS;
     } else {
-      process.env.AGDA_MCP_NONTERMINAL_IDLE_MS = previousNonTerminal;
+      process.env.AGDA_MCP_LOAD_TERMINUS_IDLE_MS = previousTerminus;
     }
   }
 });

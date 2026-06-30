@@ -57,6 +57,18 @@ export class AgdaTransport {
   private controlEscalationTimer: NodeJS.Timeout | null = null;
   private lastResponseAt: number | null = null;
   private lastResponseKind: string | null = null;
+  // Goal-terminus tracking for a metas `Cmd_load`. Per the documented
+  // load sequence (tooling/protocol/data/official-cross-version-notes.json)
+  // a Cmd_load always emits InteractionPoints + AllGoalsWarnings; on a
+  // type error it emits a DisplayInfo Error instead. We must not resolve
+  // the command until that terminus is on the wire, since on a large
+  // module Agda pauses to compute it (the gap that dropped goals/errors
+  // pre-fix). Only armed when `awaitGoalTerminus` is set; every other
+  // command leaves these false and keeps the original fast idle path.
+  private awaitGoalTerminus = false;
+  private sawInteractionPoints = false;
+  private sawAllGoalsWarnings = false;
+  private sawLoadError = false;
 
   handleStdout(chunk: Buffer): void {
     // Drop stdout while idle UNLESS a control-command escalation
@@ -116,6 +128,7 @@ export class AgdaTransport {
     this.sawStatusDone = false;
     this.lastResponseAt = null;
     this.lastResponseKind = null;
+    this.awaitGoalTerminus = false;
     this.rejectInFlightCommand("AgdaTransport destroyed while command was in flight");
   }
 
@@ -195,6 +208,7 @@ export class AgdaTransport {
     this.sawStatusDone = false;
     this.lastResponseAt = null;
     this.lastResponseKind = null;
+    this.awaitGoalTerminus = false;
 
     // Kill-escalation fallback for a wedged Agda that fails to
     // service the control command. Caller decides when to arm:
@@ -256,6 +270,7 @@ export class AgdaTransport {
     proc: ChildProcess,
     command: string,
     timeoutMs = configuredCommandTimeoutMs(),
+    options: { awaitGoalTerminus?: boolean } = {},
   ): Promise<AgdaResponse[]> {
     logger.trace("sendCommand", { command: command.slice(0, 200), timeoutMs });
     const startTime = Date.now();
@@ -270,6 +285,10 @@ export class AgdaTransport {
     this.sawStatusDone = false;
     this.lastResponseAt = null;
     this.lastResponseKind = null;
+    this.awaitGoalTerminus = options.awaitGoalTerminus ?? false;
+    this.sawInteractionPoints = false;
+    this.sawAllGoalsWarnings = false;
+    this.sawLoadError = false;
 
     return new Promise<AgdaResponse[]>((resolveCmd, rejectCmd) => {
       const sentryIntervalMs = configuredWaitingSentryMs();
@@ -437,8 +456,30 @@ export class AgdaTransport {
     if (response.kind === "Status") {
       this.sawStatusDone = true;
     }
+    this.recordGoalTerminusResponse(response);
 
     this.bumpIdleCompletionTimer();
+  }
+
+  /** Track the documented Cmd_load goal-state terminus (InteractionPoints
+   *  + AllGoalsWarnings, or a DisplayInfo Error). Cheap field reads — no
+   *  schema parse — since we only need the response/info kind. */
+  private recordGoalTerminusResponse(response: AgdaResponse): void {
+    if (!this.awaitGoalTerminus) return;
+    if (response.kind === "InteractionPoints") {
+      this.sawInteractionPoints = true;
+    } else if (response.kind === "DisplayInfo") {
+      const infoKind = (response.info as { kind?: unknown } | undefined)?.kind;
+      if (infoKind === "AllGoalsWarnings") this.sawAllGoalsWarnings = true;
+      else if (infoKind === "Error") this.sawLoadError = true;
+    }
+  }
+
+  /** The awaited goal state is fully on the wire. A successful load needs
+   *  both InteractionPoints and AllGoalsWarnings (order varies across
+   *  Agda versions); a type error short-circuits via DisplayInfo Error. */
+  private sawGoalTerminus(): boolean {
+    return this.sawLoadError || (this.sawInteractionPoints && this.sawAllGoalsWarnings);
   }
 
   private clearIdleCompletionTimer(): void {
@@ -466,6 +507,8 @@ export class AgdaTransport {
       sawStatusDone: this.sawStatusDone,
       responseCount: this.responseQueue.length,
       lastResponseKind: this.lastResponseKind,
+      awaitGoalTerminus: this.awaitGoalTerminus,
+      sawGoalTerminus: this.sawGoalTerminus(),
     })) {
       return;
     }
@@ -485,6 +528,8 @@ export class AgdaTransport {
       sawStatusDone: this.sawStatusDone,
       responseCount: this.responseQueue.length,
       lastResponseKind: this.lastResponseKind,
+      awaitGoalTerminus: this.awaitGoalTerminus,
+      sawGoalTerminus: this.sawGoalTerminus(),
     }));
   }
 }

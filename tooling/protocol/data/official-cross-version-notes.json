@@ -4,11 +4,13 @@
     "src/full/Agda/Interaction/Response/Base.hs",
     "src/full/Agda/Interaction/JSONTop.hs"
   ],
-  "versionsConsulted": ["v2.7.0.1", "v2.8.0", "master (pre-2.9.0)"],
-  "lastUpdated": "2026-04-16",
+  "versionsConsulted": ["v2.7.0.1", "v2.8.0", "master (pre-2.9.0)", "v2.9.0 (empirical, --interaction-json capture)"],
+  "lastUpdated": "2026-06-30",
 
   "loadResponseSequence": {
-    "description": "After Cmd_load, Agda emits InteractionPoints, then one or more DisplayInfo/AllGoalsWarnings, then Status. The order is stable across all consulted versions.",
+    "description": "After Cmd_load, Agda emits the visible-goal InteractionPoints, one or more DisplayInfo/AllGoalsWarnings, and a Status(checked). The SET of events is stable across all consulted versions, but the ORDER is not: v2.7.0.1-2.8.0 emit InteractionPoints, then AllGoalsWarnings, then Status; an empirical v2.9.0 capture instead emits Status, then highlighting, then a second Status, then AllGoalsWarnings, then InteractionPoints last. Consumers must therefore key completion on having observed the goal-state terminus (InteractionPoints AND AllGoalsWarnings, or a DisplayInfo Error) rather than on any fixed position or on a trailing Status. See src/session/agda-transport.ts (awaitGoalTerminus) — the long idle window is held only until that terminus is on the wire, which is what prevents a slow module's goal events (or a type Error) from being dropped when the transport would otherwise resolve on idle during Agda's normalise/serialise compute gap.",
+    "notmetasNote": "Cmd_load_no_metas is NOT covered by this sequence: it deliberately skips the metas display, so a clean strict load emits no InteractionPoints/AllGoalsWarnings at all (only highlighting + Status). Absence of a goal-state terminus there is normal completion, not truncation.",
+    "legacyOrderNote": "Historical (v2.7.0.1-2.8.0) order, retained for reference:",
     "responses": [
       {
         "kind": "InteractionPoints",

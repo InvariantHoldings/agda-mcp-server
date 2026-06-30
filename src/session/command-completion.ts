@@ -2,6 +2,15 @@ export interface CommandCompletionSnapshot {
   sawStatusDone: boolean;
   responseCount: number;
   lastResponseKind?: string | null;
+  /**
+   * This command is a metas `Cmd_load` whose goal-state terminus
+   * (`AllGoalsWarnings` / `Error` / `InteractionPoints`) we must wait
+   * for. Set only on that path; every other command leaves it false and
+   * keeps the original fast idle behavior.
+   */
+  awaitGoalTerminus?: boolean;
+  /** The awaited goal-state terminus has been observed. */
+  sawGoalTerminus?: boolean;
 }
 
 export type CommandCompletionOrigin = "idle" | "signal" | "process-close";
@@ -26,21 +35,6 @@ const TERMINAL_IDLE_RESPONSE_KINDS = new Set([
   "StderrOutput",
 ]);
 
-// Mid-stream kinds (highlighting + progress) that are never a command's
-// true final response — Agda always follows them with the real terminal
-// events. On a large module the gap between a big HighlightingInfo
-// payload and the trailing goal state can exceed the short idle window;
-// resolving then drops the AllGoalsWarnings / InteractionPoints / Error
-// that follow: a dropped error then reads as a clean load, and dropped
-// goal IDs leave a hole with no targets. We don't refuse to resolve (that
-// could hang); idleCompletionDelay just waits much longer when one is last.
-const NON_TERMINAL_TRAILING_KINDS = new Set([
-  "HighlightingInfo",
-  "ClearHighlighting",
-  "RunningInfo",
-  "ClearRunningInfo",
-]);
-
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
@@ -59,18 +53,16 @@ export function configuredPostStatusIdleCompletionMs(): number {
 }
 
 /**
- * Idle window when the last response is a non-terminal mid-stream event.
- * Much larger than the normal window so it exceeds Agda's compute gap
- * before the goals arrive. Re-armed per response, so a real terminal
- * event restores the short window — no common-path latency.
+ * Idle window for a metas `Cmd_load` that has not yet emitted its
+ * goal-state terminus. Much larger than the normal window so it exceeds
+ * the compute gap a big module takes — after type-checking and after the
+ * trailing `Status` — to normalise and serialise its goals. Applies only
+ * while `awaitGoalTerminus` is set and the terminus is unseen, so a small
+ * load (terminus arrives immediately) and every non-load command keep the
+ * short window — no common-path latency.
  */
-export function configuredNonTerminalIdleMs(): number {
-  return parsePositiveInt(process.env.AGDA_MCP_NONTERMINAL_IDLE_MS, 2_000);
-}
-
-/** Whether a response kind is never the legitimate end of a command. */
-export function isNonTerminalTrailingKind(kind: string | null | undefined): boolean {
-  return kind != null && NON_TERMINAL_TRAILING_KINDS.has(kind);
+export function configuredGoalTerminusIdleMs(): number {
+  return parsePositiveInt(process.env.AGDA_MCP_LOAD_TERMINUS_IDLE_MS, 2_000);
 }
 
 export function configuredWaitingSentryMs(): number {
@@ -84,14 +76,14 @@ export function idleCompletionDelay(
     return 0;
   }
 
-  // Mid-stream highlighting/progress last → goal state hasn't arrived
-  // yet. Wait far longer so a compute gap before the goals isn't mistaken
-  // for completion. Checked before the post-Status case since progress
-  // events can interleave with Status during a load.
-  if (isNonTerminalTrailingKind(snapshot.lastResponseKind)) {
+  // A metas Cmd_load whose goal-state terminus hasn't arrived yet — the
+  // command is not done regardless of what the last response was. Wait
+  // far longer so the compute gap before the goals (which falls after the
+  // trailing Status on a large module) isn't mistaken for completion.
+  if (snapshot.awaitGoalTerminus && !snapshot.sawGoalTerminus) {
     return Math.max(
       configuredIdleCompletionMs(),
-      configuredNonTerminalIdleMs(),
+      configuredGoalTerminusIdleMs(),
     );
   }
 

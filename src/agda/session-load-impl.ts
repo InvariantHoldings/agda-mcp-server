@@ -74,15 +74,19 @@ export async function runLoad(
   invalidatePriorLoadState(session);
 
   // iotcmFor uses absPath directly — don't set currentFile yet, since
-  // ensureProcess() (inside sendCommand) would reset it.
+  // ensureProcess() (inside sendCommand) would reset it. awaitGoalTerminus
+  // tells the transport this load must not resolve until its documented
+  // goal-state terminus (InteractionPoints + AllGoalsWarnings, or Error)
+  // is on the wire — see official-cross-version-notes.json.
   const responses = await session.sendCommand(
     session.iotcmFor(absPath, command("Cmd_load", quoted(absPath), optsBuild.optsList)),
+    undefined,
+    { awaitGoalTerminus: true },
   );
   throwOnFatalProtocolStderr(responses);
   const parsed = parseLoadResponses(responses, { profilingEnabled: optsBuild.profilingEnabled });
 
-  // No terminal event → truncated stream → success is untrustworthy
-  // success is untrustworthy.
+  // No terminal event → truncated stream → success is untrustworthy.
   if (!parsed.sawLoadTerminus) {
     return finalizeEarlyReturn(
       session,
@@ -184,19 +188,16 @@ export async function runLoadNoMetas(
 
   invalidatePriorLoadState(session);
 
+  // No awaitGoalTerminus / terminus guard here: Cmd_load_no_metas
+  // deliberately skips the metas display, so a clean strict load emits no
+  // InteractionPoints / AllGoalsWarnings at all (only highlighting +
+  // Status). It's outside the documented Cmd_load goal-state sequence, so
+  // "no terminus" is normal completion, not truncation.
   const responses = await session.sendCommand(
     session.iotcmFor(absPath, command("Cmd_load_no_metas", quoted(absPath))),
   );
   throwOnFatalProtocolStderr(responses);
   const parsed: ParsedLoadResult = parseLoadResponses(responses, { profilingEnabled: false });
-
-  // No terminal event → truncated stream.
-  if (!parsed.sawLoadTerminus) {
-    return finalizeEarlyReturn(
-      session,
-      loadIncompleteNoTerminus(absPath, parsed.warnings, parsed.profiling),
-    );
-  }
 
   const needsExplicitHoleScan =
     parsed.success && parsed.goalCount === 0 && parsed.invisibleGoalCount === 0;
