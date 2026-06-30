@@ -1,222 +1,57 @@
 // MIT License — see LICENSE
 //
-// Implementations of AgdaSession.load() and AgdaSession.loadNoMetas()
-// extracted as free functions that operate on a session reference.
-// Keeping the load orchestration here instead of inline in
-// session.ts lets the class file stay under ~400 lines and makes the
-// load-path easier to reason about as a self-contained unit (Cmd_load
-// construction → response parse → session state update → return
-// value). These functions mutate session state (currentFile, goalIds,
-// lastLoadedMtime, lastClassification, lastLoadedAt) as a deliberate
-// side effect — the session fields are readable via public getters
-// and writable here because they're module-internal, not a public
-// API surface for consumers.
+// AgdaSession.load() / loadNoMetas() as free functions over a session
+// reference: Cmd_load → parse → reconcile → session-state update →
+// result. They mutate session load-state fields as a deliberate side
+// effect (readable via public getters). Helpers live in
+// session-load-helpers.ts to keep this file under the size ceiling.
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { AgdaSession } from "./session.js";
 import type { LoadResult } from "./types.js";
-import { NOT_FOUND_RESULT } from "./session-constants.js";
-import { parseLoadResponses } from "./parse-load-responses.js";
+import { parseLoadResponses, type ParsedLoadResult } from "./parse-load-responses.js";
 import { throwOnFatalProtocolStderr } from "./protocol-errors.js";
-import { mergeGoals } from "./goal-merging.js";
 import { logger } from "./logger.js";
-import { command, quoted, stringList } from "../protocol/command-builder.js";
-import { findGoalPositions } from "../session/goal-positions.js";
+import { command, quoted } from "../protocol/command-builder.js";
 import {
-  validateProfileOptions,
-  toProfileArgs,
-} from "../protocol/profile-options.js";
-import { validateCommandLineOptions } from "../protocol/command-line-options.js";
+  buildLoadOptionsList,
+  classifyLoadResult,
+  countExplicitSourceHoles,
+  fileNotFound,
+  invalidatePriorLoadState,
+  loadFailedAfterReconciliation,
+  loadIncompleteNoTerminus,
+  reconcileGoalsViaMetas,
+} from "./session-load-helpers.js";
 
-function fileNotFound(absPath: string): LoadResult {
-  return {
-    ...NOT_FOUND_RESULT,
-    errors: [`File not found: ${absPath}`],
-  };
-}
+export { buildLoadOptionsList };
 
-function invalidOptions(errors: string[], classification: string): LoadResult {
-  return {
-    success: false,
-    errors,
-    warnings: [],
-    goals: [],
-    allGoalsText: "",
-    invisibleGoalCount: 0,
-    goalCount: 0,
-    hasHoles: false,
-    isComplete: false,
-    classification,
-    profiling: null,
-  };
-}
+// ── IOTCM goal taxonomy (drives classification) ─────────────────────
+// Source: Agda Response/Base.hs + JSONTop.hs (v2.7.0.1–pre-2.9.0); see
+// tooling/protocol/data/official-cross-version-notes.json.
+//
+//  1. Visible goals — user holes ({!!}, ?). Reported as
+//     InteractionPoints (numeric IDs) + AllGoalsWarnings.visibleGoals.
+//  2. Invisible goals — unsolved metas Agda couldn't solve. Reported as
+//     AllGoalsWarnings.invisibleGoals. Holes inside `abstract` blocks
+//     have no InteractionId, so a file can have invisibleGoalCount > 0
+//     yet goalCount = 0 despite visible {!!} in source.
+//  3. Source hole markers — our fallback scan when the protocol reports
+//     zero visible and zero invisible goals but the source has {!!}/?.
+//
+// Postulates are complete, not holes. Cmd_load_no_metas is stricter:
+// any remaining interaction point, invisible goal, or source hole forces
+// a type-error.
 
-/** Cmd_load itself succeeded but the post-load metas reconciliation
- *  killed the Agda subprocess (e.g. timeout). At this point the
- *  in-memory load state is gone — return a failure so the agent
- *  re-issues `agda_load` rather than seeing a stale success that
- *  the next tool call would reject with "No file loaded". */
-function loadFailedAfterReconciliation(
-  absPath: string,
-  warnings: string[],
-  profiling: LoadResult["profiling"],
-): LoadResult {
-  return {
-    success: false,
-    errors: [
-      `Agda subprocess died during post-load reconciliation for ${absPath}. ` +
-      `The Cmd_load itself succeeded, but the follow-up metas query timed out or crashed; ` +
-      `re-issue agda_load to recover.`,
-    ],
-    warnings,
-    goals: [],
-    allGoalsText: "",
-    invisibleGoalCount: 0,
-    goalCount: 0,
-    hasHoles: false,
-    isComplete: false,
-    classification: "process-died-during-reconciliation",
-    profiling,
-  };
-}
-
-export function buildLoadOptionsList(
-  profileOptions: string[] | undefined,
-  commandLineOptions?: string[],
-):
-  | { ok: true; optsList: string; profilingEnabled: boolean }
-  | { ok: false; result: LoadResult } {
-  const allArgs: string[] = [];
-  let profilingEnabled = false;
-
-  // Validate and add profile options
-  if (profileOptions && profileOptions.length > 0) {
-    const validation = validateProfileOptions(profileOptions);
-    if (!validation.valid) {
-      return { ok: false, result: invalidOptions(validation.errors, "invalid-profile-options") };
-    }
-    allArgs.push(...toProfileArgs(validation.options));
-    profilingEnabled = true;
-  }
-
-  // Validate and add command-line options
-  if (commandLineOptions && commandLineOptions.length > 0) {
-    const validation = validateCommandLineOptions(commandLineOptions);
-    if (!validation.valid) {
-      return { ok: false, result: invalidOptions(validation.errors, "invalid-command-line-options") };
-    }
-    allArgs.push(...validation.options);
-  }
-
-  return {
-    ok: true,
-    optsList: stringList(allArgs),
-    profilingEnabled,
-  };
-}
-
-// ── IOTCM protocol semantics ────────────────────────────────────────
-//
-// Source of truth: the Agda Haskell sources (consulted across
-// v2.7.0.1, v2.8.0, and master/pre-2.9.0):
-//
-//   Response/Base.hs  — Response_boot, Goals_boot, DisplayInfo_boot
-//   JSONTop.hs        — JSON serialisation (EncodeTCM instances)
-//
-// See also: tooling/protocol/data/official-cross-version-notes.json
-//
-// The `--interaction-json` protocol distinguishes three kinds of
-// "unfinished" items. Our classification must respect all three.
-//
-// 1. **Visible goals (interaction points)**
-//
-//    Haskell type: OutputConstraint_boot tcErr A.Expr InteractionId
-//    Haskell comment: "visible metas (goals)"
-//    JSON responses: `InteractionPoints.interactionPoints` (numeric IDs)
-//                    `AllGoalsWarnings.visibleGoals` (with type info)
-//
-//    These are user-written holes (`{!!}`, `{! expr !}`, `?`). Each
-//    gets an `InteractionId` and can be targeted by give / refine /
-//    case-split / auto. The shape is stable across v2.7.0.1–2.8.0.
-//
-// 2. **Invisible goals (unsolved metavariables)**
-//
-//    Haskell type: OutputConstraint_boot tcErr A.Expr NamedMeta
-//    Haskell comment: "hidden (unsolved) metas"
-//    JSON response: `AllGoalsWarnings.invisibleGoals`
-//
-//    Metavariables Agda created during elaboration but could not
-//    solve — e.g. unsolved implicit arguments, or inferred types
-//    blocked on a user hole.
-//
-//    Key subtlety: holes inside `abstract` blocks are *not* reported
-//    as interaction points (they have no stable InteractionId).
-//    Instead they surface only as invisible goals. So a file can have
-//    `invisibleGoalCount > 0` *and* `goalCount = 0` even though the
-//    source clearly contains `{!!}`.
-//
-// 3. **Source-level hole markers (our fallback detection)**
-//
-//    Not from the protocol. When IOTCM reports zero goals *and* zero
-//    invisible goals, but the source contains explicit hole markers,
-//    the file is not truly complete. This guards against edge cases
-//    where Agda optimises away a hole's interaction point. Gated
-//    behind `(success && goalCount === 0 && invisibleGoalCount === 0)`
-//    to avoid redundant I/O in the common path.
-//
-// Postulates are *not* holes. They are accepted as complete
-// definitions and never appear in visibleGoals or invisibleGoals.
-//
-// `Cmd_load_no_metas` is strictly stronger than `Cmd_load`: it
-// requires zero unresolved metavariables, so any remaining
-// interaction points, invisible goals, or source-level hole markers
-// force a type-error classification.
-
-/**
- * Classify a load result considering protocol-reported goals,
- * invisible goals (unsolved metas), and source-level hole markers.
- *
- * `goalCount` must equal the actual `goals[]` array length so callers
- * can safely index into it. `sourceHoleCount` is the number of hole
- * markers found by scanning the source; it feeds into `hasHoles` for
- * classification but does not inflate `goalCount`.
- */
-function classifyLoadResult(input: {
-  success: boolean;
-  goalCount: number;
-  invisibleGoalCount: number;
-  sourceHoleCount: number;
-}): {
-  hasHoles: boolean;
-  isComplete: boolean;
-  classification: string;
-} {
-  const hasHoles =
-    input.goalCount > 0 ||
-    input.invisibleGoalCount > 0 ||
-    input.sourceHoleCount > 0;
-  const isComplete = input.success && !hasHoles;
-  const classification = input.success
-    ? hasHoles
-      ? "ok-with-holes"
-      : "ok-complete"
-    : "type-error";
-  return { hasHoles, isComplete, classification };
-}
-
-function countExplicitSourceHoles(absPath: string): number {
-  try {
-    const source = readFileSync(absPath, "utf8");
-    return findGoalPositions(source).length;
-  } catch (err) {
-    logger.warn("explicit hole scan failed", {
-      file: absPath,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return 0;
-  }
+/** Record an early-return classification on the session and return the
+ *  result. Keeps the proc-died / incomplete exits consistent with the
+ *  "lastClassification set on every load attempt" contract. */
+function finalizeEarlyReturn(session: AgdaSession, result: LoadResult): LoadResult {
+  session.lastClassification = result.classification;
+  session.lastLoadedAt = Date.now();
+  return result;
 }
 
 export async function runLoad(
@@ -234,15 +69,28 @@ export async function runLoad(
     return optsBuild.result;
   }
 
-  // Use buildIotcm with absPath directly — don't set currentFile yet
-  // because ensureProcess() (called inside sendCommand) resets it.
+  // Invalidate prior success up front so a throwing/incomplete load
+  // can't leave stale clean state.
+  invalidatePriorLoadState(session);
+
+  // iotcmFor uses absPath directly — don't set currentFile yet, since
+  // ensureProcess() (inside sendCommand) would reset it.
   const responses = await session.sendCommand(
     session.iotcmFor(absPath, command("Cmd_load", quoted(absPath), optsBuild.optsList)),
   );
   throwOnFatalProtocolStderr(responses);
   const parsed = parseLoadResponses(responses, { profilingEnabled: optsBuild.profilingEnabled });
 
-  // Set session state before reconciling metas so follow-up queries can run.
+  // No terminal event → truncated stream → success is untrustworthy
+  // success is untrustworthy.
+  if (!parsed.sawLoadTerminus) {
+    return finalizeEarlyReturn(
+      session,
+      loadIncompleteNoTerminus(absPath, parsed.warnings, parsed.profiling),
+    );
+  }
+
+  // Set session state before reconciling metas so follow-up queries run.
   session.currentFile = absPath;
   session.goalIds = parsed.goalIds;
   session.lastLoadedMtime = statSync(absPath).mtimeMs;
@@ -251,46 +99,44 @@ export async function runLoad(
   let goalIds = parsed.goalIds;
 
   if (parsed.success) {
-    try {
-      const metas = await session.goal.metas();
-      if (metas.goals.length > 0) {
-        goals = mergeGoals(parsed.goals, metas.goals);
-        goalIds = goals.map((goal) => goal.goalId);
-      }
-    } catch (err) {
-      logger.warn("post-load metas reconciliation failed", {
-        file: absPath,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    // If the metas reconciliation killed the Agda subprocess
-    // (timeout, crash, etc.) `sendCommand`'s finally already cleared
-    // `currentFile` and friends, but the suppressed `catch` above let
-    // execution continue. Returning a success envelope at that point
-    // would mis-report the session as loaded against a dead process.
-    // Surface the failure so the agent re-issues `agda_load`, AND
-    // record the classification on the session — the public contract
-    // for `getLastClassification()` is "set on every load attempt,"
-    // and this early return must not be an exception.
-    if (session.currentFile !== absPath) {
-      const result = loadFailedAfterReconciliation(absPath, parsed.warnings, parsed.profiling);
-      session.lastClassification = result.classification;
-      session.lastLoadedAt = Date.now();
-      return result;
+    const reconciled = await reconcileGoalsViaMetas(session, absPath, parsed.goals);
+    goals = reconciled.goals;
+    goalIds = reconciled.goalIds;
+    // metas killed the proc: sendCommand's finally cleared state, so a
+    // success envelope here would lie. Surface the failure instead.
+    if (reconciled.procDied) {
+      return finalizeEarlyReturn(
+        session,
+        loadFailedAfterReconciliation(absPath, parsed.warnings, parsed.profiling),
+      );
     }
   }
 
-  // Only scan the source for explicit hole markers when the protocol
-  // reports a nominally-clean result (no goals, no invisible metas).
-  // This avoids redundant I/O on large modules where the protocol
-  // already correctly reports holes.
+  // Scan for source holes only when the protocol looks clean — avoids
+  // I/O on large modules whose holes the protocol already reported.
   const needsExplicitHoleScan =
     parsed.success && goals.length === 0 && parsed.invisibleGoalCount === 0;
   const sourceHoleCount = needsExplicitHoleScan ? countExplicitSourceHoles(absPath) : 0;
 
-  // goalCount must match the actual goals array length so consumers
-  // can safely index into it.  sourceHoleCount feeds into hasHoles
-  // for classification only.
+  // Recovery: source has a hole but we captured no goal IDs —
+  // the load stream dropped the interaction points. Re-query a settled
+  // Agda. Only adds IDs (never removes), so a genuinely invisible hole
+  // correctly stays at zero visible goals.
+  if (sourceHoleCount > 0) {
+    const recovered = await reconcileGoalsViaMetas(session, absPath, goals);
+    if (recovered.procDied) {
+      return finalizeEarlyReturn(
+        session,
+        loadFailedAfterReconciliation(absPath, parsed.warnings, parsed.profiling),
+      );
+    }
+    if (recovered.goals.length > goals.length) {
+      goals = recovered.goals;
+      goalIds = recovered.goalIds;
+    }
+  }
+
+  // goalCount tracks the goals[] length; sourceHoleCount feeds hasHoles.
   const goalCount = goals.length;
   const { hasHoles, isComplete, classification } = classifyLoadResult({
     success: parsed.success,
@@ -336,20 +182,26 @@ export async function runLoadNoMetas(
     return fileNotFound(absPath);
   }
 
+  invalidatePriorLoadState(session);
+
   const responses = await session.sendCommand(
     session.iotcmFor(absPath, command("Cmd_load_no_metas", quoted(absPath))),
   );
   throwOnFatalProtocolStderr(responses);
-  const parsed = parseLoadResponses(responses, { profilingEnabled: false });
+  const parsed: ParsedLoadResult = parseLoadResponses(responses, { profilingEnabled: false });
 
-  // Only scan source when protocol reports clean — avoid extra I/O
-  // when protocol already correctly reports holes.
+  // No terminal event → truncated stream.
+  if (!parsed.sawLoadTerminus) {
+    return finalizeEarlyReturn(
+      session,
+      loadIncompleteNoTerminus(absPath, parsed.warnings, parsed.profiling),
+    );
+  }
+
   const needsExplicitHoleScan =
     parsed.success && parsed.goalCount === 0 && parsed.invisibleGoalCount === 0;
   const sourceHoleCount = needsExplicitHoleScan ? countExplicitSourceHoles(absPath) : 0;
 
-  // goalCount must match the actual goals array so consumers can
-  // safely index into goals[].  sourceHoleCount feeds hasHoles only.
   const goalCount = parsed.goalCount;
   const { hasHoles } = classifyLoadResult({
     success: parsed.success,
@@ -358,15 +210,11 @@ export async function runLoadNoMetas(
     sourceHoleCount,
   });
 
-  // Cmd_load_no_metas is strictly stronger: any remaining interaction
-  // points, invisible goals (unsolved metas), or source-level hole
-  // markers force a failure. See the IOTCM protocol notes above.
+  // Strict: any remaining interaction point, invisible goal, or source
+  // hole forces failure. success=true here therefore implies no holes,
+  // so only ok-complete / type-error are reachable.
   const strictFallbackTriggered = parsed.success && hasHoles;
   const success = strictFallbackTriggered ? false : parsed.success;
-  // In strict mode, success=true implies hasHoles=false (because
-  // strictFallbackTriggered would have forced success=false otherwise).
-  // So "ok-with-holes" is unreachable here — simplify to the two
-  // reachable states.
   const classification = success ? "ok-complete" : "type-error";
   const isComplete = success;
   const strictRequirement = "Strict load requires zero unresolved metas and zero holes.";
@@ -377,7 +225,6 @@ export async function runLoadNoMetas(
     ? [...parsed.errors, strictFallbackError]
     : parsed.errors;
 
-  // Set session state atomically AFTER command completes.
   session.currentFile = absPath;
   session.goalIds = parsed.goalIds;
   session.lastLoadedMtime = statSync(absPath).mtimeMs;

@@ -7,6 +7,32 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`agda_load` no longer drops a visible goal or mis-reports a failed
+  load as clean (issues #65, #66).** Both stemmed from the transport
+  resolving a `Cmd_load` on its idle heuristic during the compute gap a
+  large module takes between streaming its syntax-highlighting payload
+  and emitting the trailing goal-state events. Resolving early dropped
+  the `AllGoalsWarnings` / `InteractionPoints` / `Error` that follow — so
+  a hole surfaced with no goal ID (the load even noticed the source hole
+  but exposed no interaction point), and a real type error was silently
+  read as a successful load. Fixes, layered:
+  - Completion detection now treats mid-stream highlighting/progress
+    responses as non-terminal and waits a much longer idle window
+    (`AGDA_MCP_NONTERMINAL_IDLE_MS`, default 2000ms) when one is the last
+    response seen, so the trailing goal state is never dropped. A real
+    terminal event restores the short window — no common-path latency.
+  - A load that returns no terminal goal-state event is now reported as
+    `load-incomplete-no-terminus` (a failure) instead of a possibly-false
+    clean success, so `parsed.success` is never trusted on a truncated
+    stream.
+  - Prior load-success state (classification, goal IDs) is invalidated at
+    the start of every load, so a load that throws or returns incomplete
+    can't leave stale success visible to proof-status queries.
+  - When the source has a hole but no goal IDs were captured, a settled
+    `Cmd_metas` re-query recovers the dropped interaction points.
+
 ## [0.6.7] - 2026-05-13
 
 ### Notes for upgraders
