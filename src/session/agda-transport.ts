@@ -12,11 +12,11 @@ import {
   idleCompletionDelay,
   shouldResolveOnIdle,
   summarizeResponseKinds,
-  tailResponsePreview,
   trailingResponseDelay,
 } from "./command-completion.js";
 import { parseAgdaStdoutLine } from "./stdout-line.js";
 import { GoalTerminusTracker } from "./goal-terminus.js";
+import { waitDiagnostics as buildWaitDiagnostics } from "./command-wait-diagnostics.js";
 
 /**
  * Marker error raised when an in-flight `transport.sendCommand` is
@@ -56,6 +56,10 @@ export class AgdaTransport {
   private sawStatusDone = false;
   private idleDoneTimer: NodeJS.Timeout | null = null;
   private controlEscalationTimer: NodeJS.Timeout | null = null;
+  // Re-arms the in-flight command's inactivity timeout on each response so
+  // the timeout measures silence, not elapsed time. Set only during a
+  // regular sendCommand; null otherwise.
+  private resetInactivityTimer: (() => void) | null = null;
   private lastResponseAt: number | null = null;
   private lastResponseKind: string | null = null;
   // When set (a Cmd_load), hold idle completion until the goal-state
@@ -122,6 +126,7 @@ export class AgdaTransport {
     this.lastResponseAt = null;
     this.lastResponseKind = null;
     this.awaitGoalTerminus = false;
+    this.resetInactivityTimer = null;
     this.rejectInFlightCommand("AgdaTransport destroyed while command was in flight");
   }
 
@@ -148,18 +153,13 @@ export class AgdaTransport {
   }
 
   /** Write a fire-and-forget IOTCM control command (`Cmd_abort` /
-   *  `Cmd_exit`) and resolve after a short flush window. The Promise
-   *  itself never rejects — Agda may legitimately emit no response,
-   *  or emit a delayed `DoneAborting`/`DoneExiting` we capture if
-   *  it arrives in time.
-   *
-   *  Background safety net: if `armEscalation` is true and
-   *  `escalationMs > 0`, an `unref()`'d timer terminates the proc
-   *  after `escalationMs` unless it closes or emits a control-echo
-   *  (cleared in `recordCollectedResponse`). The caller decides
-   *  whether to arm: `Cmd_exit` always arms; `Cmd_abort` arms only
-   *  if a regular command was actually interrupted (an idle abort
-   *  is a protocol no-op and must NOT kill a healthy proc). */
+   *  `Cmd_exit`) and resolve after a short flush window. Never rejects —
+   *  Agda may emit no response, or a delayed `DoneAborting`/`DoneExiting`.
+   *  When `armEscalation` and `escalationMs > 0`, an `unref()`'d timer
+   *  terminates the proc after `escalationMs` unless it closes or emits a
+   *  control-echo. Caller decides: `Cmd_exit` always arms; `Cmd_abort`
+   *  arms only if it interrupted an in-flight command (an idle abort is a
+   *  no-op and must not kill a healthy proc). */
   sendFireAndForgetCommand(
     proc: ChildProcess,
     command: string,
@@ -173,23 +173,13 @@ export class AgdaTransport {
       escalationMs,
       armEscalation: options.armEscalation,
     });
-    // Interrupt any in-flight `sendCommand` before we clobber the
-    // shared `buffer`/`responseQueue`/`collecting` state. The
-    // session path has usually already done this synchronously
-    // before queueing us, so by the time we run there is no
-    // emitter listener left and this is a no-op; the redundant
-    // call is defense for direct-transport callers (and unit
-    // tests) that bypass the session.
-    //
-    // We do NOT trust the boolean return to gate the escalation
-    // timer here — by the time this fire-and-forget task runs
-    // through the session command queue, the in-flight that
-    // motivated the abort is long gone, and the listener-count
-    // check would always be false. The caller passes
-    // `armEscalation` explicitly based on what it observed at the
-    // moment the control command was *requested*. See
-    // `dispatchSessionControlCommand` in
-    // `session-command-dispatch.ts`.
+    // Interrupt any in-flight `sendCommand` before clobbering the shared
+    // buffer/queue/collecting state. Usually already done synchronously by
+    // the session path (so this is a no-op); the redundant call defends
+    // direct-transport callers and tests. The escalation timer is gated by
+    // the caller's explicit `armEscalation`, not this return value — by now
+    // the motivating in-flight is gone and the listener check is always
+    // false. See `dispatchSessionControlCommand`.
     this.rejectInFlightCommand(
       "Interrupted by Agda control command",
       { controlCommand: true },
@@ -202,6 +192,8 @@ export class AgdaTransport {
     this.lastResponseAt = null;
     this.lastResponseKind = null;
     this.awaitGoalTerminus = false;
+    // Control commands use the flush window; drop any stale watchdog re-arm.
+    this.resetInactivityTimer = null;
 
     // Kill-escalation fallback for a wedged Agda that fails to
     // service the control command. Caller decides when to arm:
@@ -285,24 +277,17 @@ export class AgdaTransport {
       const sentryIntervalMs = configuredWaitingSentryMs();
       const waitingSentry = sentryIntervalMs > 0
         ? setInterval(() => {
-            logger.warn("sendCommand still waiting", {
-              command: command.slice(0, 100),
-              elapsedMs: Date.now() - startTime,
-              responseCount: this.responseQueue.length,
-              sawStatusDone: this.sawStatusDone,
-              msSinceLastResponse: this.lastResponseAt === null
-                ? null
-                : Date.now() - this.lastResponseAt,
-              lastResponseKind: this.lastResponseKind,
-              responseKinds: summarizeResponseKinds(this.responseQueue),
-              responseTail: tailResponsePreview(this.responseQueue),
-            });
+            logger.warn("sendCommand still waiting", this.waitDiagnostics(command, startTime));
           }, sentryIntervalMs)
         : null;
+
+      let inactivityTimer: NodeJS.Timeout;
 
       const finish = (handler: () => void) => {
         this.collecting = false;
         this.clearIdleCompletionTimer();
+        clearTimeout(inactivityTimer);
+        this.resetInactivityTimer = null;
         if (waitingSentry) {
           clearInterval(waitingSentry);
         }
@@ -311,31 +296,29 @@ export class AgdaTransport {
         handler();
       };
 
-      const timeout = setTimeout(() => {
+      const onTimeout = () => {
         const responseCount = this.responseQueue.length;
         const responseKinds = summarizeResponseKinds(this.responseQueue);
-        logger.warn("sendCommand timed out", {
-          command: command.slice(0, 100),
-          timeoutMs,
-          responseCount,
-          sawStatusDone: this.sawStatusDone,
-          elapsedMs: Date.now() - startTime,
-          msSinceLastResponse: this.lastResponseAt === null
-            ? null
-            : Date.now() - this.lastResponseAt,
-          lastResponseKind: this.lastResponseKind,
-          responseKinds,
-          responseTail: tailResponsePreview(this.responseQueue),
-        });
+        logger.warn("sendCommand timed out", this.waitDiagnostics(command, startTime, timeoutMs));
         terminateAgdaProcess(proc);
         this.buffer = "";
         finish(() => {
           rejectCmd(new Error(
-            `sendCommand timed out after ${timeoutMs}ms ` +
+            `sendCommand timed out after ${timeoutMs}ms of inactivity ` +
             `(received ${responseCount} responses: ${JSON.stringify(responseKinds)})`,
           ));
         });
-      }, timeoutMs);
+      };
+
+      // Inactivity watchdog: reset on each response so it fires only after
+      // `timeoutMs` of silence, not of total work. A dead proc still gets
+      // reaped; a slow module emitting progress does not.
+      const armTimeout = () => {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(onTimeout, timeoutMs);
+      };
+      this.resetInactivityTimer = armTimeout;
+      armTimeout();
 
       const onDone = (origin: CommandCompletionOrigin = "signal") => {
         const trailingDelay = trailingResponseDelay({
@@ -345,7 +328,6 @@ export class AgdaTransport {
         }, origin);
 
         setTimeout(() => {
-          clearTimeout(timeout);
           finish(() => {
             const responses = [...this.responseQueue];
             logger.trace("sendCommand done", {
@@ -358,7 +340,6 @@ export class AgdaTransport {
       };
 
       const onError = (err: Error) => {
-        clearTimeout(timeout);
         finish(() => {
           rejectCmd(err);
         });
@@ -449,7 +430,26 @@ export class AgdaTransport {
     }
     if (this.awaitGoalTerminus) this.goalTerminus.record(response);
 
+    // Progress arrived — push back the inactivity watchdog.
+    this.resetInactivityTimer?.();
     this.bumpIdleCompletionTimer();
+  }
+
+  private waitDiagnostics(
+    command: string,
+    startTime: number,
+    timeoutMs?: number,
+  ): Record<string, unknown> {
+    return buildWaitDiagnostics({
+      command,
+      startTimeMs: startTime,
+      nowMs: Date.now(),
+      responseQueue: this.responseQueue,
+      sawStatusDone: this.sawStatusDone,
+      lastResponseAt: this.lastResponseAt,
+      lastResponseKind: this.lastResponseKind,
+      timeoutMs,
+    });
   }
 
   private clearIdleCompletionTimer(): void {

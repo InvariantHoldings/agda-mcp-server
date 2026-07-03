@@ -2,11 +2,14 @@
 //
 // agda_load_no_metas tool registration.
 //
-// Thin variant of agda_load that uses Cmd_load_no_metas, which fails
-// the load if any unsolved metavariables remain after scope-checking.
-// Cmd_load_no_metas does not accept per-load command-line options, so
-// profileOptions is deliberately not exposed here — callers who need
-// profiling should use agda_load.
+// Strict variant of agda_load: it fails the load if any hole or unsolved
+// metavariable remains. Implemented over Cmd_load (which emits a real
+// goal-state terminus) with strict rejection applied at the
+// classification layer — a clean Cmd_load_no_metas emits no terminus, so
+// its completion could only be guessed from an idle gap and a slow
+// module's silent type-check could resolve it mid-load as a false
+// success. profileOptions is deliberately not exposed here — callers who
+// need profiling should use agda_load.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -41,9 +44,9 @@ export function registerAgdaLoadNoMetas(
   registerStructuredTool({
     server,
     name: "agda_load_no_metas",
-    description: "Load and type-check an Agda file, failing if unsolved metavariables remain after loading. Note: Cmd_load_no_metas does not accept command-line options, so Agda profiling options cannot be passed directly. Use agda_load with profileOptions for profiled type-checking.",
+    description: "Load and type-check an Agda file strictly, failing if any hole or unsolved metavariable remains after loading. Profiling options are not supported here; use agda_load with profileOptions for profiled type-checking.",
     category: "session",
-    protocolCommands: ["Cmd_load_no_metas"],
+    protocolCommands: ["Cmd_load"],
     requiresLoadedSession: false,
     inputSchema: {
       file: z.string().describe(filePathDescription(session.getAgdaVersion() ?? undefined)),
@@ -108,7 +111,7 @@ export function registerAgdaLoadNoMetas(
               ...result.warnings.map((message) => warningDiagnostic(message, "agda-warning")),
             ],
             stale: session.isFileStale() || undefined,
-            provenance: { file: filePath, protocolCommands: ["Cmd_load_no_metas"] },
+            provenance: { file: filePath, protocolCommands: ["Cmd_load"] },
             elapsedMs,
           }),
           text,

@@ -197,10 +197,10 @@ test("runLoad invalidates prior state and records the attempt on invalid options
   }
 });
 
-test("runLoadNoMetas accepts a clean strict load with no goal-state terminus", async () => {
-  // Cmd_load_no_metas skips the metas display, so a clean strict load
-  // emits no InteractionPoints / AllGoalsWarnings — only highlighting +
-  // Status. That is normal completion, and it must report ok-complete.
+test("runLoadNoMetas accepts a clean strict load reporting an empty goal state", async () => {
+  // The strict load runs over Cmd_load, so a clean file emits the goal-
+  // state terminus (empty InteractionPoints + AllGoalsWarnings with no
+  // goals). That must report ok-complete.
   const root = makeTempRepo();
   const file = "CleanStrict.agda";
   writeFileSync(resolve(root, file), "module CleanStrict where\n", "utf8");
@@ -213,12 +213,7 @@ test("runLoadNoMetas accepts a clean strict load with no goal-state terminus", a
     lastClassification: null,
     lastLoadedAt: null,
     lastInvisibleGoalCount: 0,
-    sendCommand: async () => [
-      { kind: "Status", checked: false },
-      { kind: "ClearRunningInfo" },
-      { kind: "ClearHighlighting" },
-      { kind: "HighlightingInfo", filepath: "/tmp/hl", direct: false },
-    ],
+    sendCommand: async () => cleanLoadResponses(),
     iotcmFor: (_path: string, cmd: string) => cmd,
   } as any;
 
@@ -227,6 +222,39 @@ test("runLoadNoMetas accepts a clean strict load with no goal-state terminus", a
     expect(result.success).toBe(true);
     expect(result.classification).toBe("ok-complete");
     expect(result.hasHoles).toBe(false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoadNoMetas throws (no false green) when the process ended before the goal state", async () => {
+  // Bug #3: a clean Cmd_load_no_metas emits no terminus, so idle
+  // completion could resolve a still-checking load as ok-complete. The
+  // strict path now runs over Cmd_load and requires the goal-state
+  // terminus — a truncated stream must fail loudly, never report success.
+  const root = makeTempRepo();
+  const file = "TruncatedStrict.agda";
+  writeFileSync(resolve(root, file), "module TruncatedStrict where\n", "utf8");
+
+  const session = {
+    repoRoot: root,
+    currentFile: "/some/previous.agda",
+    goalIds: [3],
+    lastLoadedMtime: 0,
+    lastClassification: "ok-complete",
+    lastLoadedAt: null,
+    lastInvisibleGoalCount: 0,
+    sendCommand: async () => truncatedLoadResponses(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    await expect(runLoadNoMetas(session, file)).rejects.toThrow(
+      /ended before completing the strict load/i,
+    );
+    // Prior success state was invalidated up front and not restored.
+    expect(session.lastClassification).toBeNull();
+    expect(session.goalIds).toEqual([]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
