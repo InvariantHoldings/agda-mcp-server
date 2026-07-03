@@ -49,37 +49,36 @@ test("AgdaTransport waits for terminal payloads after Status before resolving", 
   });
 });
 
-test("awaitGoalTerminus holds completion until the load goal-state terminus arrives", async () => {
-  // Reproduces the #65/#66 race: Status arrives, then after a gap longer
-  // than the short idle window Agda emits the goal state. Without the
-  // terminus wait the command would resolve on Status and drop the goals.
+test("awaitGoalTerminus holds completion through a long silent gap until the goal state arrives", async () => {
+  // A load can type-check silently for a long time (only sporadic
+  // progress) before emitting its goal state. With the terminus wait the
+  // command must NOT resolve during that gap, however long, and must
+  // capture the goals when they finally arrive. The 300ms gap here is far
+  // longer than the 5ms idle window; the only reason it isn't dropped is
+  // that idle resolution is suppressed until the terminus is seen.
   await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
-    await withEnv("AGDA_MCP_LOAD_TERMINUS_IDLE_MS", "200", async () => {
-      const transport = new AgdaTransport();
-      const proc = {
-        stdin: {
-          write() {
-            // Status then highlighting arrive promptly...
-            setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"Status","status":{"checked":true}}\n')), 0);
-            setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"HighlightingInfo","payload":[]}\n')), 2);
-            // ...then a 40ms compute gap (>> the 5ms idle window) before
-            // the goal state. The terminus wait must bridge it.
-            setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"DisplayInfo","info":{"kind":"AllGoalsWarnings","visibleGoals":[],"invisibleGoals":[],"errors":[],"warnings":[]}}\n')), 45);
-            setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"InteractionPoints","interactionPoints":[0]}\n')), 48);
-          },
+    const transport = new AgdaTransport();
+    const proc = {
+      stdin: {
+        write() {
+          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"Status","status":{"checked":true}}\n')), 0);
+          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"RunningInfo","message":"Checking"}\n')), 2);
+          // 300ms silent gap — no idle resolution may fire here.
+          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"DisplayInfo","info":{"kind":"AllGoalsWarnings","visibleGoals":[],"invisibleGoals":[],"errors":[],"warnings":[]}}\n')), 305);
+          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"InteractionPoints","interactionPoints":[0]}\n')), 308);
         },
-      };
+      },
+    };
 
-      const responses = await transport.sendCommand(
-        proc as unknown as ChildProcess,
-        'IOTCM "x" NonInteractive Direct (Cmd_load)',
-        2000,
-        { awaitGoalTerminus: true },
-      );
+    const responses = await transport.sendCommand(
+      proc as unknown as ChildProcess,
+      'IOTCM "x" NonInteractive Direct (Cmd_load)',
+      2000,
+      { awaitGoalTerminus: true },
+    );
 
-      expect(responses.some((r) => r.kind === "InteractionPoints")).toBe(true);
-      expect(responses.some((r) => r.kind === "DisplayInfo")).toBe(true);
-    });
+    expect(responses.some((r) => r.kind === "InteractionPoints")).toBe(true);
+    expect(responses.some((r) => r.kind === "DisplayInfo")).toBe(true);
   });
 });
 

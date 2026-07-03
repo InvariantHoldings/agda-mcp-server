@@ -16,6 +16,7 @@ import {
   trailingResponseDelay,
 } from "./command-completion.js";
 import { parseAgdaStdoutLine } from "./stdout-line.js";
+import { GoalTerminusTracker } from "./goal-terminus.js";
 
 /**
  * Marker error raised when an in-flight `transport.sendCommand` is
@@ -57,18 +58,10 @@ export class AgdaTransport {
   private controlEscalationTimer: NodeJS.Timeout | null = null;
   private lastResponseAt: number | null = null;
   private lastResponseKind: string | null = null;
-  // Goal-terminus tracking for a metas `Cmd_load`. Per the documented
-  // load sequence (tooling/protocol/data/official-cross-version-notes.json)
-  // a Cmd_load always emits InteractionPoints + AllGoalsWarnings; on a
-  // type error it emits a DisplayInfo Error instead. We must not resolve
-  // the command until that terminus is on the wire, since on a large
-  // module Agda pauses to compute it (the gap that dropped goals/errors
-  // pre-fix). Only armed when `awaitGoalTerminus` is set; every other
-  // command leaves these false and keeps the original fast idle path.
+  // When set (a Cmd_load), hold idle completion until the goal-state
+  // terminus tracked here arrives — see GoalTerminusTracker.
   private awaitGoalTerminus = false;
-  private sawInteractionPoints = false;
-  private sawAllGoalsWarnings = false;
-  private sawLoadError = false;
+  private readonly goalTerminus = new GoalTerminusTracker();
 
   handleStdout(chunk: Buffer): void {
     // Drop stdout while idle UNLESS a control-command escalation
@@ -286,9 +279,7 @@ export class AgdaTransport {
     this.lastResponseAt = null;
     this.lastResponseKind = null;
     this.awaitGoalTerminus = options.awaitGoalTerminus ?? false;
-    this.sawInteractionPoints = false;
-    this.sawAllGoalsWarnings = false;
-    this.sawLoadError = false;
+    this.goalTerminus.reset();
 
     return new Promise<AgdaResponse[]>((resolveCmd, rejectCmd) => {
       const sentryIntervalMs = configuredWaitingSentryMs();
@@ -456,30 +447,9 @@ export class AgdaTransport {
     if (response.kind === "Status") {
       this.sawStatusDone = true;
     }
-    this.recordGoalTerminusResponse(response);
+    if (this.awaitGoalTerminus) this.goalTerminus.record(response);
 
     this.bumpIdleCompletionTimer();
-  }
-
-  /** Track the documented Cmd_load goal-state terminus (InteractionPoints
-   *  + AllGoalsWarnings, or a DisplayInfo Error). Cheap field reads — no
-   *  schema parse — since we only need the response/info kind. */
-  private recordGoalTerminusResponse(response: AgdaResponse): void {
-    if (!this.awaitGoalTerminus) return;
-    if (response.kind === "InteractionPoints") {
-      this.sawInteractionPoints = true;
-    } else if (response.kind === "DisplayInfo") {
-      const infoKind = (response.info as { kind?: unknown } | undefined)?.kind;
-      if (infoKind === "AllGoalsWarnings") this.sawAllGoalsWarnings = true;
-      else if (infoKind === "Error") this.sawLoadError = true;
-    }
-  }
-
-  /** The awaited goal state is fully on the wire. A successful load needs
-   *  both InteractionPoints and AllGoalsWarnings (order varies across
-   *  Agda versions); a type error short-circuits via DisplayInfo Error. */
-  private sawGoalTerminus(): boolean {
-    return this.sawLoadError || (this.sawInteractionPoints && this.sawAllGoalsWarnings);
   }
 
   private clearIdleCompletionTimer(): void {
@@ -503,13 +473,14 @@ export class AgdaTransport {
       return;
     }
 
-    if (!shouldResolveOnIdle({
+    const snapshot = {
       sawStatusDone: this.sawStatusDone,
       responseCount: this.responseQueue.length,
       lastResponseKind: this.lastResponseKind,
       awaitGoalTerminus: this.awaitGoalTerminus,
-      sawGoalTerminus: this.sawGoalTerminus(),
-    })) {
+      sawGoalTerminus: this.goalTerminus.reached(),
+    };
+    if (!shouldResolveOnIdle(snapshot)) {
       return;
     }
 
@@ -524,12 +495,6 @@ export class AgdaTransport {
         lastResponseKind: this.lastResponseKind,
       });
       this.emitter.emit("done", "idle");
-    }, idleCompletionDelay({
-      sawStatusDone: this.sawStatusDone,
-      responseCount: this.responseQueue.length,
-      lastResponseKind: this.lastResponseKind,
-      awaitGoalTerminus: this.awaitGoalTerminus,
-      sawGoalTerminus: this.sawGoalTerminus(),
-    }));
+    }, idleCompletionDelay(snapshot));
   }
 }

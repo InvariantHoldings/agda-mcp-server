@@ -62,26 +62,6 @@ export function loadFailedAfterReconciliation(
   );
 }
 
-/** No terminal goal-state event (AllGoalsWarnings / Error /
- *  InteractionPoints) in the Cmd_load stream — it was truncated before
- *  Agda finished, so `parsed.success` is untrustworthy. Report unknown
- *  rather than a possibly-false clean load. */
-export function loadIncompleteNoTerminus(
-  absPath: string,
-  warnings: string[],
-  profiling: LoadResult["profiling"],
-): LoadResult {
-  return failedLoadResult(
-    [
-      `Agda returned no terminal goal-state event for ${absPath} ` +
-      `(no AllGoalsWarnings / Error / InteractionPoints). The response stream was truncated ` +
-      `before type-checking finished — re-issue agda_load for a fresh result.`,
-    ],
-    "load-incomplete-no-terminus",
-    { warnings, profiling },
-  );
-}
-
 /** Clear load-success markers at the start of a load so a throwing or
  *  incomplete load can't leave stale success visible. currentFile is
  *  nulled too — Cmd_load uses an explicit path, not currentFile, and an

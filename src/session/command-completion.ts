@@ -3,10 +3,10 @@ export interface CommandCompletionSnapshot {
   responseCount: number;
   lastResponseKind?: string | null;
   /**
-   * This command is a metas `Cmd_load` whose goal-state terminus
-   * (`AllGoalsWarnings` / `Error` / `InteractionPoints`) we must wait
-   * for. Set only on that path; every other command leaves it false and
-   * keeps the original fast idle behavior.
+   * This command is a `Cmd_load` whose IOTCM goal-state terminus
+   * (`InteractionPoints` + `AllGoalsWarnings`, or a `DisplayInfo`
+   * `Error`) we must wait for before treating the stream as complete.
+   * Set only on that path; every other command leaves it false.
    */
   awaitGoalTerminus?: boolean;
   /** The awaited goal-state terminus has been observed. */
@@ -52,19 +52,6 @@ export function configuredPostStatusIdleCompletionMs(): number {
   return parsePositiveInt(process.env.AGDA_MCP_POST_STATUS_IDLE_MS, 50);
 }
 
-/**
- * Idle window for a metas `Cmd_load` that has not yet emitted its
- * goal-state terminus. Much larger than the normal window so it exceeds
- * the compute gap a big module takes — after type-checking and after the
- * trailing `Status` — to normalise and serialise its goals. Applies only
- * while `awaitGoalTerminus` is set and the terminus is unseen, so a small
- * load (terminus arrives immediately) and every non-load command keep the
- * short window — no common-path latency.
- */
-export function configuredGoalTerminusIdleMs(): number {
-  return parsePositiveInt(process.env.AGDA_MCP_LOAD_TERMINUS_IDLE_MS, 2_000);
-}
-
 export function configuredWaitingSentryMs(): number {
   return parsePositiveInt(process.env.AGDA_MCP_WAITING_SENTRY_MS, 0);
 }
@@ -74,17 +61,6 @@ export function idleCompletionDelay(
 ): number {
   if (snapshot.responseCount === 0) {
     return 0;
-  }
-
-  // A metas Cmd_load whose goal-state terminus hasn't arrived yet — the
-  // command is not done regardless of what the last response was. Wait
-  // far longer so the compute gap before the goals (which falls after the
-  // trailing Status on a large module) isn't mistaken for completion.
-  if (snapshot.awaitGoalTerminus && !snapshot.sawGoalTerminus) {
-    return Math.max(
-      configuredIdleCompletionMs(),
-      configuredGoalTerminusIdleMs(),
-    );
   }
 
   if (snapshot.sawStatusDone && snapshot.lastResponseKind === "Status") {
@@ -123,7 +99,20 @@ export function trailingResponseDelay(
 export function shouldResolveOnIdle(
   snapshot: CommandCompletionSnapshot,
 ): boolean {
-  return snapshot.responseCount > 0;
+  if (snapshot.responseCount === 0) {
+    return false;
+  }
+  // A Cmd_load is not complete until Agda has emitted its goal-state
+  // terminus. Until then, never resolve on idle: a large module can
+  // type-check silently for many seconds (only sporadic RunningInfo),
+  // and resolving in that gap would truncate the stream before the goals
+  // or a type error arrive. Completion instead comes from the terminus
+  // itself (which re-arms the idle timer via the normal path), a process
+  // close, or the per-command timeout.
+  if (snapshot.awaitGoalTerminus && !snapshot.sawGoalTerminus) {
+    return false;
+  }
+  return true;
 }
 
 export function summarizeResponseKinds(
