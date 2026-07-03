@@ -2,7 +2,6 @@ import { test, expect } from "vitest";
 
 import {
   configuredCommandTimeoutMs,
-  configuredGoalTerminusIdleMs,
   configuredIdleCompletionMs,
   configuredPostStatusIdleCompletionMs,
   idleCompletionDelay,
@@ -25,6 +24,41 @@ test("shouldResolveOnIdle resolves whenever a command has produced responses", (
   ).toBe(true);
   expect(
     shouldResolveOnIdle({ sawStatusDone: true, responseCount: 3, lastResponseKind: "InteractionPoints" }),
+  ).toBe(true);
+});
+
+test("shouldResolveOnIdle never resolves a Cmd_load before its goal-state terminus", () => {
+  // A load can type-check silently for seconds; resolving on idle before
+  // the goals/error arrive would truncate the stream (issues #65/#66 and
+  // the cold-load false-status regression). Only once the terminus is seen
+  // does idle resolution re-enable.
+  expect(
+    shouldResolveOnIdle({
+      sawStatusDone: true,
+      responseCount: 40,
+      lastResponseKind: "RunningInfo",
+      awaitGoalTerminus: true,
+      sawGoalTerminus: false,
+    }),
+  ).toBe(false);
+  expect(
+    shouldResolveOnIdle({
+      sawStatusDone: true,
+      responseCount: 42,
+      lastResponseKind: "InteractionPoints",
+      awaitGoalTerminus: true,
+      sawGoalTerminus: true,
+    }),
+  ).toBe(true);
+  // Non-load commands are unaffected.
+  expect(
+    shouldResolveOnIdle({
+      sawStatusDone: false,
+      responseCount: 3,
+      lastResponseKind: "HighlightingInfo",
+      awaitGoalTerminus: false,
+      sawGoalTerminus: false,
+    }),
   ).toBe(true);
 });
 
@@ -70,61 +104,6 @@ test("idleCompletionDelay waits longer after a trailing Status", () => {
       delete process.env.AGDA_MCP_POST_STATUS_IDLE_MS;
     } else {
       process.env.AGDA_MCP_POST_STATUS_IDLE_MS = previousPostStatus;
-    }
-  }
-});
-
-test("idleCompletionDelay waits for a metas Cmd_load's goal-state terminus", () => {
-  const previousIdle = process.env.AGDA_MCP_IDLE_COMPLETION_MS;
-  const previousTerminus = process.env.AGDA_MCP_LOAD_TERMINUS_IDLE_MS;
-
-  process.env.AGDA_MCP_IDLE_COMPLETION_MS = "250";
-  process.env.AGDA_MCP_LOAD_TERMINUS_IDLE_MS = "2000";
-
-  try {
-    expect(configuredGoalTerminusIdleMs()).toBe(2000);
-    // Awaiting the terminus, not yet seen → long window regardless of the
-    // last kind (the compute gap can fall after the trailing Status).
-    expect(
-      idleCompletionDelay({
-        sawStatusDone: true,
-        responseCount: 5,
-        lastResponseKind: "Status",
-        awaitGoalTerminus: true,
-        sawGoalTerminus: false,
-      }),
-    ).toBe(2000);
-    // Terminus observed → back to the short window.
-    expect(
-      idleCompletionDelay({
-        sawStatusDone: true,
-        responseCount: 6,
-        lastResponseKind: "InteractionPoints",
-        awaitGoalTerminus: true,
-        sawGoalTerminus: true,
-      }),
-    ).toBe(250);
-    // Not a metas load (e.g. Cmd_load_no_metas, give, query) → never the
-    // long window even if it ends on highlighting.
-    expect(
-      idleCompletionDelay({
-        sawStatusDone: false,
-        responseCount: 4,
-        lastResponseKind: "HighlightingInfo",
-        awaitGoalTerminus: false,
-        sawGoalTerminus: false,
-      }),
-    ).toBe(250);
-  } finally {
-    if (previousIdle === undefined) {
-      delete process.env.AGDA_MCP_IDLE_COMPLETION_MS;
-    } else {
-      process.env.AGDA_MCP_IDLE_COMPLETION_MS = previousIdle;
-    }
-    if (previousTerminus === undefined) {
-      delete process.env.AGDA_MCP_LOAD_TERMINUS_IDLE_MS;
-    } else {
-      process.env.AGDA_MCP_LOAD_TERMINUS_IDLE_MS = previousTerminus;
     }
   }
 });

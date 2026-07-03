@@ -22,7 +22,6 @@ import {
   fileNotFound,
   invalidatePriorLoadState,
   loadFailedAfterReconciliation,
-  loadIncompleteNoTerminus,
   reconcileGoalsViaMetas,
 } from "./session-load-helpers.js";
 
@@ -77,9 +76,10 @@ export async function runLoad(
 
   // iotcmFor uses absPath directly — don't set currentFile yet, since
   // ensureProcess() (inside sendCommand) would reset it. awaitGoalTerminus
-  // tells the transport this load must not resolve until its documented
-  // goal-state terminus (InteractionPoints + AllGoalsWarnings, or Error)
-  // is on the wire — see official-cross-version-notes.json.
+  // tells the transport not to treat this load as complete until Agda has
+  // emitted its goal-state responses (InteractionPoints + AllGoalsWarnings,
+  // or an Error) — so a slow module that type-checks silently for seconds
+  // can't be resolved mid-check and mis-read as a clean load.
   const responses = await session.sendCommand(
     session.iotcmFor(absPath, command("Cmd_load", quoted(absPath), optsBuild.optsList)),
     undefined,
@@ -88,11 +88,13 @@ export async function runLoad(
   throwOnFatalProtocolStderr(responses);
   const parsed = parseLoadResponses(responses, { profilingEnabled: optsBuild.profilingEnabled });
 
-  // No terminal event → truncated stream → success is untrustworthy.
+  // The transport waits for Agda's goal-state responses, so their absence
+  // means the process ended before finishing this load. Fail loudly rather
+  // than report a fabricated success.
   if (!parsed.sawLoadTerminus) {
-    return finalizeEarlyReturn(
-      session,
-      loadIncompleteNoTerminus(absPath, parsed.warnings, parsed.profiling),
+    throw new Error(
+      `Agda process ended before completing the load of ${absPath} ` +
+      `(no goals or type error were emitted). Re-issue agda_load.`,
     );
   }
 
@@ -118,29 +120,12 @@ export async function runLoad(
     }
   }
 
-  // Scan for source holes only when the protocol looks clean — avoids
-  // I/O on large modules whose holes the protocol already reported.
+  // Scan for source holes only when the protocol looks clean — the
+  // fallback for holes inside `abstract` blocks that Agda under-reports as
+  // interaction points. Avoids I/O on modules the protocol already covered.
   const needsExplicitHoleScan =
     parsed.success && goals.length === 0 && parsed.invisibleGoalCount === 0;
   const sourceHoleCount = needsExplicitHoleScan ? countExplicitSourceHoles(absPath) : 0;
-
-  // Recovery: source has a hole but we captured no goal IDs —
-  // the load stream dropped the interaction points. Re-query a settled
-  // Agda. Only adds IDs (never removes), so a genuinely invisible hole
-  // correctly stays at zero visible goals.
-  if (sourceHoleCount > 0) {
-    const recovered = await reconcileGoalsViaMetas(session, absPath, goals);
-    if (recovered.procDied) {
-      return finalizeEarlyReturn(
-        session,
-        loadFailedAfterReconciliation(absPath, parsed.warnings, parsed.profiling),
-      );
-    }
-    if (recovered.goals.length > goals.length) {
-      goals = recovered.goals;
-      goalIds = recovered.goalIds;
-    }
-  }
 
   // goalCount tracks the goals[] length; sourceHoleCount feeds hasHoles.
   const goalCount = goals.length;
