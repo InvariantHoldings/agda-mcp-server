@@ -56,6 +56,17 @@ and this project follows [Semantic Versioning](https://semver.org/).
   `type-error` — at the classification layer, so the pass/fail contract
   is unchanged but completion waits for Agda's real goal state.
 
+- **Reloading after a dependency changed no longer reports a stale clean
+  result (issues #61, #64).** Editing an imported module and reloading a
+  dependent triggers a rebuild of that dependency; while the rebuild runs
+  Agda streams `Checking <dep>` and then falls silent for as long as the
+  rebuild takes. The old idle heuristic could mistake that silence for
+  completion and re-report the previous `ok-complete`, hiding an error
+  the changed dependency now introduces. The goal-state terminus wait
+  makes the reload hold until the rebuild's real result is on the wire.
+  A gated integration test reproduces the race with a deliberately slow,
+  silent dependency rebuild.
+
 ## [0.6.7] - 2026-05-13
 
 ### Notes for upgraders
