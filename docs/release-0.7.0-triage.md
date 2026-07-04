@@ -1,7 +1,34 @@
 # Release 0.7.0 — Triage
 
-**Status:** planning — most of the original 0.7.0 candidate scope shipped in 0.6.5.
-**Last updated:** 2026-04-15
+**Status:** the proposed 0.7.0 release gate is **satisfied** — all three gate
+tools already shipped (see Reconciliation below). This doc was stale.
+**Last updated:** 2026-07-04
+
+---
+
+## Reconciliation (2026-07-04): gate items already shipped
+
+An audit against the codebase found that every tool named in the "Must-have"
+list below already exists, is wired into the server, and has tests — the
+"did not ship" framing was out of date. Verified state:
+
+| Item | Tool | Location | Shipped | Tests |
+|---|---|---|---|---|
+| §2.1 bulk status + cascade dedup | `agda_bulk_status` | `src/tools/agent-ux/project-tools.ts` | ≤ 0.6.x | `agent-ux-tools.test.ts` |
+| §2.2 pre-load error classifier | `agda_triage_error` | `src/tools/agent-ux/edit-tools.ts` → `src/agda/error-classifier.ts` | ≤ 0.6.x | `agent-ux.test.ts`, `agent-ux-tools.test.ts` |
+| §4.1 module-scope term search | `agda_term_search` | `src/tools/analysis-tools.ts` | 0.6.0 (PR #1) | `analysis-tools.test.ts` |
+| §5.3 project-wide proof summary | `agda_project_progress` | `src/tools/agent-ux/project-tools.ts` | ≤ 0.6.x | `agent-ux-tools.test.ts` |
+
+`agda_bulk_status` implements the `{ file, status, rootCauseFile }` table and
+clusters failures by shared upstream file (diagnostic path first, then an
+import-graph `computeImpact` fallback). `agda_triage_error` returns the exact
+seven-class taxonomy with a confidence score and `suggestedAction`.
+
+**Known limitation (tracked follow-up):** `agda_term_search` `local` scope does
+type-matching against the goal's own context, but `module`/`imported` scope runs
+a *name-relatedness* search via `Cmd_search_about`, not a type-directed one.
+Real type-directed module search (e.g. via Mimer / `Cmd_autoAll`) is the
+remaining §4.1 enhancement and is deliberately out of scope for the gate.
 
 ---
 
@@ -94,9 +121,9 @@ Each item is ordered by impact on the agent-on-large-codebase use case.
 
 ---
 
-## 0.7.0 release gate (proposed)
+## 0.7.0 release gate (proposed) — ✅ satisfied
 
-Treat 0.7.0 as gated on:
+The gate was proposed as:
 
 - `agda_bulk_status` with cascade deduplication (§2.1) — the single
   biggest throughput unlock for large-codebase agents
@@ -105,8 +132,12 @@ Treat 0.7.0 as gated on:
 - `agda_term_search` at module scope (§4.1) — reduces interactive
   proof round-trips
 
+All three shipped (see Reconciliation above), so the gate is met as of the
+0.6.8 line; the one residual is type-directed module search for
+`agda_term_search`, tracked as a §4.1 follow-up rather than a gate blocker.
+
 Everything else on the should-have list is additive and can ship as
-further patch releases after 0.7.0.
+further patch releases.
 
 ---
 

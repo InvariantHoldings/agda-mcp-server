@@ -107,7 +107,7 @@ export function classifyAgdaError(message: string): TriageResult {
   if (
     /command not found|no such file or directory|failed to start|permission denied|cannot execute/iu.test(normalized)
     || lower.includes("agda_dir")
-    || lower.includes("library") && lower.includes("not found")
+    || (lower.includes("library") && lower.includes("not found"))
   ) {
     return {
       category: "toolchain",

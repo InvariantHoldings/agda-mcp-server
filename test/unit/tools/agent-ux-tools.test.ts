@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -258,6 +258,55 @@ test("agda_bulk_status clusters failures by root cause", async () => {
 
   expect(result.structuredContent.data.files.length).toBe(2);
   expect(result.structuredContent.data.clusters.length).toBeGreaterThan(0);
+});
+
+test("agda_bulk_status attributes root cause via the import graph when the diagnostic has no path", async () => {
+  // Dep fails with a located error; Main imports Dep and fails with a
+  // path-less error. Main's root cause can only come from the import-graph
+  // fallback (computeImpact transitive deps), not from the diagnostic path.
+  writeAgda("agda/Dep.agda", "module Dep where\nFAIL\n");
+  writeAgda("agda/Main.agda", "module Main where\nopen import Dep\nNOPATHFAIL\n");
+
+  const session = {
+    getAgdaVersion: () => null,
+    loadNoMetas: async (filePath: string) => {
+      const text = readFileSync(filePath, "utf8");
+      const failNoPath = text.includes("NOPATHFAIL");
+      const fail = failNoPath || text.includes("FAIL");
+      return {
+        success: !fail,
+        errors: fail
+          ? [failNoPath ? "simulated failure with no location" : `${filePath}:1: simulated failure`]
+          : [],
+        warnings: [],
+        goals: [],
+        allGoalsText: "",
+        invisibleGoalCount: 0,
+        goalCount: 0,
+        hasHoles: false,
+        isComplete: !fail,
+        classification: fail ? "type-error" : "ok-complete",
+        profiling: null,
+      };
+    },
+  } as unknown as AgdaSession;
+
+  // Use the canonical (realpath) root so root-relative paths from the file
+  // walk match the import graph on macOS (/var vs /private/var symlink).
+  const root = realpathSync(sandbox);
+  const server = createCapturingServer();
+  registerAgentUxTools(server as unknown as McpServer, session, root);
+  const result = await server.get("agda_bulk_status")!.callback({ directory: "agda" });
+
+  const files: Array<{ file: string; rootCauseFile: string | null }> = result.structuredContent.data.files;
+  const main = files.find((f) => f.file === "agda/Main.agda")!;
+  expect(main.rootCauseFile).toBe("agda/Dep.agda");
+
+  const depCluster = result.structuredContent.data.clusters.find(
+    (c: { rootCauseFile: string }) => c.rootCauseFile === "agda/Dep.agda",
+  );
+  expect(depCluster.files).toContain("agda/Main.agda");
+  expect(depCluster.files).toContain("agda/Dep.agda");
 });
 
 // ── agda_effective_options: project-config / env-var attribution ─────

@@ -297,7 +297,7 @@ export function register(
     server,
     session,
     name: "agda_term_search",
-    description: "Search the goal's context for terms whose type matches the goal type (or a custom target type). Returns candidate expressions that might fill the goal.",
+    description: "Suggest candidate terms that might fill a goal. `local` scope type-matches the goal's own context entries against the goal type (or a custom target type). `module`/`imported` scope additionally runs a name-relatedness search (Cmd_search_about) over in-scope definitions — a heuristic by name, not a type-directed search — so widen `limit` and expect false positives outside the local context.",
     category: "analysis",
     inputSchema: {
       goalId: goalIdSchema.describe("The goal ID to search in"),
@@ -373,6 +373,9 @@ export function register(
       let output = `## Term Search in ?${goalId}\n\n`;
       output += `**Target type:** \`${target}\`\n\n`;
       output += `**Scope:** \`${effectiveScope}\`\n`;
+      if (effectiveScope !== "local") {
+        output += "_Note: `module`/`imported` candidates come from a name-relatedness search (Cmd_search_about), not a type-directed one — verify each against the goal type._\n";
+      }
       output += `**Total candidates:** ${merged.length}\n\n`;
 
       if (matches.length > 0) {
