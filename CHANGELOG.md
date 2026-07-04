@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-07-04
+
 ### Added
 
 - **New `agda_goal_candidates` tool.** In one call it returns, for every open
