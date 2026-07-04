@@ -134,8 +134,9 @@ The gate was proposed as:
   proof round-trips
 
 All three shipped (see Reconciliation above), so the gate is met as of the
-0.6.8 line; the one residual is type-directed module search for
-`agda_term_search`, tracked as a §4.1 follow-up rather than a gate blocker.
+0.6.8 line. The §4.1 item is now genuinely type-directed at module/imported
+scope (candidates are type-filtered, with `match: exact`/`result` + `arity`),
+closing out the former name-relatedness caveat.
 
 Everything else on the should-have list is additive and can ship as
 further patch releases.

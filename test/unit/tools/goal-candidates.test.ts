@@ -95,4 +95,8 @@ test("agda_goal_candidates: a failed goal query is counted, not fatal", async ()
   expect(result.isError).toBe(false);
   expect(result.structuredContent.data.failedGoalQueries).toBe(1);
   expect(result.structuredContent.data.goals.length).toBe(2);
+  // The failed goal must NOT be reported as "no local term matches" — that
+  // conflates a query failure with a genuinely empty candidate set.
+  expect(result.content[0].text).toContain("Could not query this goal");
+  expect(result.content[0].text).not.toContain("### ?9 :");
 });

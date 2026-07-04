@@ -80,7 +80,7 @@ export function registerGoalCandidates(
       const limit = limitPerGoal ?? DEFAULT_LIMIT_PER_GOAL;
       const goalIds = session.getGoalIds();
       const goals: Array<z.infer<typeof goalCandidatesEntrySchema>> = [];
-      let failedGoalQueries = 0;
+      const failedGoalIds = new Set<number>();
 
       for (const goalId of goalIds) {
         try {
@@ -97,7 +97,7 @@ export function registerGoalCandidates(
             candidates: allMatches.slice(0, limit),
           });
         } catch (err) {
-          failedGoalQueries++;
+          failedGoalIds.add(goalId);
           logger.warn("goal_candidates typeContext query failed", {
             goalId,
             error: err instanceof Error ? err.message : String(err),
@@ -105,6 +105,7 @@ export function registerGoalCandidates(
           goals.push({ goalId, type: "?", candidateCount: 0, candidates: [] });
         }
       }
+      const failedGoalQueries = failedGoalIds.size;
 
       const goalsWithCandidates = goals.filter((goal) => goal.candidateCount > 0).length;
 
@@ -113,6 +114,11 @@ export function registerGoalCandidates(
         text += "No open goals.\n";
       }
       for (const goal of goals) {
+        if (failedGoalIds.has(goal.goalId)) {
+          text += `### ?${goal.goalId}\n`;
+          text += "_Could not query this goal's type/context — candidates were not computed._\n\n";
+          continue;
+        }
         text += `### ?${goal.goalId} : \`${goal.type}\`\n`;
         if (goal.candidates.length === 0) {
           text += "_No local term matches the goal type — try `agda_term_search` (module scope) or `agda_auto`._\n\n";
