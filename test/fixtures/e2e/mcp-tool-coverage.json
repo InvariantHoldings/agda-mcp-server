@@ -165,6 +165,12 @@
     "requiresLiveAgda": false
   },
   {
+    "tool": "agda_goal_candidates",
+    "suite": "test/unit/tools/goal-candidates.test.ts",
+    "scenario": "type-directed fillable terms per goal",
+    "requiresLiveAgda": false
+  },
+  {
     "tool": "agda_goal_type",
     "suite": "test/integration/mcp/mcp-server.test.ts",
     "scenario": "goal access after load",

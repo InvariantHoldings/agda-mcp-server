@@ -9,6 +9,15 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **New `agda_goal_candidates` tool.** In one call it returns, for every open
+  goal, the local-context terms that can fill it — type-directed, reusing the
+  same matcher as `agda_term_search` (`match: exact` for a term of the goal
+  type, `match: result` with an `arity` for a function to apply). This turns
+  the per-goal "inspect the hole, then search for a term" round-trip into a
+  single whole-proof-state view. Read-only: it only queries each goal's
+  type/context. For a module/imported-wide search of one goal, use
+  `agda_term_search`.
+
 - **`agda_term_search` is now genuinely type-directed at module scope.**
   Previously `module`/`imported` scope returned a name-relatedness search
   (`Cmd_search_about`) with no type filtering. It now type-filters every
