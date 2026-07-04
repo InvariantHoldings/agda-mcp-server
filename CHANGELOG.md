@@ -31,6 +31,16 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`agda_auto` no longer errors when given `depth`, `listCandidates`,
+  `hints`, or `excludeHints` on Agda ≥ 2.6.3.** Agda 2.6.3 replaced Agsy
+  with Mimer, whose proof-search command string is a bare list of hint
+  identifiers; the Agsy flag syntax (`-d`, `--list-candidates`, `-h`, `-x`)
+  is parsed as an expression and rejected (`Not in scope: -d`). The payload
+  builder is now engine-aware: on Mimer it emits only hint identifiers, and
+  `agda_auto` notes that the flag-only options were ignored. On pre-2.6.3
+  Agda the classic flags are still used. (Found driving the server against a
+  live Agda 2.9.0 codebase.)
+
 - **`agda_load` no longer resolves a `Cmd_load` before Agda finishes
   type-checking (issues #65, #66).** The transport used an idle heuristic
   to decide a command was done: after a short quiet window it resolved

@@ -105,11 +105,27 @@ export function applyScopedRename(source: string, from: string, to: string): Sco
 }
 
 /**
- * Build the payload string for `Cmd_auto`. Composes depth, candidate
- * listing, hints, and excludes into the space-separated argv form
- * Agda's auto-search expects.
+ * Build the payload string for `Cmd_auto`.
+ *
+ * `engine` selects the proof-search backend's accepted syntax:
+ * - `"mimer"` (Agda >= 2.6.3, the default target): the string is a
+ *   space-separated list of hint identifiers. Agsy-style flags (`-d`,
+ *   `--list-candidates`, `-h`, `-x`) are parsed as expressions and
+ *   rejected, so only `hints` are emitted; `depth`/`listCandidates`/
+ *   `excludeHints` have no string form and are dropped by the caller.
+ * - `"agsy"` (Agda < 2.6.3): composes depth, candidate listing, hints,
+ *   and excludes into the classic flag argv.
  */
-export function buildAutoSearchPayload(options: AutoSearchOptions): string {
+export function buildAutoSearchPayload(
+  options: AutoSearchOptions,
+  engine: "agsy" | "mimer" = "agsy",
+): string {
+  if (engine === "mimer") {
+    return (options.hints ?? [])
+      .map((hint) => hint.trim())
+      .filter((hint) => hint.length > 0)
+      .join(" ");
+  }
   const flags: string[] = [];
   if (options.depth !== undefined) {
     flags.push(`-d ${Math.max(0, Math.trunc(options.depth))}`);

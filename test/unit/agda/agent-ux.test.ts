@@ -168,17 +168,31 @@ describe("inferFixityConflicts", () => {
 });
 
 describe("buildAutoSearchPayload", () => {
-  test("renders configurable payload", () => {
+  test("renders configurable payload (agsy flags)", () => {
     const payload = buildAutoSearchPayload({
       depth: 5,
       listCandidates: true,
       hints: ["helper"],
       excludeHints: ["bad"],
-    });
+    }, "agsy");
     expect(payload).toContain("-d 5");
     expect(payload).toContain("--list-candidates");
     expect(payload).toContain("-h helper");
     expect(payload).toContain("-x bad");
+  });
+
+  test("mimer mode emits bare hints and drops flag-only options", () => {
+    // Mimer (Agda >= 2.6.3) rejects Agsy flags — only hint identifiers
+    // are valid, space-separated and unprefixed.
+    const payload = buildAutoSearchPayload({
+      depth: 5,
+      listCandidates: true,
+      hints: ["helper", "other"],
+      excludeHints: ["bad"],
+    }, "mimer");
+    expect(payload).toBe("helper other");
+    expect(payload).not.toContain("-");
+    expect(buildAutoSearchPayload({ depth: 3, listCandidates: true }, "mimer")).toBe("");
   });
 });
 
