@@ -47,8 +47,9 @@ test("agda_term_search imported scope labels candidates as imported", async () =
   });
 
   expect(result.isError).toBe(false);
-  expect(result.content[0].text).toContain("(imported)");
-  expect(result.content[0].text).not.toContain("(module)");
+  expect(result.content[0].text).toContain("(imported,");
+  expect(result.content[0].text).not.toContain("(module,");
+  expect(result.structuredContent.data.matches[0].match).toBe("exact");
 });
 
 function makeTermSearchSession(searchResults: Array<{ name: string; term: string }>, opts?: { searchThrows?: boolean }) {
@@ -85,6 +86,26 @@ test("agda_term_search local scope stays in context and never runs searchAbout",
   expect(data.matches.length).toBeGreaterThan(0);
   // The name-relatedness caveat is only emitted for non-local scope.
   expect(result.content[0].text).not.toContain("name-relatedness");
+});
+
+test("agda_term_search type-filters the module pool (drops non-matching, keeps result-type functions)", async () => {
+  clearToolManifest();
+  const server = createCapturingServer();
+  const session = makeTermSearchSession([
+    { name: "good", term: "Nat" },        // exact
+    { name: "fn", term: "Bool → Nat" },   // result type Nat, needs 1 arg
+    { name: "bad", term: "Bool" },        // unrelated — must be dropped
+  ]);
+
+  registerAnalysisTools(server as unknown as McpServer, session, "/repo");
+  const result = await server.get("agda_term_search")!.callback({ goalId: 1, scope: "module" });
+
+  const data = result.structuredContent.data;
+  const byName = Object.fromEntries(data.matches.map((m: any) => [m.name, m]));
+  expect(byName.bad).toBeUndefined();
+  expect(byName.good.match).toBe("exact");
+  expect(byName.fn.match).toBe("result");
+  expect(byName.fn.arity).toBe(1);
 });
 
 test("agda_term_search paginates module candidates via offset/limit/hasMore", async () => {

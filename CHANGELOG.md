@@ -7,18 +7,27 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`agda_term_search` is now genuinely type-directed at module scope.**
+  Previously `module`/`imported` scope returned a name-relatedness search
+  (`Cmd_search_about`) with no type filtering. It now type-filters every
+  candidate: a result is kept only when its type IS the goal type
+  (`match: exact`) or its RESULT type is the goal type (`match: result`, a
+  function to apply — `arity` reports how many arguments it needs). Local
+  scope gained the same result-type matching, so a `f : A → Goal` in context
+  now surfaces. Backed by pure, tested helpers (`resultTypeOf`,
+  `matchTermsByType`) that split on top-level function arrows only.
+
 ### Changed
 
-- **Verified the proposed 0.7.0 release gate is already met and reconciled
-  the stale planning doc.** `agda_bulk_status` (cascade dedup),
-  `agda_triage_error` (7-class mechanical detection), and `agda_term_search`
-  (module scope) all shipped earlier and are now covered by added tests
-  (a per-class triage table, `agda_term_search` local-scope/pagination, and
-  the `agda_bulk_status` import-graph root-cause fallback).
-  `docs/release-0.7.0-triage.md` now records the gate as satisfied.
-  `agda_term_search`'s description now states plainly that `module`/`imported`
-  scope is a name-relatedness search (`Cmd_search_about`), not a type-directed
-  one — real type-directed module search remains a tracked follow-up.
+- **Verified the proposed 0.7.0 release gate is met and reconciled the stale
+  planning doc.** `agda_bulk_status` (cascade dedup), `agda_triage_error`
+  (7-class mechanical detection), and `agda_term_search` all shipped earlier;
+  added test coverage (a per-class triage table, `agda_term_search`
+  local-scope/pagination/type-filtering, and the `agda_bulk_status`
+  import-graph root-cause fallback), and `docs/release-0.7.0-triage.md` now
+  records the gate as satisfied.
 
 ### Fixed
 

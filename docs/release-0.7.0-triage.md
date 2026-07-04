@@ -24,11 +24,12 @@ clusters failures by shared upstream file (diagnostic path first, then an
 import-graph `computeImpact` fallback). `agda_triage_error` returns the exact
 seven-class taxonomy with a confidence score and `suggestedAction`.
 
-**Known limitation (tracked follow-up):** `agda_term_search` `local` scope does
-type-matching against the goal's own context, but `module`/`imported` scope runs
-a *name-relatedness* search via `Cmd_search_about`, not a type-directed one.
-Real type-directed module search (e.g. via Mimer / `Cmd_autoAll`) is the
-remaining §4.1 enhancement and is deliberately out of scope for the gate.
+`agda_term_search` is now genuinely type-directed at all scopes: candidates are
+kept only when their type is the goal type (`match: exact`) or their result type
+is the goal type (`match: result`, with an `arity`). The `module`/`imported`
+candidate pool is still sourced via `Cmd_search_about` (which relates by the
+goal type's names) and then type-filtered — a broader whole-scope enumeration is
+a possible future refinement, not a gate blocker.
 
 ---
 
