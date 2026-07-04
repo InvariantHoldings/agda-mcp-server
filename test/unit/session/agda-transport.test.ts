@@ -2,6 +2,7 @@ import { test, expect } from "vitest";
 import type { ChildProcess } from "node:child_process";
 
 import { AgdaTransport } from "../../../src/session/agda-transport.js";
+import { expectWarning } from "../../helpers/warn-guard.js";
 
 function withEnv(name: string, value: string, fn: () => Promise<void>) {
   const previous = process.env[name];
@@ -384,6 +385,8 @@ test("sendFireAndForgetCommand terminates a wedged proc that never acknowledges 
 
   // SIGTERM should have been delivered to the wedged proc.
   expect(killSignals).toContain("SIGTERM");
+  // The escalation path warns that the control command went unacknowledged.
+  expectWarning("Control command not acknowledged");
 });
 
 test("sendFireAndForgetCommand does NOT arm the escalation when armEscalation is false (idle-abort default)", async () => {
@@ -685,6 +688,7 @@ test("sendCommand timeout kills the subprocess AND rejects the Promise", async (
     ),
   ).rejects.toThrow(/sendCommand timed out after 25ms/);
   expect(killCalls).toEqual(["SIGTERM"]);
+  expectWarning("sendCommand timed out");
 });
 
 test("AgdaTransport captures prompt notices as stderr output while collecting", async () => {

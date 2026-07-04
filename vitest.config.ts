@@ -8,6 +8,7 @@ export default defineConfig({
       "test/property/**/*.test.ts",
       "test/integration/**/*.test.ts",
     ],
+    setupFiles: ["test/helpers/warn-guard.ts"],
     testTimeout: 30_000,
   },
 });

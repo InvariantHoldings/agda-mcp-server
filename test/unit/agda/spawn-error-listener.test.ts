@@ -19,6 +19,8 @@ import { test, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 
+import { expectWarning } from "../../helpers/warn-guard.js";
+
 function makeFakeProc(): EventEmitter & {
   stdout: EventEmitter;
   stderr: EventEmitter;
@@ -68,4 +70,6 @@ test("spawnAgdaProcess.detachListeners keeps at least one 'error' listener so a 
   // next line would crash the Node process.
   expect((fakeProc as unknown as ChildProcess).listenerCount("error")).toBeGreaterThanOrEqual(1);
   expect(() => (fakeProc as unknown as ChildProcess).emit("error", new Error("late spawn failure"))).not.toThrow();
+  // The quiet replacement listener logs the late error rather than crashing.
+  expectWarning("Late error from abandoned Agda process");
 });

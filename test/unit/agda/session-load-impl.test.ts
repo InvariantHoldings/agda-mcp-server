@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { test, expect } from "vitest";
 
 import { runLoad, runLoadNoMetas } from "../../../src/agda/session-load-impl.js";
+import { expectWarning } from "../../helpers/warn-guard.js";
 
 function makeTempRepo(): string {
   return mkdtempSync(join(tmpdir(), "agda-load-impl-"));
@@ -334,6 +335,7 @@ test("runLoad records lastClassification on the process-died-during-reconciliati
 
   try {
     const result = await runLoad(session, file);
+    expectWarning("post-load metas reconciliation failed");
     expect(result.success).toBe(false);
     expect(result.classification).toBe("process-died-during-reconciliation");
 
@@ -384,6 +386,7 @@ test("runLoad reports failure when post-load metas reconciliation killed the pro
 
   try {
     const result = await runLoad(session, file);
+    expectWarning("post-load metas reconciliation failed");
     expect(metasCalls).toBe(1);
     expect(result.success).toBe(false);
     expect(result.classification).toBe("process-died-during-reconciliation");

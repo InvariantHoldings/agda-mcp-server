@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { registerGoalCandidates } from "../../../src/tools/register-goal-candidates.js";
 import { clearToolManifest } from "../../../src/tools/manifest.js";
+import { expectWarning } from "../../helpers/warn-guard.js";
 
 function createCapturingServer() {
   const registrations = new Map<string, { callback: (args: any) => any }>();
@@ -92,6 +93,7 @@ test("agda_goal_candidates: a failed goal query is counted, not fatal", async ()
   registerGoalCandidates(server as unknown as McpServer, session, "/repo");
   const result = await server.get("agda_goal_candidates")!.callback({});
 
+  expectWarning("goal_candidates typeContext query failed");
   expect(result.isError).toBe(false);
   expect(result.structuredContent.data.failedGoalQueries).toBe(1);
   expect(result.structuredContent.data.goals.length).toBe(2);

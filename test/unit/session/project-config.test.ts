@@ -14,6 +14,7 @@ import {
   ENV_DEFAULT_FLAGS,
   MAX_CONFIG_FILE_BYTES,
 } from "../../../src/session/project-config.js";
+import { expectWarning } from "../../helpers/warn-guard.js";
 
 let tempDirs: string[] = [];
 let originalEnv: string | undefined;
@@ -75,6 +76,7 @@ test("emits warning for invalid JSON without throwing", () => {
   expect(config.warnings.length).toBeGreaterThanOrEqual(1);
   expect(config.warnings[0].source).toBe("file");
   expect(config.warnings[0].message).toMatch(/Invalid JSON/);
+  expectWarning("Failed to parse .agda-mcp.json");
 });
 
 test("emits warning for non-object JSON", () => {
