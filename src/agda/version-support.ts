@@ -165,6 +165,19 @@ export function hasConstraintsRewriteMode(agdaVersion: AgdaVersion): boolean {
   return atLeastMajorMinor(agdaVersion, 2, 9);
 }
 
+/**
+ * Agda 2.6.3 replaced the Agsy proof-search backend with Mimer. Mimer's
+ * `Cmd_auto*` command string is a space-separated list of hint identifiers;
+ * the old Agsy flag syntax (`-d N`, `-l`/`--list-candidates`, `-h`, `-x`) is
+ * parsed as an expression and rejected (`Not in scope: -d`, parse errors).
+ * Verified empirically against agda 2.8.0. A null version is treated as a
+ * modern toolchain (Mimer) since every supported release is >= 2.8.
+ */
+export function usesMimerProofSearch(agdaVersion: AgdaVersion | null): boolean {
+  if (!agdaVersion) return true;
+  return versionAtLeast(agdaVersion, { parts: [2, 6, 3], prerelease: false });
+}
+
 // ── Tool description helpers ────────────────────────────────────────
 
 /**

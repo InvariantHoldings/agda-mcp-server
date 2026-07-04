@@ -4,6 +4,8 @@ import {
   parseContextEntry,
   deriveSuggestions,
   findMatchingTerms,
+  matchTermsByType,
+  resultTypeOf,
 } from "../../../src/agda/goal-analysis.js";
 
 // ── parseContextEntry ────────────────────────────────────
@@ -110,4 +112,56 @@ test("findMatchingTerms: skips implicit entries", () => {
   const matches = findMatchingTerms("Set", context);
   expect(matches.length).toBe(1);
   expect(matches[0].name).toBe("x");
+});
+
+// ── resultTypeOf ─────────────────────────────────────────
+
+test("resultTypeOf: non-function type is itself with arity 0", () => {
+  expect(resultTypeOf("Nat")).toEqual({ resultType: "Nat", arity: 0 });
+});
+
+test("resultTypeOf: strips top-level arrows and counts arguments", () => {
+  expect(resultTypeOf("Nat → Nat")).toEqual({ resultType: "Nat", arity: 1 });
+  expect(resultTypeOf("Nat → Nat → Nat")).toEqual({ resultType: "Nat", arity: 2 });
+});
+
+test("resultTypeOf: ascii arrows and dependent function types", () => {
+  expect(resultTypeOf("A -> B -> C")).toEqual({ resultType: "C", arity: 2 });
+  expect(resultTypeOf("(x : Nat) → P x")).toEqual({ resultType: "P x", arity: 1 });
+});
+
+test("resultTypeOf: does not split arrows nested in parens/braces", () => {
+  // The (A → B) argument is one parameter; result is C.
+  expect(resultTypeOf("(A → B) → C")).toEqual({ resultType: "C", arity: 1 });
+  expect(resultTypeOf("{A : Set} → A → A")).toEqual({ resultType: "A", arity: 2 });
+  // Right-nested parenthesized result unwraps fully.
+  expect(resultTypeOf("A → (B → C)")).toEqual({ resultType: "C", arity: 2 });
+});
+
+// ── matchTermsByType ─────────────────────────────────────
+
+test("matchTermsByType: exact and result-type matches, non-matches dropped", () => {
+  const matches = matchTermsByType("Nat", [
+    { name: "z", type: "Nat" },
+    { name: "s", type: "Nat → Nat" },
+    { name: "b", type: "Bool" },
+  ]);
+  expect(matches.map((m) => m.name)).toEqual(["z", "s"]);
+  expect(matches[0]).toMatchObject({ match: "exact", arity: 0 });
+  expect(matches[1]).toMatchObject({ match: "result", arity: 1 });
+});
+
+test("matchTermsByType: exact sorts before result, then by ascending arity", () => {
+  const matches = matchTermsByType("R", [
+    { name: "two", type: "A → B → R" },
+    { name: "one", type: "A → R" },
+    { name: "exact", type: "R" },
+  ]);
+  expect(matches.map((m) => m.name)).toEqual(["exact", "one", "two"]);
+});
+
+test("matchTermsByType: whitespace-insensitive and total on junk", () => {
+  expect(matchTermsByType("Nat", [{ name: "x", type: "Nat  " }])[0].match).toBe("exact");
+  expect(matchTermsByType("", [{ name: "x", type: "Nat" }])).toEqual([]);
+  expect(matchTermsByType("Nat", [{ name: "x", type: "" }])).toEqual([]);
 });

@@ -11,7 +11,8 @@ import { projectConfigWarningsText } from "../session/project-config-diagnostics
 import {
   parseContextEntry,
   deriveSuggestions,
-  findMatchingTerms,
+  matchTermsByType,
+  type TermTypeMatch,
 } from "../agda/goal-analysis.js";
 import { goalIdSchema } from "./tool-schemas.js";
 
@@ -297,7 +298,7 @@ export function register(
     server,
     session,
     name: "agda_term_search",
-    description: "Search the goal's context for terms whose type matches the goal type (or a custom target type). Returns candidate expressions that might fill the goal.",
+    description: "Type-directed search for terms that can fill a goal. Returns candidates whose type IS the goal type (`match: exact`) or whose RESULT type is the goal type (`match: result`, a function to apply — `arity` says how many arguments it needs). `local` scope searches the goal's own context; `module`/`imported` scope additionally type-filters in-scope definitions related to the goal type (drawn via Cmd_search_about, then matched by type — so a term you expect may be missing if it is unrelated to the goal type's name; widen `targetType` or `limit` in that case).",
     category: "analysis",
     inputSchema: {
       goalId: goalIdSchema.describe("The goal ID to search in"),
@@ -318,6 +319,8 @@ export function register(
         name: z.string(),
         type: z.string(),
         source: z.enum(["local", "module", "imported"]),
+        match: z.enum(["exact", "result"]),
+        arity: z.number(),
       })),
       hasMore: z.boolean(),
     }),
@@ -326,30 +329,38 @@ export function register(
       const target = (targetType as string) || info.type;
       const contextEntries = info.context.map(parseContextEntry);
       const effectiveScope = (scope as "local" | "module" | "imported" | undefined) ?? "module";
-      const localMatches = findMatchingTerms(target, contextEntries).map((match) => ({
-        name: match.name,
-        type: match.type,
-        source: "local" as const,
-      }));
 
-      let moduleMatches: Array<{ name: string; type: string; source: "module" | "imported" }> = [];
+      type ScopedMatch = TermTypeMatch & { source: "local" | "module" | "imported" };
+
+      // Local: type-directed match over the goal's own explicit context.
+      const localCandidates = contextEntries
+        .filter((entry) => !entry.isImplicit && entry.type)
+        .map((entry) => ({ name: entry.name, type: entry.type }));
+      const localMatches: ScopedMatch[] = matchTermsByType(target, localCandidates).map(
+        (match) => ({ ...match, source: "local" }),
+      );
+
+      // Module/imported: draw a candidate pool from in-scope definitions
+      // related to the goal type (Cmd_search_about, which searches by the
+      // goal type's names), then type-filter it so only genuine type or
+      // result-type matches survive.
+      let moduleMatches: ScopedMatch[] = [];
       if (effectiveScope !== "local") {
         try {
           const about = await session.query.searchAbout(target);
           const moduleSource: "module" | "imported" =
             effectiveScope === "imported" ? "imported" : "module";
-          moduleMatches = about.results.map((entry) => ({
-            name: entry.name,
-            type: entry.term,
-            source: moduleSource,
-          }));
+          const pool = about.results.map((entry) => ({ name: entry.name, type: entry.term }));
+          moduleMatches = matchTermsByType(target, pool).map(
+            (match) => ({ ...match, source: moduleSource }),
+          );
         } catch {
           moduleMatches = [];
         }
       }
 
       const localNames = new Set(localMatches.map((entry) => entry.name));
-      let merged = [] as Array<{ name: string; type: string; source: "local" | "module" | "imported" }>;
+      let merged: ScopedMatch[] = [];
       if (effectiveScope === "local") {
         merged = localMatches;
       } else if (effectiveScope === "imported") {
@@ -373,12 +384,18 @@ export function register(
       let output = `## Term Search in ?${goalId}\n\n`;
       output += `**Target type:** \`${target}\`\n\n`;
       output += `**Scope:** \`${effectiveScope}\`\n`;
+      if (effectiveScope !== "local") {
+        output += "_Note: `module`/`imported` candidates are type-filtered from definitions Cmd_search_about relates to the goal type; a term unrelated to that type's names may be missed — widen `targetType` or `limit`._\n";
+      }
       output += `**Total candidates:** ${merged.length}\n\n`;
 
       if (matches.length > 0) {
         output += `### Matching terms (${matches.length} shown)\n\n`;
         for (const m of matches) {
-          output += `- \`${m.name}\` : \`${m.type}\` (${m.source})\n`;
+          const fit = m.match === "exact"
+            ? "exact"
+            : `apply to ${m.arity} arg${m.arity === 1 ? "" : "s"}`;
+          output += `- \`${m.name}\` : \`${m.type}\` (${m.source}, ${fit})\n`;
         }
         if (merged.length > effectiveOffset + effectiveLimit) {
           output += `\nMore candidates available. Re-call with \`offset: ${effectiveOffset + effectiveLimit}\`.\n`;

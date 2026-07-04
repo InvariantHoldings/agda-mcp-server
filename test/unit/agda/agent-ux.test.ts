@@ -53,6 +53,37 @@ describe("classifyAgdaError", () => {
     const out = classifyAgdaError("Parse error at line 4");
     expect(out.category).toBe("parser-regression");
   });
+
+  // One representative error string per class, asserting both the category
+  // and the machine-readable action an agent keys off of.
+  test.each([
+    ["agda: command not found", "toolchain", "verify-toolchain"],
+    ["Checking Foo\nLibrary 'bar' not found", "toolchain", "verify-toolchain"],
+    ["Not in scope:\n  fooBar", "mechanical-import", "suggest_import"],
+    ["Not in scope: proj1. Did you mean `proj₁`?", "mechanical-rename", "apply_rename"],
+    ["/x/Foo.agda:3,1-4: lexical error", "parser-regression", "repair_parser_syntax"],
+    [
+      "Incomplete pattern matching for f. Missing cases: f (suc n)",
+      "coverage-missing",
+      "add_missing_clauses",
+    ],
+    [
+      "Failed to load dependency while checking the declaration of Foo in src/Foo.agda",
+      "dep-failure",
+      "repair_dependency",
+    ],
+    [
+      "x != y of type Nat when checking that the expression x has type y",
+      "proof-obligation",
+      "open_interactive_goal",
+    ],
+  ])("classifies %j as %s / %s", (message, category, action) => {
+    const out = classifyAgdaError(message as string);
+    expect(out.category).toBe(category);
+    expect((out.suggestedAction as { action: string }).action).toBe(action);
+    expect(out.confidence).toBeGreaterThanOrEqual(0);
+    expect(out.confidence).toBeLessThanOrEqual(1);
+  });
 });
 
 describe("applyScopedRename", () => {
@@ -137,17 +168,31 @@ describe("inferFixityConflicts", () => {
 });
 
 describe("buildAutoSearchPayload", () => {
-  test("renders configurable payload", () => {
+  test("renders configurable payload (agsy flags)", () => {
     const payload = buildAutoSearchPayload({
       depth: 5,
       listCandidates: true,
       hints: ["helper"],
       excludeHints: ["bad"],
-    });
+    }, "agsy");
     expect(payload).toContain("-d 5");
     expect(payload).toContain("--list-candidates");
     expect(payload).toContain("-h helper");
     expect(payload).toContain("-x bad");
+  });
+
+  test("mimer mode emits bare hints and drops flag-only options", () => {
+    // Mimer (Agda >= 2.6.3) rejects Agsy flags — only hint identifiers
+    // are valid, space-separated and unprefixed.
+    const payload = buildAutoSearchPayload({
+      depth: 5,
+      listCandidates: true,
+      hints: ["helper", "other"],
+      excludeHints: ["bad"],
+    }, "mimer");
+    expect(payload).toBe("helper other");
+    expect(payload).not.toContain("-");
+    expect(buildAutoSearchPayload({ depth: 3, listCandidates: true }, "mimer")).toBe("");
   });
 });
 

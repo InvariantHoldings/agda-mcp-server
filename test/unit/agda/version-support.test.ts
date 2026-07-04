@@ -9,6 +9,7 @@ import {
   supportedFeatureFlags,
   hasStructuredGiveResult,
   filePathDescription,
+  usesMimerProofSearch,
 } from "../../../src/agda/version-support.js";
 
 const v250 = parseAgdaVersion("2.5.0");
@@ -133,4 +134,18 @@ test("with old version, shows only supported formats", () => {
   expect(desc).toContain(".agda");
   expect(desc).toContain(".lagda");
   expect(desc).not.toContain(".lagda.md");
+});
+
+// ── usesMimerProofSearch ─────────────────────────────────
+
+test("usesMimerProofSearch: Mimer for >= 2.6.3, Agsy below", () => {
+  expect(usesMimerProofSearch(parseAgdaVersion("2.6.3"))).toBe(true);
+  expect(usesMimerProofSearch(parseAgdaVersion("2.8.0"))).toBe(true);
+  expect(usesMimerProofSearch(parseAgdaVersion("2.9.0"))).toBe(true);
+  expect(usesMimerProofSearch(parseAgdaVersion("2.6.2"))).toBe(false);
+  expect(usesMimerProofSearch(parseAgdaVersion("2.5.4"))).toBe(false);
+});
+
+test("usesMimerProofSearch: unknown version assumes a modern toolchain", () => {
+  expect(usesMimerProofSearch(null)).toBe(true);
 });

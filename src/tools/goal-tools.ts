@@ -9,6 +9,7 @@ import { registerGoalTextTool } from "./tool-helpers.js";
 import { applyEditAndReload } from "../session/reload-and-diagnose.js";
 import { hasReplacementText } from "../protocol/responses/proof-actions.js";
 import { buildAutoSearchPayload } from "../agda/agent-ux.js";
+import { usesMimerProofSearch } from "../agda/version-support.js";
 import { goalIdSchema } from "./tool-schemas.js";
 
 // Appended to every write-capable proof-action tool description so
@@ -378,17 +379,29 @@ export function register(
     callback: async ({ goalId, writeToFile, depth, listCandidates, excludeHints, hints }) => {
       const shouldWrite = writeToFile !== false;
       const goalIdsBefore = session.getGoalIds();
+      // Agda >= 2.6.3 uses Mimer, whose search string is a bare hint list —
+      // Agsy flags (-d, --list-candidates, -h, -x) are rejected as
+      // expressions. Select the syntax by version.
+      const engine = usesMimerProofSearch(session.getAgdaVersion()) ? "mimer" : "agsy";
       const payload = buildAutoSearchPayload({
         depth: depth as number | undefined,
         listCandidates: listCandidates as boolean | undefined,
         excludeHints: excludeHints as string[] | undefined,
         hints: hints as string[] | undefined,
-      });
+      }, engine);
       const result = await session.goal.autoOne(goalId, payload);
       let output = `## Auto-solve ?${goalId}\n\n`;
       output += result.solution ? `**Solution:** \`${result.solution}\`\n` : `No automatic solution found.\n`;
       if (payload.length > 0) {
         output += `\nSearch payload: \`${payload}\`\n`;
+      }
+      const droppedOnMimer =
+        engine === "mimer"
+        && (depth !== undefined
+          || listCandidates === true
+          || ((excludeHints as string[] | undefined)?.length ?? 0) > 0);
+      if (droppedOnMimer) {
+        output += "\n_Note: `depth`, `listCandidates`, and `excludeHints` are ignored on this Agda — its Mimer proof search accepts only hint identifiers._\n";
       }
 
       let written = false;

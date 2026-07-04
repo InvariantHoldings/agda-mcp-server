@@ -7,7 +7,48 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **New `agda_goal_candidates` tool.** In one call it returns, for every open
+  goal, the local-context terms that can fill it — type-directed, reusing the
+  same matcher as `agda_term_search` (`match: exact` for a term of the goal
+  type, `match: result` with an `arity` for a function to apply). This turns
+  the per-goal "inspect the hole, then search for a term" round-trip into a
+  single whole-proof-state view. Read-only: it only queries each goal's
+  type/context. For a module/imported-wide search of one goal, use
+  `agda_term_search`.
+
+- **`agda_term_search` is now genuinely type-directed at module scope.**
+  Previously `module`/`imported` scope returned a name-relatedness search
+  (`Cmd_search_about`) with no type filtering. It now type-filters every
+  candidate: a result is kept only when its type IS the goal type
+  (`match: exact`) or its RESULT type is the goal type (`match: result`, a
+  function to apply — `arity` reports how many arguments it needs). Local
+  scope gained the same result-type matching, so a `f : A → Goal` in context
+  now surfaces. Backed by pure, tested helpers (`resultTypeOf`,
+  `matchTermsByType`) that split on top-level function arrows only.
+
+### Changed
+
+- **Verified the proposed 0.7.0 release gate is met and reconciled the stale
+  planning doc.** `agda_bulk_status` (cascade dedup), `agda_triage_error`
+  (7-class mechanical detection), and `agda_term_search` all shipped earlier;
+  added test coverage (a per-class triage table, `agda_term_search`
+  local-scope/pagination/type-filtering, and the `agda_bulk_status`
+  import-graph root-cause fallback), and `docs/release-0.7.0-triage.md` now
+  records the gate as satisfied.
+
 ### Fixed
+
+- **`agda_auto` no longer errors when given `depth`, `listCandidates`,
+  `hints`, or `excludeHints` on Agda ≥ 2.6.3.** Agda 2.6.3 replaced Agsy
+  with Mimer, whose proof-search command string is a bare list of hint
+  identifiers; the Agsy flag syntax (`-d`, `--list-candidates`, `-h`, `-x`)
+  is parsed as an expression and rejected (`Not in scope: -d`). The payload
+  builder is now engine-aware: on Mimer it emits only hint identifiers, and
+  `agda_auto` notes that the flag-only options were ignored. On pre-2.6.3
+  Agda the classic flags are still used. (Found driving the server against a
+  live Agda 2.9.0 codebase.)
 
 - **`agda_load` no longer resolves a `Cmd_load` before Agda finishes
   type-checking (issues #65, #66).** The transport used an idle heuristic
