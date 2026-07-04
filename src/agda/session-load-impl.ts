@@ -40,9 +40,9 @@ export { buildLoadOptionsList };
 //  3. Source hole markers — our fallback scan when the protocol reports
 //     zero visible and zero invisible goals but the source has {!!}/?.
 //
-// Postulates are complete, not holes. Cmd_load_no_metas is stricter:
-// any remaining interaction point, invisible goal, or source hole forces
-// a type-error.
+// Postulates are complete, not holes. The strict load (agda_load_no_metas)
+// is stricter: any remaining interaction point, invisible goal, or source
+// hole forces a type-error.
 
 /** Record an early-return classification on the session and return the
  *  result. Keeps the proc-died / incomplete exits consistent with the
@@ -175,16 +175,32 @@ export async function runLoadNoMetas(
     return finalizeEarlyReturn(session, fileNotFound(absPath));
   }
 
-  // No awaitGoalTerminus / terminus guard here: Cmd_load_no_metas
-  // deliberately skips the metas display, so a clean strict load emits no
-  // InteractionPoints / AllGoalsWarnings at all (only highlighting +
-  // Status). It's outside the documented Cmd_load goal-state sequence, so
-  // "no terminus" is normal completion, not truncation.
+  // Strict load via Cmd_load, not Cmd_load_no_metas. A clean
+  // Cmd_load_no_metas emits no goal-state terminus at all — only a
+  // "Checking <module>" line, then silence until it finishes — so its
+  // completion can only be guessed from an idle gap, which a slow
+  // module's silent type-checking pause defeats (resolving mid-check as a
+  // false success). Cmd_load always emits InteractionPoints +
+  // AllGoalsWarnings (or an Error), giving the transport a real terminus;
+  // we then reject any hole or unsolved meta at the classification layer,
+  // which reproduces Cmd_load_no_metas's pass/fail exactly.
   const responses = await session.sendCommand(
-    session.iotcmFor(absPath, command("Cmd_load_no_metas", quoted(absPath))),
+    session.iotcmFor(absPath, command("Cmd_load", quoted(absPath), "[]")),
+    undefined,
+    { awaitGoalTerminus: true },
   );
   throwOnFatalProtocolStderr(responses);
   const parsed: ParsedLoadResult = parseLoadResponses(responses, { profilingEnabled: false });
+
+  // The transport waits for Agda's goal-state responses, so their absence
+  // means the process ended before finishing. Fail loudly rather than
+  // report a fabricated strict success.
+  if (!parsed.sawLoadTerminus) {
+    throw new Error(
+      `Agda process ended before completing the strict load of ${absPath} ` +
+      `(no goals or type error were emitted). Re-issue agda_load_no_metas.`,
+    );
+  }
 
   const needsExplicitHoleScan =
     parsed.success && parsed.goalCount === 0 && parsed.invisibleGoalCount === 0;

@@ -21,11 +21,51 @@ and this project follows [Semantic Versioning](https://semver.org/).
   mis-reported. The fix makes a `Cmd_load` withhold idle completion until
   those goal-state responses are actually on the wire; completion then
   comes from the goal state itself, a process exit, or the per-command
-  timeout. Only `agda_load`'s `Cmd_load` opts in — `agda_load_no_metas`,
-  give, case-split, and queries are unchanged, and a fast load whose goal
-  state arrives promptly sees no extra latency. Prior load-success state
-  (classification, goal IDs) is also invalidated at the start of every
-  load so a failed load can't leave stale success visible.
+  timeout. `agda_load` and `agda_load_no_metas` both wait for the goal
+  state (see the strict-load entry below); give, case-split, and queries
+  are unchanged, and a fast load whose goal state arrives promptly sees
+  no extra latency. Prior load-success state (classification, goal IDs)
+  is also invalidated at the start of every load so a failed load can't
+  leave stale success visible.
+
+- **`agda_load` no longer hangs the full command timeout when Agda
+  rejects the command itself.** A malformed IOTCM (or one Agda "cannot
+  read") is answered on the JSON channel with a `cannot read: …` notice
+  and no goal state — but the process stays alive. With the goal-state
+  wait above, the load then waited out the entire per-command timeout
+  before failing. A fatal protocol stderr (`cannot read:`, `failed to
+  parse`, `invalid …`) is now treated as a load terminus, so the load
+  fails fast with Agda's own message instead of stalling.
+
+- **The per-command timeout now measures inactivity, not total elapsed
+  time.** It was an absolute deadline from command start, so a healthy
+  cold load still streaming progress at the deadline was killed and the
+  subprocess respawned. It is now an inactivity watchdog that resets on
+  every response, firing only after a full quiet window — a genuinely
+  wedged process is still reaped, but a slow-but-progressing load is not.
+
+- **`agda_load_no_metas` no longer reports a clean load before Agda
+  finishes (strict false-green).** A clean `Cmd_load_no_metas` emits no
+  goal-state terminus at all — only a `Checking <module>` line, then
+  silence until it finishes — so its completion could only be inferred
+  from an idle gap. A module that type-checks silently for longer than
+  that gap was resolved mid-check as `ok-complete`, hiding holes or
+  errors past the pause. The strict load now runs over `Cmd_load` (which
+  always emits `InteractionPoints` + `AllGoalsWarnings`, or an `Error`)
+  and applies the same strict rejection — any hole or unsolved meta is a
+  `type-error` — at the classification layer, so the pass/fail contract
+  is unchanged but completion waits for Agda's real goal state.
+
+- **Reloading after a dependency changed no longer reports a stale clean
+  result (issues #61, #64).** Editing an imported module and reloading a
+  dependent triggers a rebuild of that dependency; while the rebuild runs
+  Agda streams `Checking <dep>` and then falls silent for as long as the
+  rebuild takes. The old idle heuristic could mistake that silence for
+  completion and re-report the previous `ok-complete`, hiding an error
+  the changed dependency now introduces. The goal-state terminus wait
+  makes the reload hold until the rebuild's real result is on the wire.
+  A gated integration test reproduces the race with a deliberately slow,
+  silent dependency rebuild.
 
 ## [0.6.7] - 2026-05-13
 

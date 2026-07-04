@@ -22,6 +22,20 @@ test("reached() short-circuits on a DisplayInfo Error", () => {
   expect(t.reached()).toBe(true);
 });
 
+test("reached() short-circuits on a fatal protocol stderr", () => {
+  const t = new GoalTerminusTracker();
+  // Agda rejects a malformed IOTCM on the JSON> channel and keeps
+  // running with no goal state — must still count as a terminus.
+  t.record({ kind: "StderrOutput", text: 'cannot read: IOTCM "X" None Direct bad' } as never);
+  expect(t.reached()).toBe(true);
+});
+
+test("reached() ignores benign stderr notices", () => {
+  const t = new GoalTerminusTracker();
+  t.record({ kind: "StderrOutput", text: "Checking Foo (/tmp/Foo.agda)." } as never);
+  expect(t.reached()).toBe(false);
+});
+
 test("progress/highlighting responses are never a terminus", () => {
   const t = new GoalTerminusTracker();
   for (const kind of ["Status", "RunningInfo", "HighlightingInfo", "ClearHighlighting", "ClearRunningInfo"]) {

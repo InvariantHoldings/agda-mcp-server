@@ -109,6 +109,66 @@ test("without awaitGoalTerminus a non-load command resolves on the short idle wi
   });
 });
 
+test("inactivity watchdog keeps a steadily-progressing load alive past the timeout window", async () => {
+  // The per-command timeout measures silence, not elapsed time. Here the
+  // 40ms timeout is shorter than the ~120ms the load runs, but progress
+  // arrives every ~15ms (< 40ms), so the watchdog keeps resetting and the
+  // proc is never reaped. An absolute timeout would have killed it mid-load.
+  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
+    const transport = new AgdaTransport();
+    const killCalls: unknown[] = [];
+    const proc = {
+      exitCode: null,
+      signalCode: null,
+      kill(sig?: unknown) { killCalls.push(sig); return true; },
+      stdin: {
+        write() {
+          for (let i = 0; i < 6; i++) {
+            setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"RunningInfo","message":"Checking"}\n')), i * 15);
+          }
+          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"DisplayInfo","info":{"kind":"AllGoalsWarnings","visibleGoals":[],"invisibleGoals":[],"errors":[],"warnings":[]}}\n')), 95);
+          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"InteractionPoints","interactionPoints":[]}\n')), 98);
+        },
+      },
+    };
+
+    const responses = await transport.sendCommand(
+      proc as unknown as ChildProcess,
+      'IOTCM "x" NonInteractive Direct (Cmd_load)',
+      40,
+      { awaitGoalTerminus: true },
+    );
+
+    expect(killCalls).toEqual([]);
+    expect(responses.some((r) => r.kind === "InteractionPoints")).toBe(true);
+  });
+});
+
+test("a fatal protocol stderr completes a load instead of hanging until timeout", async () => {
+  // A malformed IOTCM makes Agda print `cannot read:` and keep running with
+  // no goal state. Without treating it as a terminus the load would wait the
+  // full timeout; here it must resolve on the idle window with that notice.
+  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
+    const transport = new AgdaTransport();
+    const proc = {
+      stdin: {
+        write() {
+          setTimeout(() => transport.handleStdout(Buffer.from('JSON> cannot read: IOTCM "x" None Direct bad\n')), 0);
+        },
+      },
+    };
+
+    const responses = await transport.sendCommand(
+      proc as unknown as ChildProcess,
+      'IOTCM "x" NonInteractive Direct (Cmd_load)',
+      2000,
+      { awaitGoalTerminus: true },
+    );
+
+    expect(responses.some((r) => r.kind === "StderrOutput")).toBe(true);
+  });
+});
+
 test("AgdaTransport resolves after trailing Status when earlier payloads already arrived", async () => {
   await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
     const transport = new AgdaTransport();
