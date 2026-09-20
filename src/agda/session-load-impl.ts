@@ -229,7 +229,7 @@ export async function runLoadNoMetas(
   // Prompt framing makes the real strict command safe: an empty successful
   // Cmd_load_no_metas frame is complete only when Agda emits the next prompt.
   const responses = await session.sendCommand(
-    session.iotcmFor(absPath, command("Cmd_load_no_metas", quoted(absPath), "[]")),
+    session.iotcmFor(absPath, command("Cmd_load_no_metas", quoted(absPath))),
   );
   throwOnFatalProtocolStderr(responses);
   const parsed = parseLoadResponses(responses, {
