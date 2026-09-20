@@ -35,7 +35,7 @@ export interface SessionSnapshot {
   invisibleGoalCount: number;
   /** Completeness classification from the last load, if any. */
   classification: CompletenessClassification | null;
-  /** Whether the proof is complete (no holes, no errors). */
+  /** Whether the current loaded state is fresh and complete, not merely historical success. */
   isComplete: boolean;
   /** Whether the module has holes. */
   hasHoles: boolean;
@@ -80,7 +80,17 @@ export function deriveSessionSnapshot(input: SnapshotInput): SessionSnapshot {
   const goalCount = input.goalIds.length;
   const hasHoles = goalCount > 0 || input.invisibleGoalCount > 0;
   const classification = parseClassification(input.classification);
-  const isComplete = classification === "ok-complete";
+  // Classification describes the last load; it cannot certify a busy, stale,
+  // missing, or goal-bearing current state. Keep that history independently.
+  const isComplete =
+    classification === "ok-complete" &&
+    input.phase === "loaded" &&
+    input.loadedFile !== null &&
+    input.lastLoadedAt !== null &&
+    input.projectRootExists &&
+    !input.stale &&
+    goalCount === 0 &&
+    input.invisibleGoalCount === 0;
 
   const suggestedActions = deriveSuggestedActions({
     phase: input.phase,

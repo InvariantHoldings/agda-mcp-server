@@ -30,7 +30,7 @@ test("decodeLoadDisplayResponses extracts visible goals, warnings, and errors", 
   expect(decoded.warnings).toEqual(["unreachable clause"]);
 });
 
-test("decodeLoadDisplayResponses ignores malformed visible goals", () => {
+test("decodeLoadDisplayResponses reports malformed visible goals without hiding cardinality", () => {
   const decoded = decodeLoadDisplayResponses([
     {
       kind: "DisplayInfo",
@@ -45,6 +45,51 @@ test("decodeLoadDisplayResponses ignores malformed visible goals", () => {
   ]);
 
   expect(decoded.visibleGoals).toEqual([{ goalId: 7, type: "Nat" }]);
+  expect(decoded.protocolErrors).toEqual([
+    "Malformed visible goal entry at index 0.",
+  ]);
+});
+
+test("decodeLoadDisplayResponses reports malformed invisible goals", () => {
+  const decoded = decodeLoadDisplayResponses([
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [],
+        invisibleGoals: [{ bad: true }],
+        errors: [],
+        warnings: [],
+      },
+    },
+  ]);
+
+  expect(decoded.invisibleGoals).toEqual([]);
+  expect(decoded.protocolErrors).toEqual([
+    "Malformed invisible goal entry at index 0.",
+  ]);
+});
+
+test("decodeLoadDisplayResponses preserves blank diagnostics and reports them", () => {
+  const decoded = decodeLoadDisplayResponses([
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [],
+        invisibleGoals: [],
+        errors: [""],
+        warnings: [""],
+      },
+    },
+  ]);
+
+  expect(decoded.errors).toEqual([""]);
+  expect(decoded.warnings).toEqual([""]);
+  expect(decoded.protocolErrors).toEqual([
+    "Malformed warning diagnostic at index 0.",
+    "Malformed error diagnostic at index 0.",
+  ]);
 });
 
 test("decodeLoadDisplayResponses accepts visible goals with object constraint ids", () => {

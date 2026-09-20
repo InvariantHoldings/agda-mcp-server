@@ -11,7 +11,14 @@ import { resolve } from "node:path";
 
 import type { AgdaSession } from "./session.js";
 import type { LoadResult } from "./types.js";
-import { parseLoadResponses, type ParsedLoadResult } from "./parse-load-responses.js";
+import { ControlCommandInterruption } from "../session/agda-transport.js";
+import {
+  cancelledLoadResult,
+  clearUntrustedLoadState,
+  sourceChangedResult,
+  sourceSnapshot,
+} from "./load-safety.js";
+import { parseLoadResponses } from "./parse-load-responses.js";
 import { throwOnFatalProtocolStderr } from "./protocol-errors.js";
 import { logger } from "./logger.js";
 import { command, quoted } from "../protocol/command-builder.js";
@@ -53,6 +60,10 @@ function finalizeEarlyReturn(session: AgdaSession, result: LoadResult): LoadResu
   return result;
 }
 
+
+
+
+
 export async function runLoad(
   session: AgdaSession,
   filePath: string,
@@ -68,6 +79,8 @@ export async function runLoad(
   if (!existsSync(absPath)) {
     return finalizeEarlyReturn(session, fileNotFound(absPath));
   }
+  const sourceBefore = sourceSnapshot(absPath);
+  if (sourceBefore === null) return fileNotFound(absPath);
 
   const optsBuild = buildLoadOptionsList(options?.profileOptions, options?.commandLineOptions);
   if (!optsBuild.ok) {
@@ -75,18 +88,31 @@ export async function runLoad(
   }
 
   // iotcmFor uses absPath directly — don't set currentFile yet, since
-  // ensureProcess() (inside sendCommand) would reset it. awaitGoalTerminus
-  // tells the transport not to treat this load as complete until Agda has
-  // emitted its goal-state responses (InteractionPoints + AllGoalsWarnings,
-  // or an Error) — so a slow module that type-checks silently for seconds
-  // can't be resolved mid-check and mis-read as a clean load.
+  // ensureProcess() (inside sendCommand) would reset it. The transport
+  // seals this request only at Agda's next protocol prompt, after every
+  // response in the load frame has arrived.
   const responses = await session.sendCommand(
     session.iotcmFor(absPath, command("Cmd_load", quoted(absPath), optsBuild.optsList)),
-    undefined,
-    { awaitGoalTerminus: true },
   );
   throwOnFatalProtocolStderr(responses);
-  const parsed = parseLoadResponses(responses, { profilingEnabled: optsBuild.profilingEnabled });
+  const parsed = parseLoadResponses(responses, {
+    profilingEnabled: optsBuild.profilingEnabled,
+    mode: "load",
+    frameComplete: true,
+  });
+  if (!sourceSnapshot(absPath)?.equals(sourceBefore)) {
+    clearUntrustedLoadState(session);
+    const result = sourceChangedResult(absPath, parsed.warnings, parsed.profiling);
+    session.lastClassification = result.classification;
+    session.lastLoadedAt = Date.now();
+    return result;
+  }
+  if (parsed.classification === "protocol-error") {
+    clearUntrustedLoadState(session);
+    session.lastClassification = parsed.classification;
+    session.lastLoadedAt = Date.now();
+    return parsed;
+  }
 
   // The transport waits for Agda's goal-state responses, so their absence
   // means the process ended before finishing this load. Fail loudly rather
@@ -107,15 +133,31 @@ export async function runLoad(
   let goalIds = parsed.goalIds;
 
   if (parsed.success) {
-    const reconciled = await reconcileGoalsViaMetas(session, absPath, parsed.goals);
-    goals = reconciled.goals;
-    goalIds = reconciled.goalIds;
-    // metas killed the proc: sendCommand's finally cleared state, so a
-    // success envelope here would lie. Surface the failure instead.
-    if (reconciled.procDied) {
+    try {
+      const reconciled = await reconcileGoalsViaMetas(session, absPath, parsed.goals);
+      goals = reconciled.goals;
+      goalIds = reconciled.goalIds;
+      // metas killed the proc: sendCommand's finally cleared state, so a
+      // success envelope here would lie. Surface the failure instead.
+      if (reconciled.procDied) {
+        return finalizeEarlyReturn(
+          session,
+          loadFailedAfterReconciliation(absPath, parsed.warnings, parsed.profiling),
+        );
+      }
+    } catch (err) {
+      if (!(err instanceof ControlCommandInterruption)) throw err;
+      clearUntrustedLoadState(session);
       return finalizeEarlyReturn(
         session,
-        loadFailedAfterReconciliation(absPath, parsed.warnings, parsed.profiling),
+        cancelledLoadResult(absPath, parsed.warnings, parsed.profiling),
+      );
+    }
+    if (!sourceSnapshot(absPath)?.equals(sourceBefore)) {
+      clearUntrustedLoadState(session);
+      return finalizeEarlyReturn(
+        session,
+        sourceChangedResult(absPath, parsed.warnings, parsed.profiling),
       );
     }
   }
@@ -126,6 +168,13 @@ export async function runLoad(
   const needsExplicitHoleScan =
     parsed.success && goals.length === 0 && parsed.invisibleGoalCount === 0;
   const sourceHoleCount = needsExplicitHoleScan ? countExplicitSourceHoles(absPath) : 0;
+  if (parsed.success && !sourceSnapshot(absPath)?.equals(sourceBefore)) {
+    clearUntrustedLoadState(session);
+    const result = sourceChangedResult(absPath, parsed.warnings, parsed.profiling);
+    session.lastClassification = result.classification;
+    session.lastLoadedAt = Date.now();
+    return result;
+  }
 
   // goalCount tracks the goals[] length; sourceHoleCount feeds hasHoles.
   const goalCount = goals.length;
@@ -174,32 +223,30 @@ export async function runLoadNoMetas(
   if (!existsSync(absPath)) {
     return finalizeEarlyReturn(session, fileNotFound(absPath));
   }
+  const sourceBefore = sourceSnapshot(absPath);
+  if (sourceBefore === null) return fileNotFound(absPath);
 
-  // Strict load via Cmd_load, not Cmd_load_no_metas. A clean
-  // Cmd_load_no_metas emits no goal-state terminus at all — only a
-  // "Checking <module>" line, then silence until it finishes — so its
-  // completion can only be guessed from an idle gap, which a slow
-  // module's silent type-checking pause defeats (resolving mid-check as a
-  // false success). Cmd_load always emits InteractionPoints +
-  // AllGoalsWarnings (or an Error), giving the transport a real terminus;
-  // we then reject any hole or unsolved meta at the classification layer,
-  // which reproduces Cmd_load_no_metas's pass/fail exactly.
+  // Prompt framing makes the real strict command safe: an empty successful
+  // Cmd_load_no_metas frame is complete only when Agda emits the next prompt.
   const responses = await session.sendCommand(
-    session.iotcmFor(absPath, command("Cmd_load", quoted(absPath), "[]")),
-    undefined,
-    { awaitGoalTerminus: true },
+    session.iotcmFor(absPath, command("Cmd_load_no_metas", quoted(absPath), "[]")),
   );
   throwOnFatalProtocolStderr(responses);
-  const parsed: ParsedLoadResult = parseLoadResponses(responses, { profilingEnabled: false });
-
-  // The transport waits for Agda's goal-state responses, so their absence
-  // means the process ended before finishing. Fail loudly rather than
-  // report a fabricated strict success.
-  if (!parsed.sawLoadTerminus) {
-    throw new Error(
-      `Agda process ended before completing the strict load of ${absPath} ` +
-      `(no goals or type error were emitted). Re-issue agda_load_no_metas.`,
+  const parsed = parseLoadResponses(responses, {
+    profilingEnabled: false,
+    mode: "load-no-metas",
+    frameComplete: true,
+  });
+  if (!sourceSnapshot(absPath)?.equals(sourceBefore)) {
+    clearUntrustedLoadState(session);
+    return finalizeEarlyReturn(
+      session,
+      sourceChangedResult(absPath, parsed.warnings, parsed.profiling),
     );
+  }
+  if (parsed.classification === "protocol-error") {
+    clearUntrustedLoadState(session);
+    return finalizeEarlyReturn(session, parsed);
   }
 
   const needsExplicitHoleScan =

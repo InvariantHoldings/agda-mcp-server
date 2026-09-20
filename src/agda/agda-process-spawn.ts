@@ -104,18 +104,22 @@ export function spawnAgdaProcess(args: {
     stdio: ["pipe", "pipe", "pipe"],
   });
 
+  // Bind every listener to this process generation. A retired child can
+  // still deliver buffered stdout/stderr or close/error events after its
+  // listeners are detached; the transport ignores those events by token.
+  const generation = args.transport.attachProcess(proc);
   const onStdout = (chunk: Buffer): void => {
-    args.transport.handleStdout(chunk);
+    args.transport.handleStdout(chunk, generation);
   };
   const onStderr = (chunk: Buffer): void => {
-    args.transport.handleStderr(chunk);
+    args.transport.handleStderr(chunk, generation);
   };
   const onClose = (): void => {
-    args.transport.handleProcessClose();
+    args.transport.handleProcessClose(proc, generation);
     args.onClose(proc);
   };
   const onError = (err: Error): void => {
-    args.transport.handleProcessError(err);
+    args.transport.handleProcessError(err, generation);
     args.onError(err);
   };
 

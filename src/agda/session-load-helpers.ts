@@ -11,6 +11,7 @@ import type { LoadResult } from "./types.js";
 import { NOT_FOUND_RESULT } from "./session-constants.js";
 import { mergeGoals } from "./goal-merging.js";
 import { logger } from "./logger.js";
+import { ControlCommandInterruption } from "../session/agda-transport.js";
 import { stringList } from "../protocol/command-builder.js";
 import { findGoalPositions } from "../session/goal-positions.js";
 import { validateProfileOptions, toProfileArgs } from "../protocol/profile-options.js";
@@ -99,6 +100,7 @@ export async function reconcileGoalsViaMetas(
       goalIds = goals.map((goal) => goal.goalId);
     }
   } catch (err) {
+    if (err instanceof ControlCommandInterruption) throw err;
     logger.warn("post-load metas reconciliation failed", {
       file: absPath,
       error: err instanceof Error ? err.message : String(err),

@@ -110,6 +110,21 @@ describe("deriveSessionSnapshot", () => {
     expect(snap.stale).toBe(true);
   });
 
+  it.each<Partial<SnapshotInput>>([
+    { stale: true },
+    { phase: "busy" },
+    { phase: "exiting" },
+    { loadedFile: null },
+    { lastLoadedAt: null },
+    { projectRootExists: false },
+    { goalIds: [1] },
+    { invisibleGoalCount: 1 },
+  ])("does not promote historical success to current completeness: %j", (patch) => {
+    const snap = deriveSessionSnapshot(baseInput(patch));
+    expect(snap.classification).toBe("ok-complete");
+    expect(snap.isComplete).toBe(false);
+  });
+
   it("copies goalIds without sharing reference", () => {
     const ids = [0, 1];
     const snap = deriveSessionSnapshot(baseInput({ goalIds: ids }));

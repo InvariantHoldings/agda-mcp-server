@@ -13,6 +13,7 @@
 import type { AgdaSession } from "./session.js";
 import type { AgdaResponse } from "./types.js";
 import { iotcmEnvelope } from "../protocol/command-builder.js";
+import { ControlCommandInterruption } from "../session/agda-transport.js";
 import {
   piggybackVersionFromResponses,
   preflightVersionDetection,
@@ -55,7 +56,9 @@ export function dispatchSessionCommand(
   const task = session.commandQueue.then(async () => {
     assertSessionAlive(session);
     if (mySerial <= session.cancelledThrough) {
-      throw new Error("Cancelled by Agda control command (Cmd_abort/Cmd_exit)");
+      throw new ControlCommandInterruption(
+        "Cancelled by Agda control command (Cmd_abort/Cmd_exit)",
+      );
     }
 
     const proc = session.ensureProcess();
@@ -74,7 +77,10 @@ export function dispatchSessionCommand(
       assertSessionAlive(session);
       assertProcSurvivedPreflight(session, proc, fileAtStart);
 
-      responses = await session.transport.sendCommand(proc, command, timeoutMs, options);
+      // Prompt framing supersedes the old goal-terminus completion hint;
+      // retain the session-level option for source compatibility only.
+      void options;
+      responses = await session.transport.sendCommand(proc, command, timeoutMs);
     } finally {
       resetFileBoundStateIfProcDied(session, proc);
     }

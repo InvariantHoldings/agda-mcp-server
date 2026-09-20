@@ -21,7 +21,7 @@ test("normalizes InteractionPoints {id}[] → number[]", () => {
 
 // ── DisplayInfo AllGoalsWarnings ──────────────────────────
 
-test("normalizes AllGoalsWarnings string fields → single-element arrays", () => {
+test("preserves malformed AllGoalsWarnings string fields for boundary rejection", () => {
   const input = {
     kind: "DisplayInfo",
     info: {
@@ -34,10 +34,10 @@ test("normalizes AllGoalsWarnings string fields → single-element arrays", () =
   };
   const result = normalizeAgdaResponse(input);
   const info = result.info as any;
-  expect(info.visibleGoals).toEqual(["?0 : Nat"]);
-  expect(info.invisibleGoals).toEqual(["hidden"]);
-  expect(info.errors).toEqual(["some error"]);
-  expect(info.warnings).toEqual(["some warning"]);
+  expect(info.visibleGoals).toBe("?0 : Nat");
+  expect(info.invisibleGoals).toBe("hidden");
+  expect(info.errors).toBe("some error");
+  expect(info.warnings).toBe("some warning");
 });
 
 test("normalizes AllGoalsWarnings arrays pass through", () => {
@@ -58,7 +58,7 @@ test("normalizes AllGoalsWarnings arrays pass through", () => {
   expect((result.info as any).errors).toEqual(errs);
 });
 
-test("normalizes AllGoalsWarnings empty string → empty array", () => {
+test("preserves malformed AllGoalsWarnings empty strings for boundary rejection", () => {
   const input = {
     kind: "DisplayInfo",
     info: {
@@ -70,8 +70,8 @@ test("normalizes AllGoalsWarnings empty string → empty array", () => {
     },
   };
   const result = normalizeAgdaResponse(input);
-  expect((result.info as any).visibleGoals).toEqual([]);
-  expect((result.info as any).errors).toEqual([]);
+  expect((result.info as any).visibleGoals).toBe("");
+  expect((result.info as any).errors).toBe("");
 });
 
 // ── DisplayInfo Error ─────────────────────────────────────

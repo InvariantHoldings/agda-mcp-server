@@ -2,10 +2,9 @@
 //
 // Wire-format normalization for Agda --interaction-json responses.
 //
-// Agda's JSON protocol has polymorphic fields: some can be strings OR
-// arrays of objects depending on version and context. This module
-// normalizes all known-polymorphic fields to canonical types immediately
-// after JSON.parse, so downstream consumers never deal with the ambiguity.
+// Agda's JSON protocol has polymorphic fields on several response kinds.
+// This module normalizes only fields whose alternate wire forms are
+// semantically lossless; load evidence is shape-checked before normalization.
 
 import type { AgdaResponse } from "./types.js";
 
@@ -40,21 +39,11 @@ function toString(val: unknown): string {
 }
 
 /**
- * Coerce a wire value to an array.
- * array → pass-through, non-empty string → [string], else → [].
- */
-function toArray(val: unknown): unknown[] {
-  if (Array.isArray(val)) return val;
-  if (typeof val === "string" && val.trim()) return [val];
-  return [];
-}
-
-/**
  * Normalize a raw Agda JSON response into canonical form.
  *
  * After normalization:
  * - InteractionPoints.interactionPoints: always number[]
- * - AllGoalsWarnings .visibleGoals/.invisibleGoals/.errors/.warnings: always arrays
+ * - AllGoalsWarnings fields: preserved for pre-normalization shape validation
  * - GiveAction .giveResult/.result: always string
  * - MakeCase .clauses: always string[]
  * - RunningInfo .message: always string
@@ -85,16 +74,9 @@ export function normalizeAgdaResponse(raw: AgdaResponse): AgdaResponse {
         const info = { ...(rawInfo as Record<string, unknown>) };
         resp.info = info;
 
-        if (info.kind === "AllGoalsWarnings") {
-          for (const field of [
-            "visibleGoals",
-            "invisibleGoals",
-            "errors",
-            "warnings",
-          ]) {
-            info[field] = toArray(info[field]);
-          }
-        }
+        // AllGoalsWarnings fields are validated by the response decoder;
+        // preserve malformed values here so downstream parsing can fail
+        // closed rather than observing fabricated empty arrays.
       }
       break;
     }
