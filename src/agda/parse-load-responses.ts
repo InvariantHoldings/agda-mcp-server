@@ -8,6 +8,7 @@ import type { AgdaResponse, AgdaGoal, LoadResult } from "./types.js";
 import { classifyCompleteness } from "./completeness.js";
 import { rewriteCompilerPlaceholders } from "./agent-ux.js";
 import {
+  allGoalsWarningsInfoSchema,
   displayInfoResponseSchema,
   parseResponseWithSchema,
   timeInfoSchema,
@@ -81,22 +82,82 @@ export function extractEarliestErrorLine(messages: string[]): number | null {
 /**
  * Parse a normalized Cmd_load response sequence.
  *
- * After normalization guarantees:
+ * At this boundary, load evidence is shape-checked before the lossy
+ * normalization used by other response kinds. Valid evidence has:
  * - InteractionPoints.interactionPoints: number[]
  * - AllGoalsWarnings .visibleGoals/.invisibleGoals/.errors/.warnings: arrays
  * - StderrOutput.text: string
  */
+export interface ParseLoadOptions {
+  profilingEnabled?: boolean;
+  /** Cmd_load has a successful continuation that emits AllGoalsWarnings. */
+  mode?: "load" | "load-no-metas";
+  /** True only when the transport sealed the frame with the next prompt. */
+  frameComplete?: boolean;
+}
+
+type LoadEvidence = {
+  hasValidAllGoalsWarnings: boolean;
+  hasMalformedAllGoalsWarnings: boolean;
+};
+
+function inspectLoadEvidence(responses: AgdaResponse[]): LoadEvidence {
+  let hasValidAllGoalsWarnings = false;
+  let hasMalformedAllGoalsWarnings = false;
+  for (const response of responses) {
+    if (response.kind !== "DisplayInfo") continue;
+    const info = response.info;
+    if (!info || typeof info !== "object" ||
+      (info as { kind?: unknown }).kind !== "AllGoalsWarnings") continue;
+    if (allGoalsWarningsInfoSchema.safeParse(info).success) {
+      hasValidAllGoalsWarnings = true;
+    } else {
+      hasMalformedAllGoalsWarnings = true;
+    }
+  }
+  return { hasValidAllGoalsWarnings, hasMalformedAllGoalsWarnings };
+}
+
+function explicitErrorText(info: unknown): string {
+  if (info && typeof info === "object") {
+    const value = info as Record<string, unknown>;
+    if (typeof value.message === "string" && value.message.length > 0) {
+      return value.message;
+    }
+    if (typeof value.error === "string" && value.error.length > 0) {
+      return value.error;
+    }
+    if (value.error && typeof value.error === "object") {
+      const nested = value.error as Record<string, unknown>;
+      if (typeof nested.message === "string" && nested.message.length > 0) {
+        return nested.message;
+      }
+    }
+  }
+  return "Agda reported an explicit Error response.";
+}
+
 export function parseLoadResponses(
   responses: AgdaResponse[],
-  options?: { profilingEnabled?: boolean },
+  options?: ParseLoadOptions,
 ): ParsedLoadResult {
   const errors: string[] = [];
   const warnings: string[] = [];
   const goals: AgdaGoal[] = [];
   const goalIds: number[] = [];
+  const evidence = inspectLoadEvidence(responses);
   const loadDisplay = decodeLoadDisplayResponses(responses);
   const allGoalsText = loadDisplay.text;
-  let success = true;
+  const mode = options?.mode ?? "load";
+  const frameComplete = options?.frameComplete ?? true;
+  const hasMalformedLoadEvidence = evidence.hasMalformedAllGoalsWarnings ||
+    loadDisplay.protocolErrors.length > 0;
+  const hasSuccessfulLoadEvidence = evidence.hasValidAllGoalsWarnings &&
+    loadDisplay.protocolErrors.length === 0;
+  let compilerFailure = false;
+  let success = frameComplete &&
+    !hasMalformedLoadEvidence &&
+    (mode === "load-no-metas" || hasSuccessfulLoadEvidence);
   let invisibleGoalCount = loadDisplay.invisibleGoalCount;
   const interactionPointIds = decodeInteractionPointIds(responses);
   const stderrTexts = decodeStderrOutputs(responses);
@@ -104,17 +165,18 @@ export function parseLoadResponses(
   for (const resp of responses) {
     // ── DisplayInfo ──────────────────────────────────────
     if (resp.kind === "DisplayInfo") {
+      const rawInfo = resp.info;
+      if (rawInfo && typeof rawInfo === "object" &&
+        (rawInfo as { kind?: unknown }).kind === "Error") {
+        compilerFailure = true;
+        success = false;
+        const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
+        const text = display ? decodeDisplayInfoEvents([resp]).at(-1)?.text ?? "" : "";
+        errors.push(text || explicitErrorText(rawInfo));
+        continue;
+      }
       const display = parseResponseWithSchema(displayInfoResponseSchema, resp);
       if (!display) continue;
-      const info = display.info;
-
-      if (info.kind === "Error") {
-        success = false;
-        const text = decodeDisplayInfoEvents([resp]).at(-1)?.text ?? "";
-        if (text) {
-          errors.push(text);
-        }
-      }
     }
   }
 
@@ -132,7 +194,22 @@ export function parseLoadResponses(
     success = false;
   }
 
+  if (!frameComplete) {
+    errors.push("Agda response frame was not closed by a protocol prompt.");
+    success = false;
+  }
+  if (hasMalformedLoadEvidence) {
+    errors.push("Malformed AllGoalsWarnings load evidence; discarded the response.");
+    errors.push(...loadDisplay.protocolErrors);
+    success = false;
+  }
+  if (mode === "load" && !hasSuccessfulLoadEvidence && errors.length === 0) {
+    errors.push("Cmd_load completed without AllGoalsWarnings load evidence.");
+    success = false;
+  }
+
   if (loadDisplay.errors.length > 0) {
+    compilerFailure = true;
     success = false;
     errors.push(...loadDisplay.errors);
   }
@@ -165,6 +242,12 @@ export function parseLoadResponses(
     goals,
     invisibleGoalCount,
   });
+  const protocolEvidenceMissing = !frameComplete ||
+    hasMalformedLoadEvidence ||
+    (mode === "load" && !hasSuccessfulLoadEvidence && !compilerFailure);
+  const classification = protocolEvidenceMissing
+    ? "protocol-error"
+    : completeness.classification;
 
   // See §1.4 in docs/bug-reports/agent-ux-observations.md. We scan both
   // errors and warnings because Agda can emit a diagnostic with a
@@ -198,7 +281,7 @@ export function parseLoadResponses(
     goalCount: completeness.goalCount,
     hasHoles: completeness.hasHoles,
     isComplete: completeness.isComplete,
-    classification: completeness.classification,
+    classification,
     profiling,
     lastCheckedLine,
     sawLoadTerminus,

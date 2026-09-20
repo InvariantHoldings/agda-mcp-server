@@ -2,6 +2,7 @@ import { test, expect } from "vitest";
 import type { ChildProcess } from "node:child_process";
 
 import { AgdaSession } from "../../../src/agda-process.js";
+import { ControlCommandInterruption } from "../../../src/session/agda-transport.js";
 
 function withEnv(name: string, value: string, fn: () => Promise<void>) {
   const previous = process.env[name];
@@ -432,8 +433,8 @@ test("session.abort() rejects regular commands queued before it instead of letti
     const aborted = session.abort();
 
     await Promise.all([a, aborted]);
-    await expect(b).rejects.toThrow(/Cancelled by Agda control command/);
-    await expect(c).rejects.toThrow(/Cancelled by Agda control command/);
+    await expect(b).rejects.toBeInstanceOf(ControlCommandInterruption);
+    await expect(c).rejects.toBeInstanceOf(ControlCommandInterruption);
 
     // The decisive invariant: B and C must NOT have run on the
     // transport. Their task bodies rejected before any sendCommand
@@ -441,6 +442,70 @@ test("session.abort() rejects regular commands queued before it instead of letti
     expect(events.some((e) => e.includes("b_queued:RAN"))).toBe(false);
     expect(events.some((e) => e.includes("c_queued:RAN"))).toBe(false);
     expect(events).toContain("abort:wrote");
+  } finally {
+    await session.destroy();
+  }
+});
+
+test("queued cancellation during load metas returns cancelled, never completed", async () => {
+  const session = new AgdaSession(process.cwd());
+  session["versionDetectionAttempts"] = AgdaSession.VERSION_DETECTION_MAX_ATTEMPTS;
+
+  const releaseQueueGate = (() => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    return { gate, release };
+  })();
+  let metasQueued!: () => void;
+  const metasQueuedBarrier = new Promise<void>((resolve) => { metasQueued = resolve; });
+  const transport = session["transport"];
+  const fakeAgdaProcess = { exitCode: null, signalCode: null, killed: false } as unknown as ChildProcess;
+
+  session.ensureProcess = () => fakeAgdaProcess;
+  transport.sendCommand = async (_proc, command) => {
+    if (command.includes("Cmd_load")) {
+      // Hold the next queue slot open after Cmd_load completes. This
+      // leaves the real Cmd_metas dispatch queued, not running, when
+      // the control command cancels it.
+      session.commandQueue = session.commandQueue.then(() => releaseQueueGate.gate);
+      return [{
+        kind: "DisplayInfo",
+        info: {
+          kind: "AllGoalsWarnings",
+          visibleGoals: [],
+          invisibleGoals: [],
+          errors: [],
+          warnings: [],
+        },
+      }];
+    }
+    throw new Error(`unexpected transport command: ${command}`);
+  };
+  transport.sendFireAndForgetCommand = (async () => []) as unknown as typeof transport.sendFireAndForgetCommand;
+
+  const originalMetas = session.goal.metas;
+  (session as any).goal = {
+    ...session.goal,
+    metas: () => {
+      const pending = originalMetas();
+      metasQueued();
+      return pending;
+    },
+  };
+
+  try {
+    const load = session.load("test/fixtures/agda/CompleteFixture.agda");
+    await metasQueuedBarrier;
+
+    const abort = session.abort();
+    releaseQueueGate.release();
+
+    const result = await load;
+    await abort;
+    expect(result.success).toBe(false);
+    expect(result.classification).toBe("cancelled");
+    expect(result.isComplete).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/cancelled/i);
   } finally {
     await session.destroy();
   }

@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { test, expect } from "vitest";
 
 import { runLoad, runLoadNoMetas } from "../../../src/agda/session-load-impl.js";
+import { ControlCommandInterruption } from "../../../src/session/agda-transport.js";
 import { expectWarning } from "../../helpers/warn-guard.js";
 
 function makeTempRepo(): string {
@@ -73,11 +74,10 @@ function truncatedLoadResponses() {
   ];
 }
 
-test("runLoad throws (no fabricated success) when the process ended before the goal state", async () => {
-  // The transport waits for Agda's goal-state responses, so a response set
-  // lacking them means the process ended mid-load. runLoad must fail
-  // loudly rather than report a classification — never a fabricated
-  // ok-complete, and never an invented status string.
+test("runLoad reports protocol-error when a completed frame lacks goal evidence", async () => {
+  // Prompt framing establishes that this is the whole response frame;
+  // parseLoadResponses must still reject an ordinary load with no goal
+  // evidence rather than fabricate ok-complete.
   const root = makeTempRepo();
   const file = "Truncated.agda";
   writeFileSync(resolve(root, file), "module Truncated where\nx : Set\nx = {!!}\n", "utf8");
@@ -97,11 +97,12 @@ test("runLoad throws (no fabricated success) when the process ended before the g
   } as any;
 
   try {
-    await expect(runLoad(session, file)).rejects.toThrow(/ended before completing the load/i);
-    // Never ran metas — the guard fires before reconciliation.
+    const result = await runLoad(session, file);
+    expect(result.success).toBe(false);
+    expect(result.classification).toBe("protocol-error");
+    // Never ran metas — malformed load evidence is rejected first.
     expect(metasCalls).toBe(0);
-    // Prior success state was invalidated up front and not restored.
-    expect(session.lastClassification).toBeNull();
+    expect(session.lastClassification).toBe("protocol-error");
     expect(session.goalIds).toEqual([]);
     expect(session.currentFile).toBeNull();
   } finally {
@@ -228,11 +229,9 @@ test("runLoadNoMetas accepts a clean strict load reporting an empty goal state",
   }
 });
 
-test("runLoadNoMetas throws (no false green) when the process ended before the goal state", async () => {
-  // Bug #3: a clean Cmd_load_no_metas emits no terminus, so idle
-  // completion could resolve a still-checking load as ok-complete. The
-  // strict path now runs over Cmd_load and requires the goal-state
-  // terminus — a truncated stream must fail loudly, never report success.
+test("runLoadNoMetas accepts a prompt-completed strict frame without goal evidence", async () => {
+  // Cmd_load_no_metas may legitimately emit no goal-state payload. The
+  // transport prompt—not an idle gap—proves this synthetic frame complete.
   const root = makeTempRepo();
   const file = "TruncatedStrict.agda";
   writeFileSync(resolve(root, file), "module TruncatedStrict where\n", "utf8");
@@ -250,11 +249,11 @@ test("runLoadNoMetas throws (no false green) when the process ended before the g
   } as any;
 
   try {
-    await expect(runLoadNoMetas(session, file)).rejects.toThrow(
-      /ended before completing the strict load/i,
-    );
-    // Prior success state was invalidated up front and not restored.
-    expect(session.lastClassification).toBeNull();
+    const result = await runLoadNoMetas(session, file);
+    expect(result.success).toBe(true);
+    expect(result.classification).toBe("ok-complete");
+    expect(session.lastClassification).toBe("ok-complete");
+    expect(session.currentFile).toBe(resolve(root, file));
     expect(session.goalIds).toEqual([]);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -290,6 +289,70 @@ test("runLoad classifies explicit hole as ok-with-holes despite empty protocol g
     // goalCount reflects actual protocol goals (0 here), but hasHoles
     // is true because the source scan found explicit hole markers.
     expect(result.goalCount).toBe(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoad discards successful-looking evidence when source changes during the request", async () => {
+  const root = makeTempRepo();
+  const file = "Changed.agda";
+  const path = resolve(root, file);
+  writeFileSync(path, "module Changed where\nvalue : Set\nvalue = Set\n", "utf8");
+  const session = {
+    repoRoot: root,
+    currentFile: null,
+    goalIds: [],
+    lastLoadedMtime: null,
+    lastClassification: null,
+    lastLoadedAt: null,
+    lastInvisibleGoalCount: 0,
+    goal: { metas: async () => ({ goals: [] }) },
+    sendCommand: async () => {
+      writeFileSync(path, "module Changed where\nvalue : Set\nvalue = Set₁\n", "utf8");
+      return cleanLoadResponses();
+    },
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, file);
+    expect(result.success).toBe(false);
+    expect(result.classification).toBe("type-error");
+    expect(result.errors.join(" ")).toMatch(/Source changed/);
+    expect(session.currentFile).toBeNull();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runLoad does not turn control cancellation during metas into success", async () => {
+  const root = makeTempRepo();
+  const file = "Cancelled.agda";
+  writeFileSync(resolve(root, file), "module Cancelled where\n", "utf8");
+  const session = {
+    repoRoot: root,
+    currentFile: null,
+    goalIds: [],
+    lastLoadedMtime: null,
+    lastClassification: null,
+    lastLoadedAt: null,
+    lastInvisibleGoalCount: 0,
+    goal: {
+      metas: async () => {
+        throw new ControlCommandInterruption("Interrupted by Cmd_abort");
+      },
+    },
+    sendCommand: async () => cleanLoadResponses(),
+    iotcmFor: (_path: string, cmd: string) => cmd,
+  } as any;
+
+  try {
+    const result = await runLoad(session, file);
+    expect(result.success).toBe(false);
+    expect(result.classification).toBe("cancelled");
+    expect(result.errors.join(" ")).toMatch(/cancel/i);
+    expect(session.currentFile).toBeNull();
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

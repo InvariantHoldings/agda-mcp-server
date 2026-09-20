@@ -53,21 +53,39 @@ export interface DecodedLoadDisplay {
   invisibleGoalCount: number;
   warnings: string[];
   errors: string[];
+  /** Entry-level wire-shape failures that must block load certification. */
+  protocolErrors: string[];
 }
 
-function decodeDiagnosticText(entry: unknown): string {
+type DecodedDiagnostic = {
+  text: string;
+  valid: boolean;
+};
+
+function stringifyEntry(entry: unknown): string {
+  try {
+    const encoded = JSON.stringify(entry);
+    return encoded === undefined ? String(entry) : encoded;
+  } catch {
+    return String(entry);
+  }
+}
+
+function decodeDiagnosticText(entry: unknown): DecodedDiagnostic {
   if (typeof entry === "string") {
-    return entry;
+    return { text: entry, valid: entry.trim().length > 0 };
   }
 
   const diagnostic = diagnosticEntrySchema.safeParse(entry);
-  if (diagnostic.success) {
-    return diagnostic.data.message
-      ?? diagnostic.data.type
-      ?? JSON.stringify(entry);
+  if (!diagnostic.success) {
+    return { text: stringifyEntry(entry), valid: false };
   }
 
-  return JSON.stringify(entry);
+  const text = diagnostic.data.message ?? diagnostic.data.type;
+  if (typeof text !== "string") {
+    return { text: stringifyEntry(entry), valid: false };
+  }
+  return { text, valid: text.trim().length > 0 };
 }
 
 function decodeGoalConstraint(entry: unknown): DecodedGoalConstraint | null {
@@ -110,6 +128,7 @@ export function decodeLoadDisplayResponses(
   const visibleGoals: DecodedGoalConstraint[] = [];
   const warnings: string[] = [];
   const errors: string[] = [];
+  const protocolErrors: string[] = [];
   let invisibleGoals: DecodedInvisibleGoal[] = [];
 
   for (const event of decodeDisplayInfoEvents(responses)) {
@@ -126,10 +145,12 @@ export function decodeLoadDisplayResponses(
       allGoalTexts.push(event.text);
     }
 
-    for (const entry of payload.visibleGoals) {
+    for (const [index, entry] of payload.visibleGoals.entries()) {
       const decoded = decodeGoalConstraint(entry);
       if (decoded) {
         visibleGoals.push(decoded);
+      } else {
+        protocolErrors.push(`Malformed visible goal entry at index ${index}.`);
       }
     }
 
@@ -137,26 +158,32 @@ export function decodeLoadDisplayResponses(
     // AllGoalsWarnings events to prevent undercount when a later
     // event has fewer entries.
     const eventInvisible: DecodedInvisibleGoal[] = [];
-    for (const entry of payload.invisibleGoals) {
+    for (const [index, entry] of payload.invisibleGoals.entries()) {
       const decoded = decodeInvisibleGoalConstraint(entry);
       if (decoded) {
         eventInvisible.push(decoded);
+      } else {
+        protocolErrors.push(`Malformed invisible goal entry at index ${index}.`);
       }
     }
     if (eventInvisible.length > invisibleGoals.length) {
       invisibleGoals = eventInvisible;
     }
 
-    warnings.push(
-      ...payload.warnings
-        .map(decodeDiagnosticText)
-        .filter((message) => message.trim().length > 0),
-    );
-    errors.push(
-      ...payload.errors
-        .map(decodeDiagnosticText)
-        .filter((message) => message.trim().length > 0),
-    );
+    for (const [index, entry] of payload.warnings.entries()) {
+      const decoded = decodeDiagnosticText(entry);
+      warnings.push(decoded.text);
+      if (!decoded.valid) {
+        protocolErrors.push(`Malformed warning diagnostic at index ${index}.`);
+      }
+    }
+    for (const [index, entry] of payload.errors.entries()) {
+      const decoded = decodeDiagnosticText(entry);
+      errors.push(decoded.text);
+      if (!decoded.valid) {
+        protocolErrors.push(`Malformed error diagnostic at index ${index}.`);
+      }
+    }
   }
 
   return {
@@ -166,5 +193,6 @@ export function decodeLoadDisplayResponses(
     invisibleGoalCount: invisibleGoals.length,
     warnings,
     errors,
+    protocolErrors,
   };
 }

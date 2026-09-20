@@ -35,6 +35,7 @@ const arbSnapshotInput: fc.Arbitrary<SnapshotInput> = fc.record({
   phase: arbPhase,
   loadedFile: fc.option(fc.string({ minLength: 1, maxLength: 50 }), { nil: null }),
   projectRoot: fc.string({ minLength: 1, maxLength: 30 }),
+  projectRootExists: fc.boolean(),
   stale: fc.boolean(),
   goalIds: arbGoalIds,
   invisibleGoalCount: fc.nat({ max: 20 }),
@@ -73,6 +74,22 @@ test("snapshot isComplete is true only when classification is ok-complete", asyn
       }
     }),
   );
+});
+
+test("current completeness requires a fresh, loaded, goal-free successful state", () => {
+  fc.assert(fc.property(arbSnapshotInput, (input) => {
+    const snap = deriveSessionSnapshot(input);
+    expect(snap.isComplete).toBe(
+      input.phase === "loaded" &&
+      input.loadedFile !== null &&
+      input.lastLoadedAt !== null &&
+      input.projectRootExists &&
+      !input.stale &&
+      input.goalIds.length === 0 &&
+      input.invisibleGoalCount === 0 &&
+      input.classification === "ok-complete"
+    );
+  }));
 });
 
 test("snapshot classification is one of the valid values or null", async () => {

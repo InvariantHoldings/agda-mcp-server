@@ -39,6 +39,30 @@ test("adding an Error response never makes success go false→true", async () =>
   );
 });
 
+test("arbitrary explicit Error payloads can never restore load success", async () => {
+  await fc.assert(
+    fc.property(fc.jsonValue(), (errorPayload) => {
+      const result = parseLoadResponses([
+        {
+          kind: "DisplayInfo",
+          info: {
+            kind: "AllGoalsWarnings",
+            visibleGoals: [],
+            invisibleGoals: [],
+            errors: [],
+            warnings: [],
+          },
+        },
+        {
+          kind: "DisplayInfo",
+          info: { kind: "Error", error: errorPayload },
+        },
+      ] as any, { frameComplete: true });
+      expect(result.success).toBe(false);
+    }),
+  );
+});
+
 // ── Goal-goalId consistency ──────────────────────────────
 
 test("goalIds set equals goals.map(g => g.goalId) set", async () => {

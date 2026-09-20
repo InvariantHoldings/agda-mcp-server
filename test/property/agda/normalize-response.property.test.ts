@@ -144,7 +144,7 @@ test("InteractionPoints.interactionPoints is always number[] after normalization
   );
 });
 
-test("AllGoalsWarnings fields are always arrays after normalization", async () => {
+test("AllGoalsWarnings fields are preserved for pre-normalization validation", async () => {
   const fieldArb = fc.oneof(
     fc.constant(""),
     fc.constant(undefined),
@@ -165,10 +165,10 @@ test("AllGoalsWarnings fields are always arrays after normalization", async () =
         },
       });
       const info = resp.info as Record<string, unknown>;
-      expect(Array.isArray(info.visibleGoals)).toBeTruthy();
-      expect(Array.isArray(info.invisibleGoals)).toBeTruthy();
-      expect(Array.isArray(info.errors)).toBeTruthy();
-      expect(Array.isArray(info.warnings)).toBeTruthy();
+      expect(info.visibleGoals).toBe(vg);
+      expect(info.invisibleGoals).toBe(ig);
+      expect(info.errors).toBe(err);
+      expect(info.warnings).toBe(warn);
     }),
   );
 });

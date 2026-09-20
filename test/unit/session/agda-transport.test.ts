@@ -19,7 +19,7 @@ function withEnv(name: string, value: string, fn: () => Promise<void>) {
     });
 }
 
-test("AgdaTransport waits for terminal payloads after Status before resolving", async () => {
+test("AgdaTransport waits for the protocol prompt after Status before resolving", async () => {
   await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
     const transport = new AgdaTransport();
     let wrote = false;
@@ -29,13 +29,13 @@ test("AgdaTransport waits for terminal payloads after Status before resolving", 
         write() {
           wrote = true;
           setTimeout(() => {
-            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"Status\",\"status\":{\"checked\":true}}\n"));
+            transport.handleStdout(Buffer.from("{\"kind\":\"Status\",\"status\":{\"checked\":true}}\n"));
           }, 0);
           setTimeout(() => {
-            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DisplayInfo\",\"info\":{\"kind\":\"CurrentGoal\",\"goal\":\"Nat\"}}\n"));
+            transport.handleStdout(Buffer.from("{\"kind\":\"DisplayInfo\",\"info\":{\"kind\":\"CurrentGoal\",\"goal\":\"Nat\"}}\n"));
           }, 15);
           setTimeout(() => {
-            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"InteractionPoints\",\"interactionPoints\":[0]}\n"));
+            transport.handleStdout(Buffer.from("{\"kind\":\"InteractionPoints\",\"interactionPoints\":[0]}\nJSON> "));
           }, 20);
         },
       },
@@ -50,127 +50,7 @@ test("AgdaTransport waits for terminal payloads after Status before resolving", 
   });
 });
 
-test("awaitGoalTerminus holds completion through a long silent gap until the goal state arrives", async () => {
-  // A load can type-check silently for a long time (only sporadic
-  // progress) before emitting its goal state. With the terminus wait the
-  // command must NOT resolve during that gap, however long, and must
-  // capture the goals when they finally arrive. The 300ms gap here is far
-  // longer than the 5ms idle window; the only reason it isn't dropped is
-  // that idle resolution is suppressed until the terminus is seen.
-  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
-    const transport = new AgdaTransport();
-    const proc = {
-      stdin: {
-        write() {
-          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"Status","status":{"checked":true}}\n')), 0);
-          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"RunningInfo","message":"Checking"}\n')), 2);
-          // 300ms silent gap — no idle resolution may fire here.
-          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"DisplayInfo","info":{"kind":"AllGoalsWarnings","visibleGoals":[],"invisibleGoals":[],"errors":[],"warnings":[]}}\n')), 305);
-          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"InteractionPoints","interactionPoints":[0]}\n')), 308);
-        },
-      },
-    };
-
-    const responses = await transport.sendCommand(
-      proc as unknown as ChildProcess,
-      'IOTCM "x" NonInteractive Direct (Cmd_load)',
-      2000,
-      { awaitGoalTerminus: true },
-    );
-
-    expect(responses.some((r) => r.kind === "InteractionPoints")).toBe(true);
-    expect(responses.some((r) => r.kind === "DisplayInfo")).toBe(true);
-  });
-});
-
-test("without awaitGoalTerminus a non-load command resolves on the short idle window", async () => {
-  // Same gap, but no terminus wait → resolves on the short window after
-  // Status, leaving the late payload out. This is the fast path that
-  // Cmd_load_no_metas / give / queries keep.
-  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
-    const transport = new AgdaTransport();
-    const proc = {
-      stdin: {
-        write() {
-          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"Status","status":{"checked":true}}\n')), 0);
-          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"HighlightingInfo","payload":[]}\n')), 2);
-          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"InteractionPoints","interactionPoints":[0]}\n')), 60);
-        },
-      },
-    };
-
-    const responses = await transport.sendCommand(
-      proc as unknown as ChildProcess,
-      'IOTCM "x" NonInteractive Direct (Cmd_load_no_metas)',
-      2000,
-    );
-
-    // Resolved before the 60ms-late payload arrived.
-    expect(responses.some((r) => r.kind === "InteractionPoints")).toBe(false);
-  });
-});
-
-test("inactivity watchdog keeps a steadily-progressing load alive past the timeout window", async () => {
-  // The per-command timeout measures silence, not elapsed time. Here the
-  // 40ms timeout is shorter than the ~120ms the load runs, but progress
-  // arrives every ~15ms (< 40ms), so the watchdog keeps resetting and the
-  // proc is never reaped. An absolute timeout would have killed it mid-load.
-  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
-    const transport = new AgdaTransport();
-    const killCalls: unknown[] = [];
-    const proc = {
-      exitCode: null,
-      signalCode: null,
-      kill(sig?: unknown) { killCalls.push(sig); return true; },
-      stdin: {
-        write() {
-          for (let i = 0; i < 6; i++) {
-            setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"RunningInfo","message":"Checking"}\n')), i * 15);
-          }
-          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"DisplayInfo","info":{"kind":"AllGoalsWarnings","visibleGoals":[],"invisibleGoals":[],"errors":[],"warnings":[]}}\n')), 95);
-          setTimeout(() => transport.handleStdout(Buffer.from('JSON> {"kind":"InteractionPoints","interactionPoints":[]}\n')), 98);
-        },
-      },
-    };
-
-    const responses = await transport.sendCommand(
-      proc as unknown as ChildProcess,
-      'IOTCM "x" NonInteractive Direct (Cmd_load)',
-      40,
-      { awaitGoalTerminus: true },
-    );
-
-    expect(killCalls).toEqual([]);
-    expect(responses.some((r) => r.kind === "InteractionPoints")).toBe(true);
-  });
-});
-
-test("a fatal protocol stderr completes a load instead of hanging until timeout", async () => {
-  // A malformed IOTCM makes Agda print `cannot read:` and keep running with
-  // no goal state. Without treating it as a terminus the load would wait the
-  // full timeout; here it must resolve on the idle window with that notice.
-  await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
-    const transport = new AgdaTransport();
-    const proc = {
-      stdin: {
-        write() {
-          setTimeout(() => transport.handleStdout(Buffer.from('JSON> cannot read: IOTCM "x" None Direct bad\n')), 0);
-        },
-      },
-    };
-
-    const responses = await transport.sendCommand(
-      proc as unknown as ChildProcess,
-      'IOTCM "x" NonInteractive Direct (Cmd_load)',
-      2000,
-      { awaitGoalTerminus: true },
-    );
-
-    expect(responses.some((r) => r.kind === "StderrOutput")).toBe(true);
-  });
-});
-
-test("AgdaTransport resolves after trailing Status when earlier payloads already arrived", async () => {
+test("AgdaTransport resolves after a prompt following trailing Status", async () => {
   await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
     const transport = new AgdaTransport();
 
@@ -178,13 +58,13 @@ test("AgdaTransport resolves after trailing Status when earlier payloads already
       stdin: {
         write() {
           setTimeout(() => {
-            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DisplayInfo\",\"info\":{\"kind\":\"CurrentGoal\",\"goal\":\"Nat\"}}\n"));
+            transport.handleStdout(Buffer.from("{\"kind\":\"DisplayInfo\",\"info\":{\"kind\":\"CurrentGoal\",\"goal\":\"Nat\"}}\n"));
           }, 0);
           setTimeout(() => {
-            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"HighlightingInfo\",\"payload\":[]}\n"));
+            transport.handleStdout(Buffer.from("{\"kind\":\"HighlightingInfo\",\"payload\":[]}\n"));
           }, 5);
           setTimeout(() => {
-            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"Status\",\"status\":{\"checked\":false}}\n"));
+            transport.handleStdout(Buffer.from("{\"kind\":\"Status\",\"status\":{\"checked\":false}}\nJSON> "));
           }, 10);
         },
       },
@@ -198,7 +78,7 @@ test("AgdaTransport resolves after trailing Status when earlier payloads already
   });
 });
 
-test("AgdaTransport resolves status-only commands without timing out", async () => {
+test("AgdaTransport resolves status-only commands at their prompt", async () => {
   await withEnv("AGDA_MCP_IDLE_COMPLETION_MS", "5", async () => {
     const transport = new AgdaTransport();
 
@@ -206,7 +86,7 @@ test("AgdaTransport resolves status-only commands without timing out", async () 
       stdin: {
         write() {
           setTimeout(() => {
-            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"Status\",\"status\":{\"checked\":true}}\n"));
+            transport.handleStdout(Buffer.from("{\"kind\":\"Status\",\"status\":{\"checked\":true}}\nJSON> "));
           }, 0);
         },
       },
@@ -385,7 +265,6 @@ test("sendFireAndForgetCommand terminates a wedged proc that never acknowledges 
 
   // SIGTERM should have been delivered to the wedged proc.
   expect(killSignals).toContain("SIGTERM");
-  // The escalation path warns that the control command went unacknowledged.
   expectWarning("Control command not acknowledged");
 });
 
@@ -458,7 +337,7 @@ test("sendFireAndForgetCommand clears the escalation timer once Agda emits DoneA
       // Agda services the abort and emits DoneAborting promptly,
       // then stays alive serving subsequent commands.
       setTimeout(() => {
-        transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DoneAborting\"}\n"));
+        transport.handleStdout(Buffer.from("{\"kind\":\"DoneAborting\"}\nJSON> "));
       }, 0);
     } },
     once(event: string, listener: () => void) {
@@ -595,7 +474,7 @@ test("late DoneAborting that arrives AFTER the flush window closes still clears 
 
   // Inject the late echo — past the flush window.
   await new Promise((resolve) => setTimeout(resolve, 30));
-  transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DoneAborting\"}\n"));
+  transport.handleStdout(Buffer.from("{\"kind\":\"DoneAborting\"}\nJSON> "));
 
   // Wait past the escalation budget. The echo should have cleared
   // the timer, so no SIGTERM.
@@ -620,13 +499,13 @@ test("late DoneAborting echo arriving during a subsequent regular sendCommand do
         // simulates an echo that beat the regular command's first
         // protocol message.
         setTimeout(() => {
-          transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DoneAborting\"}\n"));
+          transport.handleStdout(Buffer.from("{\"kind\":\"DoneAborting\"}\n"));
         }, 0);
         setTimeout(() => {
-          transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DisplayInfo\",\"info\":{\"kind\":\"CurrentGoal\",\"goal\":\"Nat\"}}\n"));
+          transport.handleStdout(Buffer.from("{\"kind\":\"DisplayInfo\",\"info\":{\"kind\":\"CurrentGoal\",\"goal\":\"Nat\"}}\n"));
         }, 5);
         setTimeout(() => {
-          transport.handleStdout(Buffer.from("JSON> {\"kind\":\"Status\",\"status\":{\"checked\":false}}\n"));
+          transport.handleStdout(Buffer.from("{\"kind\":\"Status\",\"status\":{\"checked\":false}}\nJSON> "));
         }, 10);
       } },
     };
@@ -699,10 +578,10 @@ test("AgdaTransport captures prompt notices as stderr output while collecting", 
       stdin: {
         write() {
           setTimeout(() => {
-            transport.handleStdout(Buffer.from("JSON> compiling...\n"));
+            transport.handleStdout(Buffer.from("compiling...\n"));
           }, 0);
           setTimeout(() => {
-            transport.handleStdout(Buffer.from("JSON> {\"kind\":\"DisplayInfo\",\"info\":{\"kind\":\"CurrentGoal\",\"goal\":\"Nat\"}}\n"));
+            transport.handleStdout(Buffer.from("{\"kind\":\"DisplayInfo\",\"info\":{\"kind\":\"CurrentGoal\",\"goal\":\"Nat\"}}\nJSON> "));
           }, 5);
         },
       },

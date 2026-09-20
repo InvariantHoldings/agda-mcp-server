@@ -54,9 +54,10 @@ test("sawLoadTerminus false when stream is truncated before goal state", () => {
     { kind: "HighlightingInfo", filepath: "/tmp/hl", direct: false },
   ]);
   expect(result.sawLoadTerminus).toBe(false);
-  // success still defaults true — which is exactly why callers must not
-  // trust it without a terminus.
-  expect(result.success).toBe(true);
+  // Ordinary loads fail closed when their completed frame contains no
+  // load evidence; callers never receive a fabricated success.
+  expect(result.success).toBe(false);
+  expect(result.classification).toBe("protocol-error");
 });
 
 test("load with interaction points → goals populated", () => {
@@ -115,6 +116,29 @@ test("load with errors in AllGoalsWarnings.errors → success=false", () => {
   expect(result.success).toBe(false);
   expect(result.errors.length > 0).toBeTruthy();
   expect(result.errors[0].includes("Unsolved")).toBeTruthy();
+});
+
+test("malformed goal entries and blank errors cannot certify a load", () => {
+  const result = parseLoadResponses([
+    {
+      kind: "DisplayInfo",
+      info: {
+        kind: "AllGoalsWarnings",
+        visibleGoals: [{ bad: true }],
+        invisibleGoals: [{ bad: true }],
+        errors: [""],
+        warnings: [],
+      },
+    },
+  ] as any);
+
+  expect(result.success).toBe(false);
+  expect(result.classification).toBe("protocol-error");
+  expect(result.errors).toEqual(expect.arrayContaining([
+    "Malformed AllGoalsWarnings load evidence; discarded the response.",
+    "Malformed visible goal entry at index 0.",
+    "Malformed invisible goal entry at index 0.",
+  ]));
 });
 
 test("warnings extracted from AllGoalsWarnings.warnings", () => {
